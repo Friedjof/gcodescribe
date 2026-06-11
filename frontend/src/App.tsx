@@ -3,13 +3,14 @@ import { api } from "./api";
 import Convert from "./components/Convert";
 import Place from "./components/Place";
 import Paint from "./components/Paint";
+import Games from "./components/Games";
 import Calibrate from "./components/Calibrate";
 import Control from "./components/Control";
 import Paper from "./components/Paper";
 import Segmented from "./components/Segmented";
 import { useI18n } from "./i18n";
 
-type Tab = "place" | "paint" | "convert" | "paper" | "calibrate" | "control";
+type Tab = "place" | "paint" | "games" | "convert" | "paper" | "calibrate" | "control";
 
 export default function App() {
   const { lang, setLang, t } = useI18n();
@@ -27,6 +28,7 @@ export default function App() {
   const tabs: { value: Tab; label: string }[] = [
     { value: "place", label: t("tabs.place") },
     { value: "paint", label: t("tabs.paint") },
+    { value: "games", label: t("tabs.games") },
     { value: "convert", label: t("tabs.jobs") },
     { value: "paper", label: t("tabs.paper") },
     { value: "calibrate", label: t("tabs.calibrate") },
@@ -58,6 +60,7 @@ export default function App() {
       <main>
         {tab === "place" && <Place status={status} onAction={refreshStatus} />}
         {tab === "paint" && <Paint />}
+        {tab === "games" && <Games onOpenPaint={() => setTab("paint")} />}
         {tab === "convert" && <Convert status={status} onAction={refreshStatus} />}
         {tab === "paper" && <Paper status={status} onAction={refreshStatus} />}
         {tab === "calibrate" && <Calibrate />}

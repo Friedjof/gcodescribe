@@ -1,0 +1,47 @@
+import type { Calibration } from "../api";
+import type {
+  GameId,
+  TemplateSpec,
+  Translator,
+  DotsDensity,
+  DotsJitter,
+  DotsPlayable,
+  MazeSize,
+  MazeType,
+  BattleshipsSize,
+  SudokuDifficulty,
+} from "./types";
+import { buildDotsBoxesTemplate } from "./dotsBoxes";
+import { buildTicTacToeTemplate } from "./ticTacToe";
+import { buildMazeTemplate } from "./maze";
+import { buildBattleshipsTemplate } from "./battleships";
+import { buildConnectFourTemplate } from "./connectFour";
+import { buildMetaTicTacToeTemplate } from "./metaTicTacToe";
+import { buildSudokuTemplate } from "./sudoku";
+import { buildBingoTemplate } from "./bingo";
+import { buildCityCountryRiverTemplate } from "./cityCountryRiver";
+
+export function buildTemplate(
+  gameId: GameId,
+  cal: Calibration,
+  t: Translator,
+  seeds: {
+    dotsBoxes: { density: DotsDensity; seed: number; jitter: DotsJitter; playable: DotsPlayable };
+    battleships: BattleshipsSize;
+    maze: number;
+    mazeSettings: { size: MazeSize; type: MazeType };
+    sudoku: { difficulty: SudokuDifficulty; seed: number };
+    bingo: number;
+  },
+): TemplateSpec {
+  if (gameId === "dotsBoxes") return buildDotsBoxesTemplate(cal, t, seeds.dotsBoxes);
+  if (gameId === "ticTacToe") return buildTicTacToeTemplate(cal, t);
+  if (gameId === "maze") return buildMazeTemplate(cal, seeds.maze, seeds.mazeSettings, t);
+  if (gameId === "battleships") return buildBattleshipsTemplate(cal, t, seeds.battleships);
+  if (gameId === "connectFour") return buildConnectFourTemplate(cal, t);
+  if (gameId === "metaTicTacToe") return buildMetaTicTacToeTemplate(cal, t);
+  if (gameId === "sudoku") return buildSudokuTemplate(cal, t, seeds.sudoku);
+  if (gameId === "bingo") return buildBingoTemplate(cal, seeds.bingo, t);
+  if (gameId === "cityCountryRiver") return buildCityCountryRiverTemplate(cal, t);
+  throw new Error(t("games.notReadyHint"));
+}
