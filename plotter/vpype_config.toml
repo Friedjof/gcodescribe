@@ -1,0 +1,11 @@
+[gwrite]
+default_profile = "anycubic"
+
+[gwrite.anycubic]
+document_start = "G21\nG17\nG90\nG28\n"
+segment_first = "G91 Z-10\nG90\nG0 X{x:.4f} Y{y:.4f} F15000\nG91 Z+13\nG90\n"
+segment = "G1 X{x:.4f} Y{y:.4f} F10000\n"
+document_end = "G91 Z-10\nG90\nG0 X0 Y0 F15000\nM2\n"
+unit = "mm"
+vertical_flip = true
+

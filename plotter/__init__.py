@@ -1,0 +1,2 @@
+"""Plotter pipeline CLI."""
+
