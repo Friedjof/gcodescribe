@@ -4,9 +4,12 @@ A browser-based pen plotter controller for turning PDF, SVG, image, and Office
 documents into safe G-code for an **Anycubic i3 Mega S** or any OctoPrint-backed
 printer.
 
-<p align="center">
-  <img src="media/images/gcode-preview.png" alt="GCodeScribe main document placement view" width="900">
-</p>
+<table>
+  <tr>
+    <td width="70%"><img src="media/images/gcode-preview.png" alt="GCodeScribe main document placement view with rocket artwork" width="100%"></td>
+    <td width="30%"><img src="media/images/automaticchickenfeeder-plot.png" alt="Real pen-plot result of converted artwork" width="100%"></td>
+  </tr>
+</table>
 
 GCodeScribe combines document conversion, visual layout, paper calibration, G-code
 preview, job management, and printer control in one small web app. Upload a
