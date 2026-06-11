@@ -19,16 +19,16 @@ build:
 
 # Persistent Redis for the position cache (survives app restarts).
 redis:
-	@docker start plotter-redis >/dev/null 2>&1 || \
-	  docker run -d --name plotter-redis \
+	@docker start gcodescribe-redis >/dev/null 2>&1 || \
+	  docker run -d --name gcodescribe-redis \
 	    -p $(REDIS_PORT):6379 \
-	    -v plotter-redis-data:/data \
+	    -v gcodescribe-redis-data:/data \
 	    redis:7-alpine redis-server --appendonly yes >/dev/null 2>&1 || \
 	  printf '\033[1;33m⚠ Docker/Redis nicht verfügbar — Backend nutzt den Datei-Store\033[0m\n'
 	@printf '\033[1;36m▶ Redis    → redis://localhost:$(REDIS_PORT)/0\033[0m\n'
 
 redis-stop:
-	docker rm -f plotter-redis
+	docker rm -f gcodescribe-redis
 
 # Run redis, backend (uvicorn --reload) and frontend (Vite HMR) in parallel.
 # Ctrl-C kills both via the trap.

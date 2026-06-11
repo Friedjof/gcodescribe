@@ -36,4 +36,4 @@ RUN uv sync --frozen --no-dev
 
 VOLUME ["/data"]
 EXPOSE 8000
-CMD ["uv", "run", "--no-dev", "plotter-web"]
+CMD ["uv", "run", "--no-dev", "gcodescribe-web"]

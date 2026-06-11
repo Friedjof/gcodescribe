@@ -1,7 +1,7 @@
 [project]
-name = "plotter"
+name = "gcodescribe"
 version = "0.1.0"
-description = "Convert documents into plotter G-code"
+description = "GCodeScribe — convert documents into pen-plotter G-code"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -22,8 +22,8 @@ dependencies = [
 ]
 
 [project.scripts]
-plotter = "plotter.cli:main"
-plotter-web = "plotter.web.server:main"
+gcodescribe = "plotter.cli:main"
+gcodescribe-web = "plotter.web.server:main"
 
 [build-system]
 requires = ["hatchling"]

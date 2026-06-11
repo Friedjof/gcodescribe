@@ -1,14 +1,14 @@
-# Plotter
+# GCodeScribe
 
 A browser-based pen plotter controller for turning PDF, SVG, image, and Office
 documents into safe G-code for an **Anycubic i3 Mega S** or any OctoPrint-backed
 printer.
 
 <p align="center">
-  <img src="media/images/gcode-preview.png" alt="Plotter main document placement view" width="900">
+  <img src="media/images/gcode-preview.png" alt="GCodeScribe main document placement view" width="900">
 </p>
 
-Plotter combines document conversion, visual layout, paper calibration, G-code
+GCodeScribe combines document conversion, visual layout, paper calibration, G-code
 preview, job management, and printer control in one small web app. Upload a
 document, place it on the virtual bed, calibrate the physical sheet, generate
 G-code, preview the toolpaths, and send it to the printer — all from the same interface.
@@ -61,7 +61,7 @@ docker compose up --build
 ```
 
 Open <http://localhost:8000>. Calibration and generated jobs are persisted in
-the `plotter-data` volume (`/data`).
+the `gcodescribe-data` volume (`/data`).
 
 > PDF support works out of the box (`poppler-utils` provides `pdftocairo`,
 > `pdftoppm` and `pdfinfo`; OpenCV does the tracing). For Office documents,
@@ -69,14 +69,14 @@ the `plotter-data` volume (`/data`).
 
 ## Local development
 
-`make dev` starts Redis (Docker container `plotter-redis`), the backend with
+`make dev` starts Redis (Docker container `gcodescribe-redis`), the backend with
 reload and the Vite dev server in one go.
 
 Backend only (FastAPI via uvicorn):
 
 ```bash
 uv sync
-OCTOPRINT_URL=... OCTOPRINT_API_KEY=... uv run plotter-web
+OCTOPRINT_URL=... OCTOPRINT_API_KEY=... uv run gcodescribe-web
 ```
 
 Frontend (Vite dev server, proxies `/api` to the backend on :8000):
@@ -114,8 +114,8 @@ origin offset.
 The original command-line converter is still available:
 
 ```bash
-uv run plotter input.pdf --output out/
-uv run plotter input.svg --profile anycubic
+uv run gcodescribe input.pdf --output out/
+uv run gcodescribe input.svg --profile anycubic
 ```
 
 ## How the G-code is built

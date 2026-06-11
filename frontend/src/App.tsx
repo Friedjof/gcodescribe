@@ -37,7 +37,7 @@ export default function App() {
     <div className={`app tab-${tab}`}>
       <header>
         <h1>
-          <span className="pen">✎</span> Plotter
+          <span className="pen">✎</span> GCodeScribe
         </h1>
         <div className="header-actions">
           <select className="lang-select" value={lang} onChange={(e) => setLang(e.target.value as "de" | "en" | "ba" | "fr" | "es")}>

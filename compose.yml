@@ -1,5 +1,5 @@
 services:
-  plotter:
+  gcodescribe:
     build: .
     ports:
       - "${PLOTTER_HOST_PORT:-8000}:8000"
@@ -10,7 +10,7 @@ services:
       OCTOPRINT_VERIFY_SSL: "${OCTOPRINT_VERIFY_SSL:-true}"
       REDIS_URL: "redis://redis:6379/0"
     volumes:
-      - plotter-data:/data
+      - gcodescribe-data:/data
     depends_on:
       - redis
     restart: unless-stopped
@@ -23,5 +23,5 @@ services:
     restart: unless-stopped
 
 volumes:
-  plotter-data:
+  gcodescribe-data:
   redis-data:
