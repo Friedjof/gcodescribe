@@ -1,0 +1,27 @@
+services:
+  plotter:
+    build: .
+    ports:
+      - "${PLOTTER_HOST_PORT:-8000}:8000"
+    environment:
+      # Point these at your OctoPrint instance.
+      OCTOPRINT_URL: "${OCTOPRINT_URL:-}"
+      OCTOPRINT_API_KEY: "${OCTOPRINT_API_KEY:-}"
+      OCTOPRINT_VERIFY_SSL: "${OCTOPRINT_VERIFY_SSL:-true}"
+      REDIS_URL: "redis://redis:6379/0"
+    volumes:
+      - plotter-data:/data
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+volumes:
+  plotter-data:
+  redis-data:
