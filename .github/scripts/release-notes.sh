@@ -17,17 +17,17 @@ if [ -n "$PREV" ]; then
   range="$PREV..$TAG"
   api_authors=(gh api --paginate "repos/$REPO/compare/$PREV...$TAG"
                --jq '.commits[].author | select(. != null) | [.login, .avatar_url] | @tsv')
-  header="## Änderungen seit $PREV"
+  header="## Changes since $PREV"
 else
   range="$TAG"
   api_authors=(gh api --paginate "repos/$REPO/commits?sha=$TAG"
                --jq '.[].author | select(. != null) | [.login, .avatar_url] | @tsv')
-  header="## Änderungen"
+  header="## Changes"
 fi
 
 # --- Changelog ---------------------------------------------------------------
 changelog="$(git log "$range" --no-merges --pretty=format:'- %s (%h)')"
-[ -z "$changelog" ] && changelog="- _Keine Änderungen._"
+[ -z "$changelog" ] && changelog="- _No changes._"
 
 # --- Contributors: one circular avatar per unique GitHub author --------------
 contributors=""
@@ -38,7 +38,7 @@ while IFS=$'\t' read -r login avatar; do
   contributors+="alt=\"${login}\" style=\"border-radius:50%\" /></a> "
 done < <("${api_authors[@]}" | awk '!seen[$1]++')  # dedupe by login, keep order
 
-[ -z "$contributors" ] && contributors="_Keine verknüpften GitHub-Konten in diesem Bereich._"
+[ -z "$contributors" ] && contributors="_No linked GitHub accounts in this range._"
 
 # --- Body --------------------------------------------------------------------
 cat <<EOF
