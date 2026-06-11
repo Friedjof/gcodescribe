@@ -18,7 +18,7 @@ export type GameDef = {
   group: GameGroup;
 };
 
-export type DotsDensity = "relaxed" | "balanced" | "dense";
+export type DotsDensity = "relaxed" | "balanced" | "dense" | "extreme";
 export type DotsJitter = "straight" | "organic" | "wild";
 export type DotsPlayable = "sparse" | "balanced" | "full";
 export type MazeSize = "small" | "medium" | "large" | "extreme";

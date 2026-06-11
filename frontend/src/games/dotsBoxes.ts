@@ -203,8 +203,11 @@ export function buildDotsBoxesTemplate(
   const maxW = usableW * 0.88;
   const maxH = usableH * 0.88;
 
-  const densityFactor = settings.density === "relaxed" ? 1.12 : settings.density === "dense" ? 0.62 : 1;
-  const targetCell = clamp((Math.min(maxW, maxH) / 6.2) * densityFactor, 6, 24);
+  const densityFactor =
+    settings.density === "relaxed" ? 1.12 :
+    settings.density === "dense"   ? 0.62 :
+    settings.density === "extreme" ? 0.40 : 1;
+  const targetCell = clamp((Math.min(maxW, maxH) / 6.2) * densityFactor, 5, 24);
   const cols = clamp(Math.floor(maxW / targetCell), 6, 28);
   const rows = clamp(Math.floor(maxH / targetCell), 5, 20);
   const cell = Math.min(maxW / cols, maxH / rows);

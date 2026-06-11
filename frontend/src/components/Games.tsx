@@ -286,9 +286,10 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
                             value={dotsDensity}
                             onChange={updateDotsDensity}
                             options={[
-                              { value: "relaxed", label: t("games.option.density.relaxed") },
+                              { value: "relaxed",  label: t("games.option.density.relaxed") },
                               { value: "balanced", label: t("games.option.density.balanced") },
-                              { value: "dense", label: t("games.option.density.dense") },
+                              { value: "dense",    label: t("games.option.density.dense") },
+                              { value: "extreme",  label: t("games.option.density.extreme") },
                             ]}
                           />
                         </div>
