@@ -163,7 +163,7 @@ def test_pattern(name: str, cal: Calibration) -> str:
             ]
             y += step
     else:
-        raise ValueError(f"unknown test pattern: {name}")
+        raise ValueError(f"Unbekanntes Test-Pattern: {name}")
 
     lines += _footer(cal)
     gcode = "\n".join(lines) + "\n"

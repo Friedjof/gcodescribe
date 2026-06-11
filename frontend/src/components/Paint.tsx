@@ -39,18 +39,19 @@ function withStyledCache(obj: SceneObject): SceneObject {
   };
 }
 
-function textGeometry(text: string, size: number, font: TextFont) {
-  return localize(textWorld(text || "Text", [0, 0], size, font));
+function textGeometry(text: string, size: number, font: TextFont, fallbackText = "Text") {
+  return localize(textWorld(text || fallbackText, [0, 0], size, font));
 }
 
-async function textGeometryAsync(text: string, size: number, font: TextFont) {
-  if (!isOutlineFont(font)) return textGeometry(text, size, font);
-  const res = await api.textPolylines(text || "Text", font, size);
+async function textGeometryAsync(text: string, size: number, font: TextFont, fallbackText = "Text") {
+  if (!isOutlineFont(font)) return textGeometry(text, size, font, fallbackText);
+  const res = await api.textPolylines(text || fallbackText, font, size);
   return localize(res.polylines as Pt[][]);
 }
 
 export default function Paint() {
   const { t } = useI18n();
+  const defaultText = t("paint.text");
   const [cal, setCal] = useState<Calibration | null>(null);
   const [index, setIndex] = useState<PageIndex | null>(null);
   const [page, setPage] = useState<Page | null>(null);
@@ -233,10 +234,10 @@ export default function Paint() {
   };
 
   const addTextObject = (at: Pt) => {
-    const text = "Text";
+    const text = defaultText;
     const size = 12;
     const font: TextFont = "pdf-serif";
-    textGeometryAsync(text, size, font)
+    textGeometryAsync(text, size, font, defaultText)
       .then(({ local, cx, cy }) => {
         addObject({
           id: crypto.randomUUID(),
@@ -320,13 +321,13 @@ export default function Paint() {
     const obj = page.objects.find((o) => o.id === id);
     if (!obj) return;
     const data = {
-      text: String(obj.data?.text ?? "Text"),
+      text: String(obj.data?.text ?? defaultText),
       mode: isOutlineFont((patch.font ?? obj.data?.font ?? "pdf-serif") as TextFont) ? "outline" : "single-line",
       size: Number(obj.data?.size ?? 12),
       font: (obj.data?.font ?? "pdf-serif") as TextFont,
       ...patch,
     };
-    textGeometryAsync(data.text, data.size, data.font)
+    textGeometryAsync(data.text, data.size, data.font, defaultText)
       .then(({ local }) => {
         const style = objectStyle(obj);
         const objects = page.objects.map((o) => o.id === id
@@ -342,7 +343,7 @@ export default function Paint() {
     if (!page || selectedIds.length !== 1) return false;
     const obj = page.objects.find((o) => o.id === selectedIds[0]);
     if (!obj || obj.type !== "text") return false;
-    updateTextObject(obj.id, { text: edit(String(obj.data?.text ?? "Text")) });
+    updateTextObject(obj.id, { text: edit(String(obj.data?.text ?? defaultText)) });
     return true;
   };
 
@@ -511,7 +512,7 @@ export default function Paint() {
           return;
         }
         if (e.key.length === 1) {
-          if (editSelectedText((text) => text === "Text" ? e.key : text + e.key)) e.preventDefault();
+          if (editSelectedText((text) => text === defaultText ? e.key : text + e.key)) e.preventDefault();
           return;
         }
       }
@@ -708,27 +709,27 @@ export default function Paint() {
             </div>
 
             <div className="paint-style-panel">
-              <h4>Linie</h4>
+              <h4>{t("paint.style.line")}</h4>
               <label className="field">
-                Art
+                {t("paint.style.type")}
                 <select
                   disabled={!hasSelection}
                   value={selectedStyle.stroke.mode}
                   onChange={(e) => updateSelectedStyle({ stroke: { mode: e.target.value as StrokeMode } as any })}
                 >
-                  <option value="solid">Durchgezogen</option>
-                  <option value="dashed">Gestrichelt</option>
-                  <option value="dotted">Gepunktet</option>
+                  <option value="solid">{t("paint.style.solid")}</option>
+                  <option value="dashed">{t("paint.style.dashed")}</option>
+                  <option value="dotted">{t("paint.style.dotted")}</option>
                 </select>
               </label>
               {selectedStyle.stroke.mode === "dashed" && (
                 <div className="fields compact">
-                  <label className="field">Strich
+                  <label className="field">{t("paint.style.dash")}
                     <input type="number" min={0.5} step={0.5} disabled={!hasSelection}
                       value={selectedStyle.stroke.dashLength}
                       onChange={(e) => updateSelectedStyle({ stroke: { dashLength: Number(e.target.value) || 1 } as any })} />
                   </label>
-                  <label className="field">Lücke
+                  <label className="field">{t("paint.style.gap")}
                     <input type="number" min={0.5} step={0.5} disabled={!hasSelection}
                       value={selectedStyle.stroke.gapLength}
                       onChange={(e) => updateSelectedStyle({ stroke: { gapLength: Number(e.target.value) || 1 } as any })} />
@@ -737,12 +738,12 @@ export default function Paint() {
               )}
               {selectedStyle.stroke.mode === "dotted" && (
                 <div className="fields compact">
-                  <label className="field">Abstand
+                  <label className="field">{t("paint.style.spacing")}
                     <input type="number" min={0.5} step={0.5} disabled={!hasSelection}
                       value={selectedStyle.stroke.dotSpacing}
                       onChange={(e) => updateSelectedStyle({ stroke: { dotSpacing: Number(e.target.value) || 1 } as any })} />
                   </label>
-                  <label className="field">Größe
+                  <label className="field">{t("paint.size")}
                     <input type="number" min={0.2} step={0.2} disabled={!hasSelection}
                       value={selectedStyle.stroke.dotSize}
                       onChange={(e) => updateSelectedStyle({ stroke: { dotSize: Number(e.target.value) || 0.5 } as any })} />
@@ -750,7 +751,7 @@ export default function Paint() {
                 </div>
               )}
 
-              <h4>Füllung</h4>
+              <h4>{t("paint.style.fill")}</h4>
               <label className="check style-check">
                 <input
                   type="checkbox"
@@ -758,28 +759,28 @@ export default function Paint() {
                   checked={selectedStyle.fill.enabled}
                   onChange={(e) => updateSelectedStyle({ fill: { enabled: e.target.checked } as any })}
                 />
-                Aktiv
+                {t("paint.style.active")}
               </label>
               <label className="field">
-                Muster
+                {t("paint.style.pattern")}
                 <select
                   disabled={!hasSelection || !selectedStyle.fill.enabled}
                   value={selectedStyle.fill.mode}
                   onChange={(e) => updateSelectedStyle({ fill: { mode: e.target.value as FillMode } as any })}
                 >
-                  <option value="hatch">Schraffur</option>
-                  <option value="dashed-hatch">Gestrichelte Schraffur</option>
-                  <option value="dotted-fill">Punkte</option>
+                  <option value="hatch">{t("paint.image.hatch")}</option>
+                  <option value="dashed-hatch">{t("paint.style.dashedHatch")}</option>
+                  <option value="dotted-fill">{t("paint.image.dots")}</option>
                 </select>
               </label>
               {selectedStyle.fill.mode !== "dotted-fill" && (
-                <label className="field">Winkel
+                <label className="field">{t("paint.style.angle")}
                   <input type="number" step={5} disabled={!hasSelection || !selectedStyle.fill.enabled}
                     value={selectedStyle.fill.angle}
                     onChange={(e) => updateSelectedStyle({ fill: { angle: Number(e.target.value) || 0 } as any })} />
                 </label>
               )}
-              <label className="field">Abstand
+              <label className="field">{t("paint.style.spacing")}
                 <input type="number" min={0.5} step={0.5} disabled={!hasSelection || !selectedStyle.fill.enabled}
                   value={selectedStyle.fill.mode === "dotted-fill" ? selectedStyle.fill.dotSpacing : selectedStyle.fill.spacing}
                   onChange={(e) => updateSelectedStyle({ fill: selectedStyle.fill.mode === "dotted-fill"
@@ -795,7 +796,7 @@ export default function Paint() {
             <div className="field">
               <label>{t("paint.text")}</label>
               <textarea
-                value={String(selectedText.data?.text ?? "Text")}
+                value={String(selectedText.data?.text ?? defaultText)}
                 onChange={(e) => updateTextObject(selectedText.id, { text: e.target.value })}
                 rows={3}
               />
@@ -808,7 +809,7 @@ export default function Paint() {
                   onChange={(e) => updateTextObject(selectedText.id, { font: e.target.value as TextFont })}
                 >
                   {TEXT_FONTS.map((font) => (
-                    <option key={font.value} value={font.value}>{font.label}</option>
+                    <option key={font.value} value={font.value}>{t(font.labelKey)}</option>
                   ))}
                 </select>
               </div>

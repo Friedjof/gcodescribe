@@ -45,7 +45,7 @@ def _job_info(path: Path, cal: Calibration | None = None) -> JobInfo:
 def _job_path(filename: str) -> Path:
     path = jobs_dir() / Path(filename).name
     if not path.exists():
-        raise HTTPException(404, "job not found")
+        raise HTTPException(404, "Job nicht gefunden")
     return path
 
 
@@ -64,7 +64,7 @@ def list_jobs() -> list[JobInfo]:
 @router.post("/convert")
 async def convert(file: UploadFile = File(...)) -> dict:
     if not file.filename:
-        raise HTTPException(400, "missing filename")
+        raise HTTPException(400, "Dateiname fehlt")
     cal = Calibration.load()
     # Keep the original filename (sanitised) so generated G-code is named after it.
     safe_name = Path(file.filename).name
@@ -121,7 +121,7 @@ def job_preview_3d(filename: str) -> dict:
 @router.post("/testpattern/{name}")
 def make_test_pattern(name: str) -> dict:
     if name not in TEST_PATTERNS:
-        raise HTTPException(404, f"unknown pattern: {name}")
+        raise HTTPException(404, f"Unbekanntes Test-Pattern: {name}")
     cal = Calibration.load()
     gcode = test_pattern(name, cal)
     out = jobs_dir() / f"test-{name}-{int(time.time())}.gcode"

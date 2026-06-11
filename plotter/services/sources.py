@@ -43,7 +43,7 @@ class SourceService:
 
     def create(self, filename: str, data: bytes, *, mode: str = "auto", detail: int = 1) -> dict:
         if mode not in ("auto", "vector", "trace", "edges", "hatch", "lines", "dots"):
-            raise ServiceError(f"unknown mode: {mode}")
+            raise ServiceError(f"Unbekannter Modus: {mode}")
         suffix = Path(filename).suffix.lower()
         source_id = uuid.uuid4().hex[:12]
         src_dir = self.root / source_id
@@ -87,7 +87,7 @@ class SourceService:
         if suffix in OFFICE_EXTENSIONS:
             pdf = convert_office_to_pdf(original, src_dir)
         elif suffix != ".pdf":
-            raise PlotterError(f"Unsupported input format: {suffix}")
+            raise PlotterError(f"Nicht unterstütztes Eingabeformat: {suffix}")
 
         if mode in ("auto", "vector"):
             pages = self._vector_pages(pdf, src_dir)
@@ -153,7 +153,7 @@ class SourceService:
     def get(self, source_id: str) -> dict:
         meta_file = self.root / source_id / "meta.json"
         if not meta_file.exists():
-            raise ServiceError(f"source not found: {source_id}")
+            raise ServiceError(f"Quelle nicht gefunden: {source_id}")
         return json.loads(meta_file.read_text())
 
     def delete(self, source_id: str) -> None:
@@ -164,7 +164,7 @@ class SourceService:
         for p in meta["pages"]:
             if p["n"] == page:
                 return self.root / source_id / p["file"]
-        raise ServiceError(f"page {page} not found in source {source_id}")
+        raise ServiceError(f"Seite {page} in Quelle {source_id} nicht gefunden")
 
     def preview(self, source_id: str, page: int, *, max_points: int = 20000) -> dict:
         drawing = load_svg_drawing(self._page_svg(source_id, page), quantization_mm=0.5)

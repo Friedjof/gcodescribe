@@ -15,20 +15,20 @@ export type TextFont =
   | "techno"
   | "hand";
 
-export const TEXT_FONTS: { value: TextFont; label: string }[] = [
-  { value: "pdf-serif", label: "PDF Serif" },
-  { value: "pdf-times", label: "PDF Times" },
-  { value: "pdf-sans", label: "PDF Sans" },
-  { value: "pdf-script", label: "PDF Schreibschrift" },
-  { value: "print", label: "Gedruckt" },
-  { value: "printSerif", label: "Gedruckt Serif" },
-  { value: "block", label: "Gezeichnet Block" },
-  { value: "serif", label: "Gezeichnet Serif" },
-  { value: "script", label: "Gezeichnet Schreibschrift" },
-  { value: "narrow", label: "Schmal" },
-  { value: "rounded", label: "Rund" },
-  { value: "techno", label: "Techno" },
-  { value: "hand", label: "Handschrift" },
+export const TEXT_FONTS: { value: TextFont; labelKey: string }[] = [
+  { value: "pdf-serif", labelKey: "font.pdfSerif" },
+  { value: "pdf-times", labelKey: "font.pdfTimes" },
+  { value: "pdf-sans", labelKey: "font.pdfSans" },
+  { value: "pdf-script", labelKey: "font.pdfScript" },
+  { value: "print", labelKey: "font.printed" },
+  { value: "printSerif", labelKey: "font.printedSerif" },
+  { value: "block", labelKey: "font.drawnBlock" },
+  { value: "serif", labelKey: "font.drawnSerif" },
+  { value: "script", labelKey: "font.drawnScript" },
+  { value: "narrow", labelKey: "font.narrow" },
+  { value: "rounded", labelKey: "font.rounded" },
+  { value: "techno", labelKey: "font.techno" },
+  { value: "hand", labelKey: "font.hand" },
 ];
 
 export const isOutlineFont = (font: TextFont) => font.startsWith("pdf-");

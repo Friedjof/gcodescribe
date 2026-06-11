@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type GcodePreview3D, type Job } from "../api";
+import { useI18n } from "../i18n";
 import Modal from "./Modal";
 import Gcode3D from "./Gcode3D";
 
@@ -19,6 +20,7 @@ export default function Convert({
   const [err, setErr] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ name: string; data: GcodePreview3D | null }>();
   const [fullscreen, setFullscreen] = useState(false);
+  const { t } = useI18n();
 
   const openPreview = (name: string) => {
     setPreview({ name, data: null });
@@ -53,7 +55,7 @@ export default function Convert({
   const send = async (name: string, start: boolean) => {
     try {
       await api.send(name, start);
-      flash(start ? "An OctoPrint gesendet & gestartet" : "An OctoPrint gesendet");
+      flash(start ? t("convert.sentStarted") : t("convert.sent"));
       onAction();
     } catch (e) {
       fail(e);
@@ -62,14 +64,14 @@ export default function Convert({
 
   const rename = (name: string) => {
     const base = name.replace(/\.gcode$/i, "");
-    const next = window.prompt("Neuer Name für den Job:", base);
+    const next = window.prompt(t("convert.renamePrompt"), base);
     if (next == null) return; // cancelled
     const trimmed = next.trim();
     if (!trimmed || trimmed === base) return;
     api
       .renameJob(name, trimmed)
       .then((j) => {
-        flash(`Umbenannt in „${j.filename}“`);
+        flash(t("convert.renamed", { file: j.filename }));
         refresh();
       })
       .catch(fail);
@@ -80,12 +82,9 @@ export default function Convert({
   return (
     <div className="single-col">
       <section className="card">
-        <h2>G-code-Jobs</h2>
-        <p className="muted">
-          Im Tab „Platzieren &amp; Plotten“ erzeugte Jobs — hier prüfen, in der
-          3D-Vorschau ansehen und an OctoPrint senden.
-        </p>
-        {jobs.length === 0 && <p className="muted">Noch keine Jobs.</p>}
+        <h2>{t("convert.title")}</h2>
+        <p className="muted">{t("convert.hint")}</p>
+        {jobs.length === 0 && <p className="muted">{t("convert.noJobs")}</p>}
         <ul className="jobs">
           {jobs.map((j) => {
             const unfit = j.fits === false;
@@ -93,29 +92,29 @@ export default function Convert({
               <li key={j.filename} className={unfit ? "job-unfit" : ""}>
                 <button
                   className="job-meta job-open"
-                  title="3D-Vorschau öffnen"
+                  title={t("convert.openPreview")}
                   onClick={() => openPreview(j.filename)}
                 >
                   <span className="name">{j.filename}</span>
                   {unfit ? (
                     <span className="job-warn" title={j.issue ?? ""}>
-                      ⚠ Passt nicht in die aktuelle Plotfläche
+                      {t("convert.unfit")}
                     </span>
                   ) : (
-                    <span className="muted">{fmtSize(j.size)} · 3D-Vorschau</span>
+                    <span className="muted">{fmtSize(j.size)} · {t("convert.preview3d")}</span>
                   )}
                 </button>
                 <div className="job-actions">
                   <button
                     className="ghost"
-                    title="3D-Vorschau"
+                    title={t("convert.preview3d")}
                     onClick={() => openPreview(j.filename)}
                   >
                     ◰
                   </button>
                   <button
                     className="ghost"
-                    title="Umbenennen"
+                    title={t("common.rename")}
                     onClick={() => rename(j.filename)}
                   >
                     ✎
@@ -125,22 +124,22 @@ export default function Convert({
                     disabled={!octoReady || unfit}
                     title={
                       unfit
-                        ? j.issue ?? "Passt nicht in die Plotfläche"
+                        ? j.issue ?? t("convert.unfitShort")
                         : octoReady
                         ? ""
-                        : "OctoPrint offline"
+                        : t("status.octoOffline")
                     }
                     onClick={() => send(j.filename, false)}
                   >
-                    Senden
+                    {t("common.send")}
                   </button>
                   <button
                     className="primary"
                     disabled={!octoReady || unfit}
-                    title={unfit ? j.issue ?? "Passt nicht in die Plotfläche" : ""}
+                    title={unfit ? j.issue ?? t("convert.unfitShort") : ""}
                     onClick={() => send(j.filename, true)}
                   >
-                    Drucken
+                    {t("common.print")}
                   </button>
                   <button
                     className="ghost"
@@ -165,17 +164,17 @@ export default function Convert({
         return (
         <>
         <Modal
-          title={<>3D-Vorschau · <span className="muted">{preview.name}</span></>}
+          title={<>{t("convert.preview3d")} · <span className="muted">{preview.name}</span></>}
           onClose={() => setPreview(undefined)}
           footer={
             <>
               {unfit && (
                 <span className="job-warn" style={{ marginRight: "auto", alignSelf: "center" }}>
-                  ⚠ Passt nicht in die Plotfläche
+                  {t("convert.unfit")}
                 </span>
               )}
               {preview.data && (preview.data.draws.length || preview.data.travels.length) && (
-                <button onClick={() => setFullscreen(true)}>Vollbild</button>
+                <button onClick={() => setFullscreen(true)}>{t("convert.fullscreen")}</button>
               )}
               <button
                 className="primary"
@@ -186,7 +185,7 @@ export default function Convert({
                   setPreview(undefined);
                 }}
               >
-                An OctoPrint senden
+                {t("common.sendOcto")}
               </button>
             </>
           }
@@ -195,10 +194,10 @@ export default function Convert({
             preview.data.draws.length || preview.data.travels.length ? (
               <Gcode3D data={preview.data} />
             ) : (
-              <p className="muted">Keine Bewegungen in diesem Job gefunden.</p>
+              <p className="muted">{t("convert.noMoves")}</p>
             )
           ) : (
-            <p className="muted">Lade 3D-Vorschau…</p>
+            <p className="muted">{t("convert.loadingPreview")}</p>
           )}
         </Modal>
         {fullscreen && preview.data && (

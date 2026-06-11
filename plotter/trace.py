@@ -26,7 +26,7 @@ def rasterize_pdf_page(source: Path, workdir: Path, page: int, dpi: float = TRAC
     )
     out = prefix.with_suffix(".png")
     if not out.exists():
-        raise PlotterError(f"pdftoppm did not produce PNG output for page {page}")
+        raise PlotterError(f"pdftoppm hat für Seite {page} keine PNG-Ausgabe erzeugt")
     return out
 
 
@@ -55,7 +55,7 @@ def trace_image_to_svg(
     """
     img = cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
     if img is None:
-        raise PlotterError(f"could not read image: {image_path}")
+        raise PlotterError(f"Bild konnte nicht gelesen werden: {image_path}")
     h_px, w_px = img.shape
     px2mm = 25.4 / dpi
     blur = cv2.GaussianBlur(img, (3, 3), 0)
@@ -126,7 +126,7 @@ def image_lines_to_svg(
     """
     img = cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
     if img is None:
-        raise PlotterError(f"could not read image: {image_path}")
+        raise PlotterError(f"Bild konnte nicht gelesen werden: {image_path}")
     h_px, w_px = img.shape
     px2mm = 25.4 / dpi
     w_mm, h_mm = w_px * px2mm, h_px * px2mm

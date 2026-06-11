@@ -26,7 +26,7 @@ def list_pages() -> dict:
 def get_page(page_id: str) -> dict:
     page = store().get_page(page_id)
     if not page:
-        raise HTTPException(404, "page not found")
+        raise HTTPException(404, "Seite nicht gefunden")
     return page
 
 
@@ -56,7 +56,7 @@ def save_page(page_id: str, req: SaveRequest) -> dict:
     try:
         return store().save_page(page_id, req.model_dump(exclude_none=True))
     except KeyError as exc:
-        raise HTTPException(404, "page not found") from exc
+        raise HTTPException(404, "Seite nicht gefunden") from exc
 
 
 @router.delete("/pages/{page_id}")
@@ -69,7 +69,7 @@ def duplicate_page(page_id: str) -> dict:
     try:
         return store().duplicate_page(page_id)
     except KeyError as exc:
-        raise HTTPException(404, "page not found") from exc
+        raise HTTPException(404, "Seite nicht gefunden") from exc
 
 
 @router.post("/pages/{page_id}/activate")
@@ -81,7 +81,7 @@ def activate_page(page_id: str) -> dict:
 def page_gcode(page_id: str) -> dict:
     page = store().get_page(page_id)
     if not page:
-        raise HTTPException(404, "page not found")
+        raise HTTPException(404, "Seite nicht gefunden")
     path = save_scene_job(page, Calibration.load())
     return _job_info(path).model_dump()
 

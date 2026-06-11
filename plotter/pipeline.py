@@ -36,19 +36,19 @@ def ensure_command(command: str) -> str:
     resolved = shutil.which(command)
     if resolved:
         return resolved
-    raise PlotterError(f"Required command not found on PATH: {command}")
+    raise PlotterError(f"Benötigter Befehl nicht im PATH gefunden: {command}")
 
 
 def run_command(command: list[str], *, cwd: Path | None = None) -> None:
     try:
         subprocess.run(command, cwd=cwd, check=True, text=True, capture_output=True)
     except FileNotFoundError as exc:
-        raise PlotterError(f"Required command not found: {command[0]}") from exc
+        raise PlotterError(f"Benötigter Befehl nicht gefunden: {command[0]}") from exc
     except subprocess.CalledProcessError as exc:
         stderr = exc.stderr.strip() if exc.stderr else ""
         stdout = exc.stdout.strip() if exc.stdout else ""
-        message = stderr or stdout or f"command failed with exit code {exc.returncode}"
-        raise PlotterError(f"{command[0]} failed: {message}") from exc
+        message = stderr or stdout or f"Befehl mit Exit-Code {exc.returncode} fehlgeschlagen"
+        raise PlotterError(f"{command[0]} fehlgeschlagen: {message}") from exc
 
 
 def detect_kind(path: Path) -> str:
@@ -59,7 +59,7 @@ def detect_kind(path: Path) -> str:
         return "pdf"
     if suffix in OFFICE_EXTENSIONS:
         return "office"
-    raise PlotterError(f"Unsupported input format: {path.suffix}")
+    raise PlotterError(f"Nicht unterstütztes Eingabeformat: {path.suffix}")
 
 
 def convert_office_to_pdf(source: Path, workdir: Path) -> Path:
@@ -80,7 +80,7 @@ def convert_office_to_pdf(source: Path, workdir: Path) -> Path:
     )
     pdf_path = workdir / f"{source.stem}.pdf"
     if not pdf_path.exists():
-        raise PlotterError(f"LibreOffice did not produce PDF output for {source}")
+        raise PlotterError(f"LibreOffice hat keine PDF-Ausgabe für {source} erzeugt")
     return pdf_path
 
 
@@ -91,11 +91,11 @@ def pdf_page_count(source: Path) -> int:
             [pdfinfo, str(source)], check=True, text=True, capture_output=True
         )
     except subprocess.CalledProcessError as exc:
-        raise PlotterError(f"pdfinfo failed: {exc.stderr or exc.stdout}") from exc
+        raise PlotterError(f"pdfinfo fehlgeschlagen: {exc.stderr or exc.stdout}") from exc
     for line in result.stdout.splitlines():
         if line.lower().startswith("pages:"):
             return int(line.split(":", 1)[1])
-    raise PlotterError(f"could not determine page count of {source}")
+    raise PlotterError(f"Seitenzahl von {source} konnte nicht bestimmt werden")
 
 
 def convert_pdf_to_svg_files(source: Path, workdir: Path, pages: list[int] | None) -> list[Path]:
@@ -110,7 +110,7 @@ def convert_pdf_to_svg_files(source: Path, workdir: Path, pages: list[int] | Non
             [pdftocairo, "-svg", "-f", str(page), "-l", str(page), str(source), str(out)]
         )
         if not out.exists():
-            raise PlotterError(f"pdftocairo did not produce SVG output for page {page}")
+            raise PlotterError(f"pdftocairo hat für Seite {page} keine SVG-Ausgabe erzeugt")
         svg_files.append(out)
     return svg_files
 

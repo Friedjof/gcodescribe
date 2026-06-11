@@ -49,7 +49,7 @@ def octo_send(req: PrintRequest) -> dict:
         _require_homed(ctrl)
     path = jobs_dir() / Path(req.filename).name
     if not path.exists():
-        raise HTTPException(404, "job not found")
+        raise HTTPException(404, "Job nicht gefunden")
     # Re-validate against the *current* calibration: catches jobs generated
     # before a recalibration (other pen heights / plot area) or by old code.
     GcodeSafetyChecker(Calibration.load()).check(path.read_text(), name=req.filename)

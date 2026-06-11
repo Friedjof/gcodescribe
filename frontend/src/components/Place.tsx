@@ -5,6 +5,7 @@ import {
   type Source,
   type SourcePreview,
 } from "../api";
+import { useI18n } from "../i18n";
 import Segmented from "./Segmented";
 
 type Mode = "auto" | "vector" | "trace";
@@ -23,6 +24,7 @@ export default function Place({
   status: any;
   onAction: () => void;
 }) {
+  const { t } = useI18n();
   const [cal, setCal] = useState<Calibration | null>(null);
   const [sources, setSources] = useState<Source[]>([]);
   const [sel, setSel] = useState<Source | null>(null);
@@ -100,7 +102,11 @@ export default function Place({
       setSel(src);
       setPage(1);
       flash(
-        `„${src.name}" geladen (${src.mode === "trace" ? "nachgezeichnet" : "Vektor"}, ${src.pages.length} Seite(n))`
+        t("place.loaded", {
+          name: src.name,
+          mode: src.mode === "trace" ? t("place.traced") : t("place.vector"),
+          pages: src.pages.length,
+        })
       );
     } catch (e) {
       fail(e);
@@ -109,7 +115,7 @@ export default function Place({
     }
   };
 
-  if (!cal) return <div className="card">Lade…</div>;
+  if (!cal) return <div className="card">{t("common.loading")}</div>;
 
   const W = cal.bed_width;
   const H = cal.bed_height;
@@ -178,10 +184,10 @@ export default function Place({
       const job = await api.sourceGcode(sel.id, page, place.x, place.y, place.width);
       if (send) {
         await api.send(job.filename, false);
-        flash(`G-code erzeugt & an OctoPrint gesendet: ${job.filename}`);
+        flash(t("place.gcodeSent", { file: job.filename }));
         onAction();
       } else {
-        flash(`G-code erzeugt: ${job.filename} (Tab „Konvertieren" zum Drucken)`);
+        flash(t("place.gcodeCreated", { file: job.filename }));
       }
     } catch (e) {
       fail(e);
@@ -224,7 +230,7 @@ export default function Place({
   return (
     <div className="grid place-grid">
       <section className="card">
-        <h2>Platzierung &amp; Vorschau</h2>
+        <h2>{t("place.previewTitle")}</h2>
         <div className="liveview">
           <svg
             ref={svgRef}
@@ -269,7 +275,7 @@ export default function Place({
         {place && (
           <div className="place-controls">
             <label className="field">
-              <span>Breite</span>
+              <span>{t("common.width")}</span>
               <div className="input-unit">
                 <input type="number" step="1" value={place.width.toFixed(0)}
                   onChange={(e) => setWidth(parseFloat(e.target.value) || 5)} />
@@ -277,16 +283,16 @@ export default function Place({
               </div>
             </label>
             <div className="place-readout muted">
-              {place.width.toFixed(0)} × {drawH.toFixed(0)} mm · Ecke ({place.x.toFixed(0)}, {place.y.toFixed(0)})
+              {place.width.toFixed(0)} × {drawH.toFixed(0)} mm · {t("place.corner")} ({place.x.toFixed(0)}, {place.y.toFixed(0)})
             </div>
           </div>
         )}
         <div className="job-controls" style={{ marginTop: 12 }}>
           <button className="primary" disabled={!place || busy} onClick={() => generate(false)}>
-            G-code erzeugen
+            {t("common.generateGcode")}
           </button>
           <button disabled={!place || busy || !online} onClick={() => generate(true)}>
-            Erzeugen &amp; senden
+            {t("place.generateSend")}
           </button>
         </div>
         {msg && <div className="banner ok">{msg}</div>}
@@ -294,35 +300,35 @@ export default function Place({
       </section>
 
       <section className="card">
-        <h2>Dokument laden</h2>
+        <h2>{t("place.loadDocument")}</h2>
         <div className="field-group">
-          <h3>Modus</h3>
+          <h3>{t("place.mode")}</h3>
           <Segmented<Mode>
             value={mode}
             onChange={setMode}
             options={[
-              { value: "auto", label: "Auto" },
-              { value: "vector", label: "Vektor" },
-              { value: "trace", label: "Nachzeichnen" },
+              { value: "auto", label: t("place.modeAuto") },
+              { value: "vector", label: t("place.modeVector") },
+              { value: "trace", label: t("place.modeTrace") },
             ]}
           />
           <p className="muted hint">
             {mode === "auto"
-              ? "Vektorlinien wenn vorhanden, sonst Flächen nachzeichnen."
+              ? t("place.hintAuto")
               : mode === "vector"
-              ? "Nur vorhandene Vektorpfade (schlägt bei reinen Bild-PDFs fehl)."
-              : "Graustufen → Flächenränder erkennen (für Scans & Bilder)."}
+              ? t("place.hintVector")
+              : t("place.hintTrace")}
           </p>
           {(mode === "trace" || mode === "auto") && (
             <>
-              <h3 style={{ marginTop: 12 }}>Detailgrad (Nachzeichnen)</h3>
+              <h3 style={{ marginTop: 12 }}>{t("place.detailLevel")}</h3>
               <Segmented
                 value={detail}
                 onChange={setDetail}
                 options={[
-                  { value: 1, label: "Grob" },
-                  { value: 2, label: "Mittel" },
-                  { value: 3, label: "Fein" },
+                  { value: 1, label: t("place.coarse") },
+                  { value: 2, label: t("place.medium") },
+                  { value: 3, label: t("place.fine") },
                 ]}
               />
             </>
@@ -332,20 +338,20 @@ export default function Place({
           <input type="file" accept=".pdf,.svg,.png,.jpg,.jpeg,.bmp,.tif,.tiff,.odt,.ods,.odp,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
             disabled={busy}
             onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
-          {busy ? "Verarbeite…" : "Datei wählen oder hierher ziehen"}
+          {busy ? t("place.processing") : t("place.dropzone")}
         </label>
 
         <div className="field-group" style={{ marginTop: 18 }}>
-          <h3>Geladene Dokumente</h3>
-          {sources.length === 0 && <p className="muted">Noch nichts geladen.</p>}
+          <h3>{t("place.loadedDocs")}</h3>
+          {sources.length === 0 && <p className="muted">{t("place.nothingLoaded")}</p>}
           <ul className="jobs">
             {sources.map((s) => (
               <li key={s.id} className={sel?.id === s.id ? "sel" : ""}>
                 <button className="src-pick" onClick={() => { setSel(s); setPage(1); }}>
                   <span className="name">{s.name}</span>
                   <span className="muted">
-                    {s.mode === "trace" ? "nachgezeichnet" : "Vektor"} · {s.pages.length} S. ·{" "}
-                    {s.pages.reduce((a, p) => a + p.lines, 0)} Linien
+                    {s.mode === "trace" ? t("place.traced") : t("place.vector")} · {s.pages.length} {t("place.pagesShort")} ·{" "}
+                    {s.pages.reduce((a, p) => a + p.lines, 0)} {t("place.linesShort")}
                   </span>
                 </button>
                 <button className="ghost" onClick={() =>
@@ -361,7 +367,7 @@ export default function Place({
 
         {sel && sel.pages.length > 1 && (
           <div className="field-group">
-            <h3>Seite</h3>
+            <h3>{t("place.page")}</h3>
             <Segmented
               value={page}
               onChange={setPage}
@@ -372,7 +378,11 @@ export default function Place({
         )}
         {pageInfo && (
           <p className="muted">
-            Original: {pageInfo.width.toFixed(0)} × {pageInfo.height.toFixed(0)} mm, {pageInfo.lines} Linien
+            {t("place.original", {
+              w: pageInfo.width.toFixed(0),
+              h: pageInfo.height.toFixed(0),
+              lines: pageInfo.lines,
+            })}
           </p>
         )}
       </section>

@@ -10,12 +10,13 @@ import {
 import LiveView from "./LiveView";
 import Segmented from "./Segmented";
 import { useArrowKeys } from "../hooks";
+import { useI18n } from "../i18n";
 
-const CORNERS: { id: string; label: string }[] = [
-  { id: "tl", label: "↖ oben links" },
-  { id: "tr", label: "↗ oben rechts" },
-  { id: "bl", label: "↙ unten links" },
-  { id: "br", label: "↘ unten rechts" },
+const CORNERS: { id: string; labelKey: string }[] = [
+  { id: "tl", labelKey: "paper.cornerTL" },
+  { id: "tr", labelKey: "paper.cornerTR" },
+  { id: "bl", labelKey: "paper.cornerBL" },
+  { id: "br", labelKey: "paper.cornerBR" },
 ];
 
 const XY_STEPS = [0.1, 1, 10, 50];
@@ -28,6 +29,7 @@ export default function Paper({
   status: any;
   onAction: () => void;
 }) {
+  const { t } = useI18n();
   const [cal, setCal] = useState<Calibration | null>(null);
   const [rect, setRect] = useState<[number, number, number, number] | null>(null);
   const [pos, setPos] = useState<Position | null>(null);
@@ -105,14 +107,14 @@ export default function Paper({
   );
   const kbd = (dir: string) => (pressed === dir ? " kbd-active" : "");
 
-  if (!cal) return <div className="card">Lade…</div>;
+  if (!cal) return <div className="card">{t("common.loading")}</div>;
 
   const homeAll = () =>
     api
       .home()
       .then(() => {
         refreshPosition();
-        flash("Genullt — Position ist jetzt exakt (0, 0, 0).");
+        flash(t("paper.homed"));
         setActive(2);
       })
       .catch(fail);
@@ -124,8 +126,8 @@ export default function Paper({
         setCal(c);
         flash(
           which === "down"
-            ? `Stift unten = Z ${c.pen_down_z.toFixed(2)} mm gespeichert.`
-            : `Stift oben = Z ${c.pen_up_z.toFixed(2)} mm gespeichert.`
+            ? t("paper.penDownSaved", { z: c.pen_down_z.toFixed(2) })
+            : t("paper.penUpSaved", { z: c.pen_up_z.toFixed(2) })
         );
       })
       .catch(fail);
@@ -147,7 +149,7 @@ export default function Paper({
       .setCorner(corner)
       .then((s) => {
         applyPaperState(s);
-        flash(`Ecke ${corner.toUpperCase()} gespeichert.`);
+        flash(t("paper.cornerSaved", { corner: corner.toUpperCase() }));
       })
       .catch(fail);
 
@@ -160,7 +162,7 @@ export default function Paper({
       .applyPaper(margin)
       .then((s) => {
         applyPaperState(s);
-        flash("Plotbereich auf das Papier gesetzt — Konvertierungen mappen jetzt darauf.");
+        flash(t("paper.applied"));
         onAction();
       })
       .catch(fail);
@@ -170,7 +172,7 @@ export default function Paper({
       .testPattern("frame")
       .then((j) => api.send(j.filename, true))
       .then(() => {
-        flash("Test-Rahmen wird geplottet.");
+        flash(t("paper.framePlotting"));
         onAction();
       })
       .catch(fail);
@@ -184,18 +186,18 @@ export default function Paper({
   const capturedCount = Object.keys(cal.paper_corners ?? {}).length;
 
   const steps = [
-    { n: 1, title: "Papier auflegen & nullen", done: homed, locked: false },
+    { n: 1, title: t("paper.step1"), done: homed, locked: false },
     // Openable once homed OR a height is already saved, so you can always come
     // back to test / re-adjust the pen height (movements still need homing).
-    { n: 2, title: "Stift-Höhe einstellen", done: heightSaved, locked: !homed && !heightSaved },
-    { n: 3, title: "Papierecken setzen", done: !!rect, locked: !homed },
-    { n: 4, title: "Als Plotbereich übernehmen", done: false, locked: !rect },
+    { n: 2, title: t("paper.step2"), done: heightSaved, locked: !homed && !heightSaved },
+    { n: 3, title: t("paper.step3"), done: !!rect, locked: !homed },
+    { n: 4, title: t("paper.step4"), done: false, locked: !rect },
   ];
 
   return (
     <div className="grid paper-grid">
       <section className="card">
-        <h2>Live-Ansicht</h2>
+        <h2>{t("paper.liveView")}</h2>
         <LiveView
           cal={cal}
           position={pos}
@@ -204,11 +206,11 @@ export default function Paper({
           onMoveTo={clickMove && homed ? moveTo : undefined}
         />
         <div className="legend">
-          <span><i className="sw paper" /> Papier</span>
-          <span><i className="sw plot" /> Plotbereich</span>
-          <span><i className="sw corner" /> Ecke</span>
-          <span><i className="sw head" /> Stift</span>
-          {preview && <span><i className="sw draw" /> Vorschau</span>}
+          <span><i className="sw paper" /> {t("paper.legPaper")}</span>
+          <span><i className="sw plot" /> {t("paper.legPlot")}</span>
+          <span><i className="sw corner" /> {t("paper.legCorner")}</span>
+          <span><i className="sw head" /> {t("paper.legPen")}</span>
+          {preview && <span><i className="sw draw" /> {t("paper.legPreview")}</span>}
         </div>
         <div className="pos-readout">
           {homed && pos ? (
@@ -218,10 +220,10 @@ export default function Paper({
               <span>Z <strong>{pos.z.toFixed(2)}</strong></span>
             </>
           ) : (
-            <span className="muted">Position unbekannt — bitte nullen (Schritt 1).</span>
+            <span className="muted">{t("paper.posUnknown")}</span>
           )}
           <label className="switch-label">
-            <span className="muted">Klick fährt an</span>
+            <span className="muted">{t("paper.clickMove")}</span>
             <button
               className={`switch ${clickMove ? "on" : ""}`}
               disabled={!homed}
@@ -234,10 +236,10 @@ export default function Paper({
         </div>
 
         <div className="field-group" style={{ marginTop: 16 }}>
-          <h3>G-code-Vorschau (Mapping)</h3>
+          <h3>{t("paper.gcodePreview")}</h3>
           <div className="preview-row">
             <select value={previewJob} onChange={(e) => setPreviewJob(e.target.value)}>
-              <option value="">— Job wählen —</option>
+              <option value="">{t("paper.chooseJob")}</option>
               {jobs.map((j) => (
                 <option key={j.filename} value={j.filename}>{j.filename}</option>
               ))}
@@ -246,15 +248,15 @@ export default function Paper({
               ⟳
             </button>
           </div>
-          {preview?.truncated && <p className="muted">Vorschau gekürzt (sehr großer Job).</p>}
+          {preview?.truncated && <p className="muted">{t("paper.previewTruncated")}</p>}
         </div>
       </section>
 
       <section className="card">
-        <h2>Papier kalibrieren</h2>
+        <h2>{t("paper.title")}</h2>
         {!online && (
           <div className="banner err" style={{ marginBottom: 14 }}>
-            OctoPrint ist offline — Bewegung nicht möglich.
+            {t("paper.offline")}
           </div>
         )}
 
@@ -276,13 +278,9 @@ export default function Paper({
                 <div className="wstep-body">
                   {s.n === 1 && (
                     <>
-                      <p className="muted">
-                        Blatt aufs Bett legen (z. B. mit Klebeband fixieren), dann alle
-                        Achsen nullen. Danach ist die Kopfposition exakt bekannt — auch
-                        nach einem Neustart der Anwendung.
-                      </p>
+                      <p className="muted">{t("paper.step1Hint")}</p>
                       <button className="primary big" disabled={!online} onClick={homeAll}>
-                        ⌂ Home XYZ
+                        {t("paper.homeXYZ")}
                       </button>
                     </>
                   )}
@@ -291,34 +289,29 @@ export default function Paper({
                     <>
                       {heightSaved && (
                         <div className="banner ok" style={{ marginTop: 0, marginBottom: 12 }}>
-                          ✓ Stift-Höhe eingerichtet — unten {cal.pen_down_z.toFixed(2)} mm,
-                          oben {cal.pen_up_z.toFixed(2)} mm. Unten testen oder neu justieren.
+                          {t("paper.heightSet", {
+                            down: cal.pen_down_z.toFixed(2),
+                            up: cal.pen_up_z.toFixed(2),
+                          })}
                         </div>
                       )}
                       {!homed && (
                         <div className="banner warn-inline">
-                          <span>
-                            Zum Testen und Anfahren erst homen — sonst kennt der Drucker
-                            die Z-Null nicht. Die Höhen lassen sich aber direkt eintippen.
-                          </span>
+                          <span>{t("paper.needHome")}</span>
                           <button
                             className="primary"
                             disabled={!online}
                             onClick={homeAll}
                           >
-                            ⌂ Home XYZ
+                            {t("paper.homeXYZ")}
                           </button>
                         </div>
                       )}
-                      <p className="muted">
-                        Stift in kleinen Schritten absenken, bis er das Papier gerade
-                        berührt, dann als <strong>Stift unten</strong> speichern. Oder die
-                        Höhen direkt eintippen.
-                      </p>
+                      <p className="muted">{t("paper.step2Hint")}</p>
                       <div className="z-panel">
                         <div className="z-readout">
-                          <span className="muted">Aktuelle Z</span>
-                          <strong>{homed && pos ? `${pos.z.toFixed(2)} mm` : "— (nicht gehomet)"}</strong>
+                          <span className="muted">{t("paper.currentZ")}</span>
+                          <strong>{homed && pos ? `${pos.z.toFixed(2)} mm` : t("paper.notHomed")}</strong>
                         </div>
                         <Segmented
                           value={zStep}
@@ -335,22 +328,22 @@ export default function Paper({
                         </div>
                         {homed && (
                           <p className="muted kbd-hint">
-                            Tastatur: <kbd>Bild↑</kbd><kbd>Bild↓</kbd> Z bewegen
+                            {t("common.keyboard")}: <kbd>{t("common.pageUpKey")}</kbd><kbd>{t("common.pageDownKey")}</kbd> {t("paper.kbdZ")}
                           </p>
                         )}
                         <div className="save-row">
                           <button disabled={!online || !homed} onClick={() => savePenHeight("down")}>
-                            ✓ Aktuelle Z als <strong>Stift unten</strong>
+                            {t("paper.saveAsDown")}
                           </button>
                           <button disabled={!online || !homed} onClick={() => savePenHeight("up")}>
-                            ✓ Aktuelle Z als <strong>Stift oben</strong>
+                            {t("paper.saveAsUp")}
                           </button>
                         </div>
                       </div>
 
                       <div className="height-fields">
                         <label className="field">
-                          <span>Stift unten (Z)</span>
+                          <span>{t("calibrate.penDownZ")}</span>
                           <div className="input-unit">
                             <input
                               type="number"
@@ -364,7 +357,7 @@ export default function Paper({
                           </div>
                         </label>
                         <label className="field">
-                          <span>Stift oben (Z)</span>
+                          <span>{t("calibrate.penUpZ")}</span>
                           <div className="input-unit">
                             <input
                               type="number"
@@ -384,43 +377,39 @@ export default function Paper({
                           disabled={!online || !homed || !heightSaved}
                           title={
                             !heightSaved
-                              ? "Erst eine Stift-unten-Höhe einrichten"
+                              ? t("paper.tipNeedDown")
                               : !homed
-                              ? "Erst homen (oben)"
-                              : "Fährt Z auf die gespeicherte Stift-unten-Höhe"
+                              ? t("paper.tipNeedHome")
+                              : t("paper.tipGoDown")
                           }
                           onClick={() => run(() => api.pen(true))}
                         >
-                          ↓ Test: Stift senken
+                          {t("paper.testLower")}
                         </button>
                         <button
                           disabled={!online || !homed || !heightSaved}
                           title={
                             !heightSaved
-                              ? "Erst eine Stift-unten-Höhe einrichten"
+                              ? t("paper.tipNeedDown")
                               : !homed
-                              ? "Erst homen (oben)"
-                              : "Fährt Z auf die gespeicherte Stift-oben-Höhe"
+                              ? t("paper.tipNeedHome")
+                              : t("paper.tipGoUp")
                           }
                           onClick={() => run(() => api.pen(false))}
                         >
-                          ↑ Test: Stift heben
+                          {t("paper.testRaise")}
                         </button>
                       </div>
 
                       <button className="primary" onClick={() => setActive(3)}>
-                        Weiter zu den Ecken →
+                        {t("paper.toCorners")}
                       </button>
                     </>
                   )}
 
                   {s.n === 3 && (
                     <>
-                      <p className="muted">
-                        Den Stift exakt über eine Papierecke fahren (Jog-Pad oder
-                        „Klick fährt an“ in der Live-Ansicht aktivieren), dann die Ecke
-                        speichern. Zwei diagonale Ecken reichen, vier sind genauer.
-                      </p>
+                      <p className="muted">{t("paper.step3Hint")}</p>
                       <Segmented
                         value={xyStep}
                         onChange={setXyStep}
@@ -436,13 +425,13 @@ export default function Paper({
                           <button disabled={!online} onClick={() => jogXY(0, -1)} className={"down" + kbd("down")}>↓</button>
                         </div>
                         <div className="z">
-                          <button disabled={!online} onClick={() => run(() => api.pen(true))}>Stift ↓</button>
-                          <button disabled={!online} onClick={() => run(() => api.pen(false))}>Stift ↑</button>
+                          <button disabled={!online} onClick={() => run(() => api.pen(true))}>{t("paper.penDownShort")}</button>
+                          <button disabled={!online} onClick={() => run(() => api.pen(false))}>{t("paper.penUpShort")}</button>
                         </div>
                       </div>
                       <p className="muted kbd-hint">
-                        Tastatur: <kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> bewegen
-                        {homed && <> · <kbd>Bild↑</kbd><kbd>Bild↓</kbd> Z</>}
+                        {t("common.keyboard")}: <kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> {t("control.kbdMove")}
+                        {homed && <> · <kbd>{t("common.pageUpKey")}</kbd><kbd>{t("common.pageDownKey")}</kbd> Z</>}
                       </p>
                       <div className="corner-grid">
                         {CORNERS.map((c) => {
@@ -450,7 +439,7 @@ export default function Paper({
                           return (
                             <div key={c.id} className={`corner ${captured ? "set" : ""}`}>
                               <button disabled={!online || !homed} onClick={() => capture(c.id)}>
-                                {c.label}
+                                {t(c.labelKey)}
                               </button>
                               {captured ? (
                                 <span className="coords">
@@ -458,7 +447,7 @@ export default function Paper({
                                   <button
                                     className="ghost tiny"
                                     disabled={!online}
-                                    title="Ecke anfahren — Stift wird zuerst angehoben"
+                                    title={t("paper.driveCorner")}
                                     onClick={() => driveToCorner(c.id, "paper")}
                                   >
                                     ➜
@@ -474,10 +463,10 @@ export default function Paper({
                       </div>
                       <div className="save-row">
                         {capturedCount > 0 && (
-                          <button className="ghost" onClick={resetCorners}>Ecken zurücksetzen</button>
+                          <button className="ghost" onClick={resetCorners}>{t("paper.resetCorners")}</button>
                         )}
                         <button className="primary" disabled={!rect} onClick={() => setActive(4)}>
-                          Weiter →
+                          {t("common.next")} →
                         </button>
                       </div>
                     </>
@@ -487,13 +476,18 @@ export default function Paper({
                     <>
                       <p className="muted">
                         {rect
-                          ? `Erfasstes Papier: ${rect[2].toFixed(1)} × ${rect[3].toFixed(1)} mm ab (${rect[0].toFixed(1)}, ${rect[1].toFixed(1)}).`
-                          : "Noch kein Papier erfasst."}{" "}
-                        Konvertierte PDFs werden in diesen Bereich eingepasst.
+                          ? t("paper.capturedPaper", {
+                              w: rect[2].toFixed(1),
+                              h: rect[3].toFixed(1),
+                              x: rect[0].toFixed(1),
+                              y: rect[1].toFixed(1),
+                            })
+                          : t("paper.noPaper")}{" "}
+                        {t("paper.pdfFit")}
                       </p>
                       <div className="apply-row">
                         <label className="field">
-                          <span>Rand</span>
+                          <span>{t("paper.margin")}</span>
                           <div className="input-unit">
                             <input
                               type="number" step="1" min="0" value={margin}
@@ -503,23 +497,23 @@ export default function Paper({
                           </div>
                         </label>
                         <button className="primary" disabled={!rect} onClick={apply}>
-                          Übernehmen
+                          {t("common.apply")}
                         </button>
                         <button
                           disabled={!online || !rect}
                           onClick={plotFrame}
-                          title="Plottet den Umriss des Plotbereichs"
+                          title={t("paper.testFrameTip")}
                         >
-                          Rahmen testen
+                          {t("paper.testFrame")}
                         </button>
                         <a className="btn-link" href="/api/calibration/export" download>
-                          ↓ Export (XML)
+                          {t("common.exportXml")}
                         </a>
                       </div>
                       <div className="field-group" style={{ marginTop: 14 }}>
-                        <h3>Plotbereich-Ecken anfahren</h3>
+                        <h3>{t("paper.driveToPlotCorners")}</h3>
                         <p className="muted" style={{ margin: "0 0 8px" }}>
-                          Stift wird immer zuerst auf „oben“ gehoben, dann angefahren.
+                          {t("paper.driveNote")}
                         </p>
                         <div className="save-row">
                           {CORNERS.map((c) => (
@@ -528,7 +522,7 @@ export default function Paper({
                               disabled={!online || !homed}
                               onClick={() => driveToCorner(c.id, "plot")}
                             >
-                              {c.label}
+                              {t(c.labelKey)}
                             </button>
                           ))}
                         </div>

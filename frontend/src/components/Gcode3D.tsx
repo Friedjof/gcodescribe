@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { GcodePreview3D } from "../api";
+import { useI18n } from "../i18n";
 
 type V3 = [number, number, number];
 
@@ -8,6 +9,7 @@ type V3 = [number, number, number];
  * external 3D dependency). Drag to orbit, scroll to zoom, right-drag to pan.
  */
 export default function Gcode3D({ data, chrome = true }: { data: GcodePreview3D; chrome?: boolean }) {
+  const { t } = useI18n();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const view = useRef({ yaw: -0.7, pitch: 1.0, zoom: 1, panX: 0, panY: 0 });
   const drag = useRef<{ x: number; y: number; mode: "orbit" | "pan" } | null>(null);
@@ -183,9 +185,7 @@ export default function Gcode3D({ data, chrome = true }: { data: GcodePreview3D;
       <canvas ref={canvasRef} className="g3d-canvas" />
       {chrome && (
         <div className="g3d-bar">
-          <span className="muted">
-            Ziehen = drehen · Scrollen = zoomen · Shift/Rechtsklick = verschieben
-          </span>
+          <span className="muted">{t("g3d.controls")}</span>
           <label className="g3d-toggle">
             <input
               type="checkbox"
@@ -195,9 +195,9 @@ export default function Gcode3D({ data, chrome = true }: { data: GcodePreview3D;
                 requestAnimationFrame(() => renderRef.current());
               }}
             />
-            Reisewege
+            {t("g3d.travels")}
           </label>
-          <button className="ghost" onClick={resetView}>Ansicht zurücksetzen</button>
+          <button className="ghost" onClick={resetView}>{t("g3d.resetView")}</button>
         </div>
       )}
     </div>

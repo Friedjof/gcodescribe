@@ -20,7 +20,7 @@ async def create_source(
     detail: int = Form(1),
 ) -> dict:
     if not file.filename:
-        raise HTTPException(400, "missing filename")
+        raise HTTPException(400, "Dateiname fehlt")
     data = await file.read()
     return service().create(file.filename, data, mode=mode, detail=max(1, min(detail, 3)))
 

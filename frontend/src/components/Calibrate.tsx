@@ -1,28 +1,30 @@
 import { useEffect, useState } from "react";
 import { api, type Calibration } from "../api";
+import { useI18n } from "../i18n";
 
-const FIELDS: { key: keyof Calibration; label: string; unit: string; group: string }[] = [
-  { key: "bed_width", label: "Bett-Breite", unit: "mm", group: "Fläche" },
-  { key: "bed_height", label: "Bett-Höhe", unit: "mm", group: "Fläche" },
-  { key: "plot_width", label: "Plot-Breite", unit: "mm", group: "Fläche" },
-  { key: "plot_height", label: "Plot-Höhe", unit: "mm", group: "Fläche" },
-  { key: "origin_x", label: "Origin X", unit: "mm", group: "Fläche" },
-  { key: "origin_y", label: "Origin Y", unit: "mm", group: "Fläche" },
-  { key: "pen_up_z", label: "Stift oben (Z)", unit: "mm", group: "Stift" },
-  { key: "pen_down_z", label: "Stift unten (Z)", unit: "mm", group: "Stift" },
-  { key: "travel_feed", label: "Travel-Speed", unit: "mm/min", group: "Speed" },
-  { key: "draw_feed", label: "Zeichen-Speed", unit: "mm/min", group: "Speed" },
-  { key: "z_feed", label: "Z-Speed", unit: "mm/min", group: "Speed" },
+const FIELDS: { key: keyof Calibration; labelKey: string; unit: string; groupKey: string }[] = [
+  { key: "bed_width", labelKey: "calibrate.bedWidth", unit: "mm", groupKey: "calibrate.groupArea" },
+  { key: "bed_height", labelKey: "calibrate.bedHeight", unit: "mm", groupKey: "calibrate.groupArea" },
+  { key: "plot_width", labelKey: "calibrate.plotWidth", unit: "mm", groupKey: "calibrate.groupArea" },
+  { key: "plot_height", labelKey: "calibrate.plotHeight", unit: "mm", groupKey: "calibrate.groupArea" },
+  { key: "origin_x", labelKey: "calibrate.originX", unit: "mm", groupKey: "calibrate.groupArea" },
+  { key: "origin_y", labelKey: "calibrate.originY", unit: "mm", groupKey: "calibrate.groupArea" },
+  { key: "pen_up_z", labelKey: "calibrate.penUpZ", unit: "mm", groupKey: "calibrate.groupPen" },
+  { key: "pen_down_z", labelKey: "calibrate.penDownZ", unit: "mm", groupKey: "calibrate.groupPen" },
+  { key: "travel_feed", labelKey: "calibrate.travelFeed", unit: "mm/min", groupKey: "calibrate.groupSpeed" },
+  { key: "draw_feed", labelKey: "calibrate.drawFeed", unit: "mm/min", groupKey: "calibrate.groupSpeed" },
+  { key: "z_feed", labelKey: "calibrate.zFeed", unit: "mm/min", groupKey: "calibrate.groupSpeed" },
 ];
 
 const PATTERNS: [string, string][] = [
-  ["frame", "Rahmen"],
-  ["cross", "Kreuz"],
-  ["pen", "Stift-Test"],
-  ["grid", "Raster"],
+  ["frame", "calibrate.patFrame"],
+  ["cross", "calibrate.patCross"],
+  ["pen", "calibrate.patPen"],
+  ["grid", "calibrate.patGrid"],
 ];
 
 export default function Calibrate() {
+  const { t } = useI18n();
   const [cal, setCal] = useState<Calibration | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -31,7 +33,7 @@ export default function Calibrate() {
     api.getCalibration().then(setCal).catch((e) => setErr(String(e.message)));
   }, []);
 
-  if (!cal) return <div className="card">Lade Kalibrierung…</div>;
+  if (!cal) return <div className="card">{t("calibrate.loading")}</div>;
 
   const set = (k: keyof Calibration, v: number | boolean) =>
     setCal({ ...cal, [k]: v });
@@ -47,7 +49,7 @@ export default function Calibrate() {
       .saveCalibration(cal)
       .then((c) => {
         setCal(c);
-        flash("Kalibrierung gespeichert");
+        flash(t("calibrate.saved"));
       })
       .catch((e) => setErr(String(e.message)));
 
@@ -56,23 +58,23 @@ export default function Calibrate() {
       .importCalibration(file)
       .then((c) => {
         setCal(c);
-        flash(`Kalibrierung importiert aus „${file.name}"`);
+        flash(t("calibrate.imported", { name: file.name }));
       })
       .catch((e) => setErr(String(e.message)));
 
-  const groups = [...new Set(FIELDS.map((f) => f.group))];
+  const groups = [...new Set(FIELDS.map((f) => f.groupKey))];
 
   return (
     <div className="grid">
       <section className="card">
-        <h2>Kalibrierung</h2>
+        <h2>{t("calibrate.title")}</h2>
         {groups.map((g) => (
           <div key={g} className="field-group">
-            <h3>{g}</h3>
+            <h3>{t(g)}</h3>
             <div className="fields">
-              {FIELDS.filter((f) => f.group === g).map((f) => (
+              {FIELDS.filter((f) => f.groupKey === g).map((f) => (
                 <label key={f.key} className="field">
-                  <span>{f.label}</span>
+                  <span>{t(f.labelKey)}</span>
                   <div className="input-unit">
                     <input
                       type="number"
@@ -88,14 +90,14 @@ export default function Calibrate() {
           </div>
         ))}
         <div className="field-group">
-          <h3>Layout</h3>
+          <h3>{t("calibrate.layout")}</h3>
           <label className="check">
             <input
               type="checkbox"
               checked={cal.fit_to_area}
               onChange={(e) => set("fit_to_area", e.target.checked)}
             />
-            In Plotfläche einpassen (skalieren)
+            {t("calibrate.fitToArea")}
           </label>
           <label className="check">
             <input
@@ -103,18 +105,18 @@ export default function Calibrate() {
               checked={cal.flip_y}
               onChange={(e) => set("flip_y", e.target.checked)}
             />
-            Y spiegeln (SVG ↓ → Drucker ↑)
+            {t("calibrate.flipY")}
           </label>
         </div>
         <div className="save-row">
           <button className="primary" onClick={save}>
-            Speichern
+            {t("common.save")}
           </button>
           <a className="btn-link" href="/api/calibration/export" download>
-            ↓ Export (XML)
+            {t("common.exportXml")}
           </a>
           <label className="btn-link">
-            ↑ Import (XML)
+            {t("common.importXml")}
             <input
               type="file"
               accept=".xml,application/xml,text/xml"
@@ -132,23 +134,20 @@ export default function Calibrate() {
       </section>
 
       <section className="card">
-        <h2>Test-Pattern</h2>
-        <p className="muted">
-          Erzeugt einen G-code-Job aus den aktuellen Werten — danach im Tab
-          „Konvertieren &amp; Drucken“ senden.
-        </p>
+        <h2>{t("calibrate.testPattern")}</h2>
+        <p className="muted">{t("calibrate.testHint")}</p>
         <div className="pattern-grid">
-          {PATTERNS.map(([id, label]) => (
+          {PATTERNS.map(([id, labelKey]) => (
             <button
               key={id}
               onClick={() =>
                 api
                   .testPattern(id)
-                  .then((j) => flash(`Erzeugt: ${j.filename}`))
+                  .then((j) => flash(t("calibrate.generated", { file: j.filename })))
                   .catch((e) => setErr(String(e.message)))
               }
             >
-              {label}
+              {t(labelKey)}
             </button>
           ))}
         </div>

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api } from "../api";
 import { useArrowKeys } from "../hooks";
+import { useI18n } from "../i18n";
 import Segmented from "./Segmented";
 
 export default function Control({
@@ -10,6 +11,7 @@ export default function Control({
   status: any;
   onAction: () => void;
 }) {
+  const { t } = useI18n();
   const [step, setStep] = useState(10);
   const [limitPlot, setLimitPlot] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -43,10 +45,10 @@ export default function Control({
   if (!online)
     return (
       <div className="card">
-        <h2>Steuerung</h2>
+        <h2>{t("control.title")}</h2>
         <p className="muted">
-          OctoPrint ist offline oder nicht konfiguriert. Setze
-          <code> OCTOPRINT_URL</code> und <code>OCTOPRINT_API_KEY</code>.
+          {t("control.offlineHint")}
+          <code> OCTOPRINT_URL</code> {t("common.and")} <code>OCTOPRINT_API_KEY</code>.
         </p>
       </div>
     );
@@ -54,7 +56,7 @@ export default function Control({
   return (
     <div className="grid">
       <section className="card">
-        <h2>Bewegung</h2>
+        <h2>{t("control.motion")}</h2>
         <Segmented
           value={step}
           onChange={setStep}
@@ -75,13 +77,13 @@ export default function Control({
           </div>
         </div>
         <p className="muted kbd-hint">
-          Tastatur: <kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> bewegen ·{" "}
-          <kbd>Bild↑</kbd><kbd>Bild↓</kbd> Z
+          {t("common.keyboard")}: <kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> {t("control.kbdMove")} ·{" "}
+          <kbd>{t("common.pageUpKey")}</kbd><kbd>{t("common.pageDownKey")}</kbd> Z
         </p>
         <div className="pen-row">
-          <button onClick={() => run(() => api.pen(false))}>Stift hoch</button>
-          <button onClick={() => run(() => api.pen(true))}>Stift runter</button>
-          <button onClick={() => run(() => api.home())}>Home alle</button>
+          <button onClick={() => run(() => api.pen(false))}>{t("control.penUp")}</button>
+          <button onClick={() => run(() => api.pen(true))}>{t("control.penDown")}</button>
+          <button onClick={() => run(() => api.home())}>{t("control.homeAll")}</button>
         </div>
         <label className="switch-label" style={{ marginTop: 14, justifyContent: "flex-start" }}>
           <button
@@ -91,22 +93,20 @@ export default function Control({
           >
             <i />
           </button>
-          <span className="muted">
-            Nur Plotbereich (XY im Papier, Z nicht unter Stift-unten)
-          </span>
+          <span className="muted">{t("control.limitPlot")}</span>
         </label>
         {err && <div className="banner err">{err}</div>}
       </section>
 
       <section className="card">
-        <h2>Druck</h2>
+        <h2>{t("control.print")}</h2>
         {job?.job?.file?.name ? (
           <p>
             <strong>{job.job.file.name}</strong>
             {progress != null && <> · {progress.toFixed(0)}%</>}
           </p>
         ) : (
-          <p className="muted">Kein Job geladen.</p>
+          <p className="muted">{t("control.noJob")}</p>
         )}
         {progress != null && (
           <div className="progress">
@@ -116,20 +116,20 @@ export default function Control({
         <div className="job-controls">
           {!printing && !paused && (
             <button className="primary" onClick={() => run(() => api.jobCommand("start"))}>
-              ▶ Start
+              ▶ {t("control.start")}
             </button>
           )}
           {printing && (
-            <button onClick={() => run(() => api.jobCommand("pause"))}>⏸ Pause</button>
+            <button onClick={() => run(() => api.jobCommand("pause"))}>⏸ {t("control.pause")}</button>
           )}
           {paused && (
             <button className="primary" onClick={() => run(() => api.jobCommand("pause"))}>
-              ▶ Fortsetzen
+              ▶ {t("control.resume")}
             </button>
           )}
           {(printing || paused) && (
             <button className="danger" onClick={() => run(() => api.jobCommand("cancel"))}>
-              ⏹ Abbrechen
+              ⏹ {t("control.cancel")}
             </button>
           )}
         </div>
