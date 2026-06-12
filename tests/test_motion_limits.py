@@ -115,9 +115,14 @@ class TestSendRevalidation:
 
         import plotter.octoprint as op
 
+        from plotter.jobmeta import write_job_meta
+
         jobs = workspace / "jobs"
         jobs.mkdir()
         (jobs / "old.gcode").write_text("G21\nG90\nG28\nG0 Z7.4 F1000\n")
+        # With a matching profile sidecar the job passes the profile guard,
+        # so this exercises the geometric safety re-validation.
+        write_job_meta(jobs / "old.gcode")
         with patch.object(op.OctoPrintClient, "upload", return_value={}), \
              patch.object(op.OctoPrintClient, "gcode", return_value=None), \
              patch.object(op.OctoPrintClient, "home", return_value=None):
@@ -135,6 +140,8 @@ class TestSendRevalidation:
 
         import plotter.octoprint as op
 
+        from plotter.jobmeta import write_job_meta
+
         jobs = workspace / "jobs"
         jobs.mkdir(exist_ok=True)
         # Job generated with a different (older) pen-down height.
@@ -142,6 +149,7 @@ class TestSendRevalidation:
             f"G21\nG90\nG0 Z{cal.pen_up_z} F1000\n"
             f"G0 X{cal.origin_x} Y{cal.origin_y} F6000\nG1 Z0.2 F1000\n"
         )
+        write_job_meta(jobs / "stale.gcode")
         with patch.object(op.OctoPrintClient, "upload", return_value={}):
             from plotter.web.app import app
             c = TestClient(app)

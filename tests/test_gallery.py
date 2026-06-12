@@ -6,6 +6,7 @@ import pytest
 
 from plotter.gallery_metrics import analyze_gcode, evaluate_gcode, metrics_dict, score_metrics
 from plotter.services.gallery import GalleryService
+from plotter.services.profiles import ProfileService
 from plotter.services.upload_validation import (
     MAX_GCODE_BYTES,
     MAX_UPLOAD_BYTES,
@@ -123,6 +124,17 @@ class TestGalleryService:
         preview = svc.svg_preview(meta["id"])
         assert preview["polylines"]
         assert svc.gcode_path(meta["id"]).exists()
+
+    def test_submission_gcode_has_profile_metadata(self, cal):
+        svc = GalleryService()
+        meta = svc.create("art.svg", SVG, title="Profiltest")
+        active = ProfileService().active_profile_meta()
+        assert meta["profile"]["id"] == active["id"]
+        assert meta["profile"]["fingerprint"] == active["fingerprint"]
+        text = svc.gcode_path(meta["id"]).read_text()
+        assert text.startswith("; --- plotter profile ---")
+        assert f"; profile_id = {active['id']}" in text
+        assert "; --- plotter calibration ---" in text
 
     def test_create_png_submission(self, cal):
         meta = GalleryService().create("foto.png", _png_bytes(), title="")

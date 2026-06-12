@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .calibration import Calibration
 from .export import calibration_comment
+from .jobmeta import profile_comment, write_job_meta
 from .pipeline import PlotterError
 from .safety import GcodeSafetyChecker
 from .storage import jobs_dir
@@ -99,11 +100,26 @@ def scene_gcode(page: dict, cal: Calibration) -> str:
     return calibration_comment(cal) + gcode
 
 
-def save_scene_job(page: dict, cal: Calibration | None = None) -> Path:
+def save_scene_job(
+    page: dict, cal: Calibration | None = None, profile: dict | None = None
+) -> Path:
     cal = cal or Calibration.load()
     gcode = scene_gcode(page, cal)
+    if profile is None:
+        from .services.profiles import ProfileService
+
+        profile = ProfileService().active_profile_meta()
     raw_stem = str(page.get("name") or page.get("id") or "paint")
     stem = "".join(c if c.isalnum() or c in "-_" else "-" for c in raw_stem)
     path = jobs_dir() / f"paint-{stem[:40]}-{int(time.time())}.gcode"
-    path.write_text(gcode)
+    path.write_text(profile_comment(profile) + gcode)
+    write_job_meta(
+        path,
+        source={
+            "kind": "paint_page",
+            "page_id": page.get("id"),
+            "page_name": page.get("name"),
+        },
+        profile=profile,
+    )
     return path

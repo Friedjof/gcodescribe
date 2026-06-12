@@ -97,7 +97,9 @@ class TestSourceService:
 
         job = svc.generate_gcode(meta["id"], 1, x=30, y=40, width=100)
         assert job.exists()
-        assert job.read_text().startswith("; --- plotter calibration ---")
+        text = job.read_text()
+        assert text.startswith("; --- plotter profile ---")
+        assert "; --- plotter calibration ---" in text
 
         assert any(m["id"] == meta["id"] for m in svc.list())
         svc.delete(meta["id"])

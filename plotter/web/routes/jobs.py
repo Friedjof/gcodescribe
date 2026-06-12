@@ -13,10 +13,30 @@ from ...calibration import Calibration
 from ...convert import convert_with_calibration
 from ...gcode_preview import parse_gcode, parse_gcode_3d
 from ...gcode_profile import TEST_PATTERNS, test_pattern
+from ...jobmeta import (
+    delete_job_meta,
+    job_profile_status,
+    profile_comment,
+    read_job_meta_checked,
+    rename_job_meta,
+    write_job_meta,
+)
 from ...safety import GcodeSafetyChecker, SafetyViolation
+from ...services.profiles import ProfileService, profile_meta
 from ...storage import jobs_dir
 
 router = APIRouter(tags=["jobs"])
+
+
+class JobProfileStatus(BaseModel):
+    id: str | None = None
+    name: str | None = None
+    fingerprint: str | None = None
+    matchesActive: bool = False
+    stale: bool = False
+    legacy: bool = False
+    missing: bool = False
+    archived: bool = False
 
 
 class JobInfo(BaseModel):
@@ -27,9 +47,17 @@ class JobInfo(BaseModel):
     # heights). None when not checked (single-file responses).
     fits: bool | None = None
     issue: str | None = None
+    # Profile the job was generated with, evaluated against the active
+    # profile at list time. None when not checked.
+    profile: JobProfileStatus | None = None
 
 
-def _job_info(path: Path, cal: Calibration | None = None) -> JobInfo:
+def _job_info(
+    path: Path,
+    cal: Calibration | None = None,
+    active_profile: dict | None = None,
+    profiles: dict[str, dict] | None = None,
+) -> JobInfo:
     stat = path.stat()
     info = JobInfo(filename=path.name, size=stat.st_size, created=stat.st_mtime)
     if cal is not None:
@@ -39,6 +67,14 @@ def _job_info(path: Path, cal: Calibration | None = None) -> JobInfo:
         except SafetyViolation as exc:
             info.fits = False
             info.issue = str(exc)
+    if active_profile is not None:
+        meta, meta_issue = read_job_meta_checked(path)
+        info.profile = JobProfileStatus(
+            **job_profile_status(meta, active_profile, profiles)
+        )
+        if meta_issue:
+            info.fits = False
+            info.issue = meta_issue
     return info
 
 
@@ -49,13 +85,25 @@ def _job_path(filename: str) -> Path:
     return path
 
 
+def _active() -> tuple[Calibration, dict]:
+    """Active profile's calibration + compact metadata, from one read."""
+    profile = ProfileService().active()
+    return Calibration().merged(profile["calibration"]), profile_meta(profile)
+
+
+def _profiles_by_id() -> dict[str, dict]:
+    return {p["id"]: p for p in ProfileService().list(include_archived=True)}
+
+
 @router.get("/jobs")
 def list_jobs() -> list[JobInfo]:
     # Validate each job against the current calibration so the UI can flag
-    # jobs that no longer fit the (possibly resized) plot area.
-    cal = Calibration.load()
+    # jobs that no longer fit the (possibly resized) plot area, and against
+    # the active profile so foreign/stale/legacy jobs are marked.
+    cal, active = _active()
+    profiles = _profiles_by_id()
     return sorted(
-        (_job_info(p, cal) for p in jobs_dir().glob("*.gcode")),
+        (_job_info(p, cal, active, profiles) for p in jobs_dir().glob("*.gcode")),
         key=lambda j: j.created,
         reverse=True,
     )
@@ -65,7 +113,7 @@ def list_jobs() -> list[JobInfo]:
 async def convert(file: UploadFile = File(...)) -> dict:
     if not file.filename:
         raise HTTPException(400, "Dateiname fehlt")
-    cal = Calibration.load()
+    cal, active = _active()
     # Keep the original filename (sanitised) so generated G-code is named after it.
     safe_name = Path(file.filename).name
     with tempfile.TemporaryDirectory(prefix="plotter-upload-") as tmp:
@@ -73,7 +121,18 @@ async def convert(file: UploadFile = File(...)) -> dict:
         with source.open("wb") as fh:
             shutil.copyfileobj(file.file, fh)
         result = convert_with_calibration(source, jobs_dir(), cal)
-    return {"files": [_job_info(p).model_dump() for p in result.gcode_files]}
+    for path in result.gcode_files:
+        write_job_meta(
+            path,
+            source={"kind": "convert", "filename": safe_name},
+            profile=active,
+        )
+    return {
+        "files": [
+            _job_info(p, active_profile=active, profiles={active["id"]: active}).model_dump()
+            for p in result.gcode_files
+        ]
+    }
 
 
 @router.get("/jobs/{filename}")
@@ -84,7 +143,9 @@ def download_job(filename: str) -> FileResponse:
 
 @router.delete("/jobs/{filename}")
 def delete_job(filename: str) -> dict:
-    (jobs_dir() / Path(filename).name).unlink(missing_ok=True)
+    path = jobs_dir() / Path(filename).name
+    path.unlink(missing_ok=True)
+    delete_job_meta(path)
     return {"ok": True}
 
 
@@ -104,8 +165,18 @@ def rename_job(filename: str, req: RenameRequest) -> JobInfo:
     dst = jobs_dir() / f"{stem}.gcode"
     if dst != src and dst.exists():
         raise HTTPException(409, "Eine Datei mit diesem Namen existiert bereits.")
-    src.rename(dst)
-    return _job_info(dst, Calibration.load())
+    if dst != src and dst.with_suffix(".json").exists():
+        raise HTTPException(409, "Eine Job-Metadatendatei mit diesem Namen existiert bereits.")
+    if dst != src:
+        src.rename(dst)
+        try:
+            rename_job_meta(src, dst)
+        except Exception:
+            # Keep job and sidecar from diverging if metadata movement fails.
+            dst.rename(src)
+            raise
+    cal, active = _active()
+    return _job_info(dst, cal, active, _profiles_by_id())
 
 
 @router.get("/jobs/{filename}/preview")
@@ -122,8 +193,9 @@ def job_preview_3d(filename: str) -> dict:
 def make_test_pattern(name: str) -> dict:
     if name not in TEST_PATTERNS:
         raise HTTPException(404, f"Unbekanntes Test-Pattern: {name}")
-    cal = Calibration.load()
+    cal, active = _active()
     gcode = test_pattern(name, cal)
     out = jobs_dir() / f"test-{name}-{int(time.time())}.gcode"
-    out.write_text(gcode)
-    return _job_info(out).model_dump()
+    out.write_text(profile_comment(active) + gcode)
+    write_job_meta(out, source={"kind": "testpattern", "name": name}, profile=active)
+    return _job_info(out, active_profile=active, profiles={active["id"]: active}).model_dump()

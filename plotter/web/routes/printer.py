@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from ...calibration import Calibration
-from ...safety import GcodeSafetyChecker
+from ...jobmeta import job_profile_status, read_job_meta_checked
+from ...safety import GcodeSafetyChecker, SafetyViolation
 from ...services import PrinterController
+from ...services.profiles import ProfileService, profile_meta
 from ...storage import jobs_dir
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["printer"])
 
@@ -42,6 +47,64 @@ def _require_homed(ctrl: PrinterController) -> None:
         )
 
 
+def _refuse_print(filename: str, reason: str, message: str) -> None:
+    """Block a print attempt with a 409 and leave an audit trail in the log."""
+    log.warning("Print blocked (%s): %s — %s", reason, filename, message)
+    raise HTTPException(409, message)
+
+
+def _require_profile_match(
+    path: Path,
+    active_profile: dict,
+    profiles: dict[str, dict],
+) -> None:
+    """Server-side profile guard — runs before the geometric safety check.
+
+    A job from another profile can be geometrically valid and still draw at
+    the wrong bed position, so the frontend's disabled buttons are not enough.
+    """
+    meta, meta_issue = read_job_meta_checked(path)
+    if meta_issue:
+        _refuse_print(path.name, "corrupt-meta", f"Drucken verweigert: {meta_issue}")
+    status = job_profile_status(meta, active_profile, profiles)
+    if status["legacy"]:
+        _refuse_print(
+            path.name,
+            "legacy",
+            "Drucken verweigert: Job hat keine Profil-Metadaten (Legacy). "
+            "Bitte den Job mit dem aktiven Profil neu erzeugen.",
+        )
+    if status["stale"]:
+        _refuse_print(
+            path.name,
+            "stale",
+            f"Drucken verweigert: Profil „{status['name']}“ wurde seit der "
+            "Job-Erzeugung geändert. Bitte den Job neu erzeugen.",
+        )
+    if status["missing"]:
+        _refuse_print(
+            path.name,
+            "missing-profile",
+            f"Drucken verweigert: Das Profil „{status['name']}“ existiert nicht mehr. "
+            "Bitte den Job mit dem aktiven Profil neu erzeugen.",
+        )
+    if status["archived"]:
+        _refuse_print(
+            path.name,
+            "archived-profile",
+            f"Drucken verweigert: Profil „{status['name']}“ ist archiviert. "
+            "Bitte das Profil wiederherstellen oder den Job neu erzeugen.",
+        )
+    if not status["matchesActive"]:
+        _refuse_print(
+            path.name,
+            "foreign-profile",
+            f"Drucken verweigert: Job gehört zu Profil „{status['name']}“, "
+            f"aktiv ist „{active_profile['name']}“. Bitte das passende Profil "
+            "aktivieren oder den Job neu erzeugen.",
+        )
+
+
 @router.post("/octoprint/send")
 def octo_send(req: PrintRequest) -> dict:
     ctrl = controller()
@@ -50,9 +113,21 @@ def octo_send(req: PrintRequest) -> dict:
     path = jobs_dir() / Path(req.filename).name
     if not path.exists():
         raise HTTPException(404, "Job nicht gefunden")
+    # Profile guard first: id + fingerprint must match the active profile.
+    # Read profile and calibration in one go so a concurrent profile switch
+    # cannot pass the guard with one profile and the safety check with another.
+    service = ProfileService()
+    active = service.active()
+    profiles = {p["id"]: p for p in service.list(include_archived=True)}
+    _require_profile_match(path, profile_meta(active), profiles)
     # Re-validate against the *current* calibration: catches jobs generated
     # before a recalibration (other pen heights / plot area) or by old code.
-    GcodeSafetyChecker(Calibration.load()).check(path.read_text(), name=req.filename)
+    cal = Calibration().merged(active["calibration"])
+    try:
+        GcodeSafetyChecker(cal).check(path.read_text(), name=req.filename)
+    except SafetyViolation as exc:
+        log.warning("Print blocked (safety): %s — %s", path.name, exc)
+        raise
     return ctrl.client.upload(path, start=req.start)
 
 

@@ -193,11 +193,21 @@ class SourceService:
         self, source_id: str, page: int, *, x: float, y: float, width: float
     ) -> Path:
         meta = self.get(source_id)
-        cal = Calibration.load()
+        from ..jobmeta import profile_comment, write_job_meta
+        from .profiles import ProfileService, profile_meta
+
+        profile = ProfileService().active()
+        active_meta = profile_meta(profile)
+        cal = Calibration().merged(profile["calibration"])
         drawing = load_svg_drawing(self._page_svg(source_id, page), quantization_mm=0.15)
         stem = Path(meta["name"]).stem
         name = f"{stem}-p{page}-{int(time.time())}.gcode"
         gcode = placed_gcode(drawing, cal, x=x, y=y, width=width, name=name)
         out = jobs_dir() / name
-        out.write_text(gcode)
+        out.write_text(profile_comment(active_meta) + gcode)
+        write_job_meta(
+            out,
+            source={"kind": "source", "source_id": source_id, "page": page},
+            profile=active_meta,
+        )
         return out

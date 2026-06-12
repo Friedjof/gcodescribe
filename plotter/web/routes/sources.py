@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
+from ...services.profiles import ProfileService
 from ...services.sources import SourceService
 from .jobs import _job_info
 
@@ -53,4 +54,4 @@ def source_gcode(source_id: str, req: PlacementRequest) -> dict:
     path = service().generate_gcode(
         source_id, req.page, x=req.x, y=req.y, width=req.width
     )
-    return _job_info(path).model_dump()
+    return _job_info(path, active_profile=ProfileService().active_profile_meta()).model_dump()

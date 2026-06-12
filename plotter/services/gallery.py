@@ -11,9 +11,11 @@ import numpy as np
 from ..calibration import Calibration, data_dir
 from ..drawing import load_svg_drawing, placed_gcode
 from ..gallery_metrics import evaluate_gcode
+from ..jobmeta import profile_comment
 from ..pipeline import PlotterError
 from ..trace import IMAGE_DPI, trace_image_to_svg
 from .errors import ServiceError
+from .profiles import ProfileService, profile_meta
 from .upload_validation import (
     MAX_GCODE_BYTES,
     MAX_UPLOAD_BYTES,
@@ -75,7 +77,10 @@ class GalleryService:
         if drawing.is_empty():
             raise PlotterError("Das Bild enthält keine plottbaren Linien.")
 
-        gcode = self._fitted_gcode(drawing, name=filename)
+        profile = ProfileService().active()
+        active_meta = profile_meta(profile)
+        cal = Calibration().merged(profile["calibration"])
+        gcode = profile_comment(active_meta) + self._fitted_gcode(drawing, cal, name=filename)
         if len(gcode.encode()) > MAX_GCODE_BYTES:
             raise UploadTooLarge(
                 "Der erzeugte G-code überschreitet "
@@ -93,13 +98,13 @@ class GalleryService:
             "width": round(drawing.width, 3),
             "height": round(drawing.height, 3),
             "lines": len(drawing.polylines),
+            "profile": active_meta,
             **evaluate_gcode(gcode, MAX_GCODE_BYTES),
         }
 
     @staticmethod
-    def _fitted_gcode(drawing, *, name: str) -> str:
+    def _fitted_gcode(drawing, cal: Calibration, *, name: str) -> str:
         """G-code with the drawing scaled to fill the calibrated plot area."""
-        cal = Calibration.load()
         bx0, by0, bx1, by1 = drawing.bounds()
         bw, bh = bx1 - bx0, by1 - by0
         if bw <= 0 or bh <= 0:
