@@ -1,53 +1,25 @@
 import { useEffect, useRef, useState } from "react";
-import { api, type Calibration, type Page, type PageIndex, type SceneObject } from "../api";
+import { api, type Calibration, type GcodePreview3D, type Page, type PageIndex, type SceneObject } from "../api";
 import PaintCanvas, { type Tool } from "./PaintCanvas";
+import PlotScore from "./PlotScore";
+import Gcode3DOverlay from "./Gcode3DOverlay";
 import Segmented from "./Segmented";
 import { localize, type Pt, type Transform } from "../paint/geometry";
-import { TEXT_FONTS, isOutlineFont, textWorld, type TextFont } from "../paint/text";
+import { TEXT_FONTS, isOutlineFont, type TextFont } from "../paint/text";
+import {
+  basePolylines,
+  cloneObjects,
+  objectStyle,
+  textGeometryAsync,
+  withStyledCache,
+  zValue,
+} from "../paint/sceneObjects";
 import { DEFAULT_VECTOR_STYLE, buildStyledPolylines, normalizeStyle, type FillMode, type StrokeMode, type VectorStyle } from "../paint/styling";
 import { useI18n } from "../i18n";
 
 const GRID_STEPS = [1, 5, 10, 25, 50];
 
 type ImageMode = "edges" | "hatch" | "lines" | "dots";
-
-const zValue = (obj: SceneObject, index: number) => obj.zOrder ?? index;
-
-const cloneObjects = (objects: SceneObject[]) =>
-  objects.map((obj) => ({
-    ...obj,
-    data: obj.data ? { ...obj.data } : undefined,
-    transform: obj.transform ? { ...obj.transform } : undefined,
-    cachedPolylines: obj.cachedPolylines?.map((line) => line.map((pt) => [...pt])),
-  }));
-
-function basePolylines(obj: SceneObject): Pt[][] {
-  return ((obj.data?.basePolylines ?? obj.cachedPolylines ?? []) as Pt[][]).map((line) => line.map((p) => [p[0], p[1]] as Pt));
-}
-
-function objectStyle(obj: SceneObject): VectorStyle {
-  return normalizeStyle(obj.data?.style);
-}
-
-function withStyledCache(obj: SceneObject): SceneObject {
-  const base = basePolylines(obj);
-  const style = objectStyle(obj);
-  return {
-    ...obj,
-    data: { ...(obj.data ?? {}), basePolylines: base, style },
-    cachedPolylines: buildStyledPolylines(base, style),
-  };
-}
-
-function textGeometry(text: string, size: number, font: TextFont, fallbackText = "Text") {
-  return localize(textWorld(text || fallbackText, [0, 0], size, font));
-}
-
-async function textGeometryAsync(text: string, size: number, font: TextFont, fallbackText = "Text") {
-  if (!isOutlineFont(font)) return textGeometry(text, size, font, fallbackText);
-  const res = await api.textPolylines(text || fallbackText, font, size);
-  return localize(res.polylines as Pt[][]);
-}
 
 export default function Paint() {
   const { t } = useI18n();
@@ -60,8 +32,9 @@ export default function Paint() {
   const [busy, setBusy] = useState(false);
   const [sending, setSending] = useState(false);
   const [lastJob, setLastJob] = useState<string | null>(null);
-  const [sentJob, setSentJob] = useState<string | null>(null);
   const [startedJob, setStartedJob] = useState<string | null>(null);
+  const [fullscreen, setFullscreen] = useState<GcodePreview3D | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number; ids: string[] } | null>(null);
   const [imageImport, setImageImport] = useState<{ file: File; at: Pt; mode: ImageMode; detail: number } | null>(null);
   const [importingImage, setImportingImage] = useState(false);
@@ -178,7 +151,6 @@ export default function Paint() {
     if (!page) return Promise.reject(new Error(t("paint.noPage")));
     setBusy(true);
     setErr(null);
-    setSentJob(null);
     setStartedJob(null);
     return api.pageGcode(page.id)
       .then((job) => {
@@ -193,27 +165,26 @@ export default function Paint() {
     generateJob().catch(fail);
   };
 
-  const sendJob = (filename: string, start: boolean) => {
-    setSending(true);
-    setErr(null);
-    return api.send(filename, start)
-      .then(() => {
-        if (start) setStartedJob(filename);
-        else setSentJob(filename);
-      })
-      .finally(() => setSending(false));
-  };
-
-  const sendLastJob = () => {
-    if (!lastJob || sending) return;
-    sendJob(lastJob, false).catch(fail);
-  };
-
   const directPlot = () => {
     if (busy || sending) return;
     generateJob()
-      .then((filename) => sendJob(filename, true))
-      .catch(fail);
+      .then((filename) => {
+        setSending(true);
+        return api.send(filename, true).then(() => setStartedJob(filename));
+      })
+      .catch(fail)
+      .finally(() => setSending(false));
+  };
+
+  // Render the page's G-code transiently (no job file) and show it fullscreen.
+  const openFullscreen = () => {
+    if (!page || loadingPreview) return;
+    setLoadingPreview(true);
+    setErr(null);
+    api.pagePreview3D(page.id, page.objects)
+      .then(setFullscreen)
+      .catch(fail)
+      .finally(() => setLoadingPreview(false));
   };
 
   // --- object editing ---
@@ -648,31 +619,34 @@ export default function Paint() {
               <button className="primary" disabled={busy || sending} onClick={createGcode}>
                 {busy ? t("paint.generating") : t("paint.generateGcode")}
               </button>
-              <button disabled={!lastJob || busy || sending} onClick={sendLastJob}>
-                {sending ? t("paint.sending") : t("paint.sendOcto")}
-              </button>
               <button className="primary" disabled={busy || sending} onClick={directPlot}>
                 {busy ? t("paint.generating") : sending ? t("paint.starting") : t("paint.directPlot")}
+              </button>
+              <button disabled={loadingPreview} onClick={openFullscreen}>
+                {loadingPreview ? t("common.loading") : t("convert.fullscreen")}
               </button>
             </div>
           </div>
         </div>
 
         <div className="paint-workspace">
-          <PaintCanvas
-            cal={cal}
-            page={page}
-            tool={tool}
-            selectedIds={selectedIds}
-            onSelect={selectIds}
-            onAdd={addObject}
-            onUpdate={updateObject}
-            onUpdateMany={updateObjects}
-            onEditStart={remember}
-            onContextMenuSelection={(ids, x, y) => { setSelectedIds(ids); setMenu({ ids, x, y }); }}
-            onImageDrop={(file, at) => setImageImport({ file, at, mode: "edges", detail: 2 })}
-            onTextAdd={addTextObject}
-          />
+          <div className="paint-canvas-wrap">
+            <PlotScore pageId={page.id} objects={page.objects} />
+            <PaintCanvas
+              cal={cal}
+              page={page}
+              tool={tool}
+              selectedIds={selectedIds}
+              onSelect={selectIds}
+              onAdd={addObject}
+              onUpdate={updateObject}
+              onUpdateMany={updateObjects}
+              onEditStart={remember}
+              onContextMenuSelection={(ids, x, y) => { setSelectedIds(ids); setMenu({ ids, x, y }); }}
+              onImageDrop={(file, at) => setImageImport({ file, at, mode: "edges", detail: 2 })}
+              onTextAdd={addTextObject}
+            />
+          </div>
 
           <aside className="paint-tools-card">
             <Segmented<Tool>
@@ -839,10 +813,10 @@ export default function Paint() {
             : t("paint.hint.draw")}
         </p>
         {lastJob && <div className="banner ok">{t("paint.jobCreated", { name: lastJob })}</div>}
-        {sentJob && <div className="banner ok">{t("paint.jobSent", { name: sentJob })}</div>}
         {startedJob && <div className="banner ok">{t("paint.jobStarted", { name: startedJob })}</div>}
         {err && <div className="banner err">{err}</div>}
       </section>
+      {fullscreen && <Gcode3DOverlay data={fullscreen} onClose={() => setFullscreen(null)} />}
     </div>
   );
 }
