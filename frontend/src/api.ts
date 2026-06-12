@@ -76,6 +76,23 @@ export interface SourcePreview {
   height: number;
 }
 
+export interface MazeResponse {
+  type: "classic" | "masked" | "hex" | "polar";
+  seed: string;
+  size: number;
+  width: number;
+  height: number;
+  viewBox: string;
+  maze_svg: string;
+  solution_svg: string;
+  start: { x: number; y: number };
+  end: { x: number; y: number };
+  wall_lines: number[][][];
+  marker_lines: number[][][];
+  solution_lines: number[][][];
+  metadata: Record<string, string | number | boolean>;
+}
+
 // --- paint document (multi-page) ---
 export interface PageGrid {
   step: number;
@@ -132,8 +149,20 @@ async function req<T>(url: string, opts?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+function mazeSizeValue(size: string) {
+  if (size === "small") return 14;
+  if (size === "large") return 26;
+  if (size === "huge") return 33;
+  if (size === "extreme") return 40;
+  return 20;
+}
+
 export const api = {
   getCalibration: () => req<Calibration>("/api/calibration"),
+  getMaze: (type: MazeResponse["type"], seed: number, size: string, width: number, height: number) => {
+    const params = new URLSearchParams({ type, seed: String(seed), size: String(mazeSizeValue(size)), width: String(Math.round(width)), height: String(Math.round(height)) });
+    return req<MazeResponse>(`/api/maze?${params.toString()}`);
+  },
   saveCalibration: (c: Partial<Calibration>) =>
     req<Calibration>("/api/calibration", {
       method: "PUT",

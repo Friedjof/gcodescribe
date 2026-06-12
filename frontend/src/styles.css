@@ -983,6 +983,36 @@ kbd {
   margin-bottom: 0;
 }
 
+.maze-type-selector {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(34px, 1fr);
+  gap: 6px;
+}
+
+.maze-type-selector button {
+  min-height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 19px;
+  line-height: 1;
+}
+
+.maze-type-selector button:hover,
+.maze-type-selector button:focus-visible {
+  border-color: var(--accent);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.maze-type-selector button.selected {
+  border-color: var(--accent);
+  background: rgba(82, 168, 255, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(82, 168, 255, 0.22);
+}
+
 .games-seed-row {
   display: flex;
   gap: 6px;

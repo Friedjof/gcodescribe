@@ -20,6 +20,8 @@ import {
 import { SUPPORTED_GAMES, SEEDED_GAMES, GAME_GROUPS, ALL_GAMES } from "../games/constants";
 import { buildTemplate } from "../games/builder";
 import { templateObject, randomSeed, randomMazeSeed } from "../games/utils";
+import { MAZE_TYPES } from "../games/mazeTypes";
+import { buildMazeTemplate, mazeRequestArea } from "../games/maze";
 
 export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
   const { t } = useI18n();
@@ -30,16 +32,20 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
   const [dotsDensity, setDotsDensity] = useState<DotsDensity>("balanced");
   const [dotsJitter, setDotsJitter] = useState<DotsJitter>("organic");
   const [dotsPlayable, setDotsPlayable] = useState<DotsPlayable>("balanced");
-  const [dotsSeed, setDotsSeed] = useState(() => randomSeed());
+  const [dotsSeed, setDotsSeed] = useState(() => randomMazeSeed());
+  const [dotsSeedManual, setDotsSeedManual] = useState(false);
+  const [dotsSeedInput, setDotsSeedInput] = useState("");
   const [battleshipsSize, setBattleshipsSize] = useState<BattleshipsSize>("s10");
   const [mazeSeed, setMazeSeed] = useState(() => randomMazeSeed());
   const [mazeSeedManual, setMazeSeedManual] = useState(false);
+  const [mazeSeedInput, setMazeSeedInput] = useState("");
   const [showMazeSolution, setShowMazeSolution] = useState(false);
   const [mazeSize, setMazeSize] = useState<MazeSize>("medium");
   const [mazeType, setMazeType] = useState<MazeType>("classic");
   const [sudokuDifficulty, setSudokuDifficulty] = useState<SudokuDifficulty>("medium");
   const [sudokuSeed, setSudokuSeed] = useState(() => randomMazeSeed());
   const [sudokuSeedManual, setSudokuSeedManual] = useState(false);
+  const [sudokuSeedInput, setSudokuSeedInput] = useState("");
   const [showSudokuSolution, setShowSudokuSolution] = useState(false);
   const [bingoSeed, setBingoSeed] = useState(() => randomSeed());
   const [preview, setPreview] = useState<GeneratedPreview | null>(null);
@@ -56,14 +62,16 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
   let autoError: string | null = null;
   if (cal && supported) {
     try {
-      autoTemplate = buildTemplate(selectedGame.id, cal, t, {
-        dotsBoxes: { density: dotsDensity, seed: dotsSeed, jitter: dotsJitter, playable: dotsPlayable },
-        battleships: battleshipsSize,
-        maze: mazeSeed,
-        mazeSettings: { size: mazeSize, type: mazeType },
-        sudoku: { difficulty: sudokuDifficulty, seed: sudokuSeed },
-        bingo: bingoSeed,
-      });
+      autoTemplate = selectedGame.id === "maze"
+        ? mazePlaceholderTemplate(cal, t, mazeSize, mazeType)
+        : buildTemplate(selectedGame.id, cal, t, {
+          dotsBoxes: { density: dotsDensity, seed: dotsSeed, jitter: dotsJitter, playable: dotsPlayable },
+          battleships: battleshipsSize,
+          maze: mazeSeed,
+          mazeSettings: { size: mazeSize, type: mazeType },
+          sudoku: { difficulty: sudokuDifficulty, seed: sudokuSeed },
+          bingo: bingoSeed,
+        });
     } catch (e: any) {
       autoError = String(e.message ?? e);
     }
@@ -117,7 +125,24 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
     setErr(null);
   };
 
-  const generatePreview = (gameId = selectedGame.id, seedHint?: number) => {
+  const parseManualSeed = (value: string) => {
+    if (!/^\d{5}$/.test(value)) {
+      setErr(t("games.errorSeedLength"));
+      return null;
+    }
+    return parseInt(value, 10);
+  };
+
+  const seedForGame = (gameId: GameId, seedHint?: number) => {
+    if (seedHint !== undefined) return seedHint;
+    if (gameId === "dotsBoxes") return dotsSeedManual ? parseManualSeed(dotsSeedInput) : dotsSeed;
+    if (gameId === "maze") return mazeSeedManual ? parseManualSeed(mazeSeedInput) : randomMazeSeed();
+    if (gameId === "sudoku") return sudokuSeedManual ? parseManualSeed(sudokuSeedInput) : randomMazeSeed();
+    if (gameId === "bingo") return bingoSeed;
+    return 1;
+  };
+
+  const generatePreview = async (gameId = selectedGame.id, seedHint?: number) => {
     if (!cal) {
       setErr(t("games.loadingPlotArea"));
       return;
@@ -126,25 +151,30 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
       setErr(t("games.notReadyHint"));
       return;
     }
-    const seed = seedHint ?? (
-      gameId === "dotsBoxes" ? dotsSeed
-      : gameId === "maze"    ? (mazeSeedManual ? mazeSeed : randomMazeSeed())
-      : gameId === "sudoku"  ? (sudokuSeedManual ? sudokuSeed : randomMazeSeed())
-      : gameId === "bingo"   ? bingoSeed
-      : 1
-    );
+    const seed = seedForGame(gameId, seedHint);
+    if (seed === null) return;
     try {
+      if (gameId === "maze") {
+        const { width, height } = mazeRequestArea(cal);
+        const maze = await api.getMaze(mazeType, seed, mazeSize, width, height);
+        const template = buildMazeTemplate(maze, cal, t, mazeSize);
+        setMazeSeed(seed);
+        setMazeSeedInput(String(seed).padStart(5, "0"));
+        setShowMazeSolution(false);
+        setPreview({ gameId, template, seed });
+        setErr(null);
+        return;
+      }
       const template = buildTemplate(gameId, cal, t, {
         dotsBoxes: { density: dotsDensity, seed: gameId === "dotsBoxes" ? seed : dotsSeed, jitter: dotsJitter, playable: dotsPlayable },
         battleships: battleshipsSize,
-        maze: gameId === "maze" ? seed : mazeSeed,
+        maze: mazeSeed,
         mazeSettings: { size: mazeSize, type: mazeType },
         sudoku: { difficulty: sudokuDifficulty, seed: gameId === "sudoku" ? seed : sudokuSeed },
         bingo: gameId === "bingo" ? seed : bingoSeed,
       });
-      if (gameId === "dotsBoxes") setDotsSeed(seed);
-      if (gameId === "maze") { setMazeSeed(seed); setShowMazeSolution(false); }
-      if (gameId === "sudoku") { setSudokuSeed(seed); setShowSudokuSolution(false); }
+      if (gameId === "dotsBoxes") { setDotsSeed(seed); setDotsSeedInput(String(seed).padStart(5, "0")); }
+      if (gameId === "sudoku") { setSudokuSeed(seed); setSudokuSeedInput(String(seed).padStart(5, "0")); setShowSudokuSolution(false); }
       if (gameId === "bingo") setBingoSeed(seed);
       setPreview({ gameId, template, seed });
       setErr(null);
@@ -159,25 +189,12 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
     if (SEEDED_GAMES.has(preview.gameId)) {
       if (preview.gameId === "maze") nextSeed = mazeSeedManual ? preview.seed : randomMazeSeed();
       else if (preview.gameId === "sudoku") nextSeed = sudokuSeedManual ? preview.seed : randomMazeSeed();
+      else if (preview.gameId === "dotsBoxes") nextSeed = dotsSeedManual ? preview.seed : randomMazeSeed();
       else nextSeed = randomSeed();
     }
     setShowMazeSolution(false);
     setShowSudokuSolution(false);
     generatePreview(preview.gameId, nextSeed);
-  };
-
-  const regenerateFromDetail = () => {
-    if (!SEEDED_GAMES.has(selectedGame.id)) return;
-    if (selectedGame.id === "dotsBoxes") {
-      setDotsSeed(randomSeed());
-      setErr(null);
-      return;
-    }
-    const next =
-      selectedGame.id === "maze"   ? (mazeSeedManual ? mazeSeed : randomMazeSeed())
-      : selectedGame.id === "sudoku" ? (sudokuSeedManual ? sudokuSeed : randomMazeSeed())
-      : randomSeed();
-    generatePreview(selectedGame.id, next);
   };
 
   const hasSettings = ["dotsBoxes", "battleships", "maze", "sudoku"].includes(selectedGame.id);
@@ -317,6 +334,42 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
                             ]}
                           />
                         </div>
+                        <div className="games-setting-row">
+                          {dotsSeedManual ? (
+                            <>
+                              <span className="games-setting-label">{t("games.param.seed")}</span>
+                              <div className="games-seed-row">
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  pattern="[0-9]*"
+                                  className="games-seed-input"
+                                  value={dotsSeedInput}
+                                  onChange={(e) => {
+                                    setDotsSeedInput(e.target.value);
+                                    setPreview(null);
+                                    setErr(null);
+                                  }}
+                                />
+                                <button
+                                  type="button"
+                                  className="games-seed-toggle"
+                                  onClick={() => { setDotsSeedManual(false); setPreview(null); setErr(null); }}
+                                >
+                                  {t("games.maze.seedAuto")}
+                                </button>
+                              </div>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              className="games-seed-toggle"
+                              onClick={() => { setDotsSeedInput(String(dotsSeed).padStart(5, "0")); setDotsSeedManual(true); }}
+                            >
+                              {t("games.maze.seedManual")}
+                            </button>
+                          )}
+                        </div>
                       </>
                     )}
                     {selectedGame.id === "battleships" && (
@@ -344,21 +397,29 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
                               { value: "small",   label: t("games.option.mazeSize.small") },
                               { value: "medium",  label: t("games.option.mazeSize.medium") },
                               { value: "large",   label: t("games.option.mazeSize.large") },
+                              { value: "huge",    label: t("games.option.mazeSize.huge") },
                               { value: "extreme", label: t("games.option.mazeSize.extreme") },
                             ]}
                           />
                         </div>
                         <div className="games-setting-row">
                           <span className="games-setting-label">{t("games.param.mazeType")}</span>
-                          <Segmented<MazeType>
-                            value={mazeType}
-                            onChange={updateMazeType}
-                            options={[
-                              { value: "classic", label: t("games.option.mazeType.classic") },
-                              { value: "branchy", label: t("games.option.mazeType.branchy") },
-                              { value: "braid",   label: t("games.option.mazeType.braid") },
-                            ]}
-                          />
+                          <div className="maze-type-selector" role="radiogroup" aria-label={t("games.param.mazeType")}>
+                            {MAZE_TYPES.map((type) => (
+                              <button
+                                key={type.id}
+                                type="button"
+                                role="radio"
+                                title={t(`games.option.mazeType.${type.id}`)}
+                                aria-label={t(`games.option.mazeType.${type.id}`)}
+                                aria-checked={mazeType === type.id}
+                                className={mazeType === type.id ? "selected" : ""}
+                                onClick={() => updateMazeType(type.id)}
+                              >
+                                <span aria-hidden="true">{type.symbol}</span>
+                              </button>
+                            ))}
+                          </div>
                         </div>
                         <div className="games-setting-row">
                           {mazeSeedManual ? (
@@ -366,14 +427,13 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
                               <span className="games-setting-label">{t("games.param.seed")}</span>
                               <div className="games-seed-row">
                                 <input
-                                  type="number"
+                                  type="text"
+                                  inputMode="numeric"
+                                  pattern="[0-9]*"
                                   className="games-seed-input"
-                                  min={10000}
-                                  max={99999}
-                                  value={mazeSeed}
+                                  value={mazeSeedInput}
                                   onChange={(e) => {
-                                    const v = Math.max(10000, Math.min(99999, parseInt(e.target.value) || 10000));
-                                    setMazeSeed(v);
+                                    setMazeSeedInput(e.target.value);
                                     setPreview(null);
                                     setErr(null);
                                   }}
@@ -391,7 +451,7 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
                             <button
                               type="button"
                               className="games-seed-toggle"
-                              onClick={() => setMazeSeedManual(true)}
+                              onClick={() => { setMazeSeedInput(String(mazeSeed).padStart(5, "0")); setMazeSeedManual(true); }}
                             >
                               {t("games.maze.seedManual")}
                             </button>
@@ -419,14 +479,13 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
                               <span className="games-setting-label">{t("games.param.seed")}</span>
                               <div className="games-seed-row">
                                 <input
-                                  type="number"
+                                  type="text"
+                                  inputMode="numeric"
+                                  pattern="[0-9]*"
                                   className="games-seed-input"
-                                  min={10000}
-                                  max={99999}
-                                  value={sudokuSeed}
+                                  value={sudokuSeedInput}
                                   onChange={(e) => {
-                                    const v = Math.max(10000, Math.min(99999, parseInt(e.target.value) || 10000));
-                                    setSudokuSeed(v);
+                                    setSudokuSeedInput(e.target.value);
                                     setPreview(null);
                                     setErr(null);
                                   }}
@@ -444,7 +503,7 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
                             <button
                               type="button"
                               className="games-seed-toggle"
-                              onClick={() => setSudokuSeedManual(true)}
+                              onClick={() => { setSudokuSeedInput(String(sudokuSeed).padStart(5, "0")); setSudokuSeedManual(true); }}
                             >
                               {t("games.maze.seedManual")}
                             </button>
@@ -484,11 +543,6 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
                   <span aria-hidden="true">✦</span>
                 </button>
                 <span className="muted games-generate-label">{t("games.generate")}</span>
-                {SEEDED_GAMES.has(selectedGame.id) && (
-                  <button type="button" className="ghost games-secondary-action" onClick={regenerateFromDetail}>
-                    {t("games.regenerate")}
-                  </button>
-                )}
               </div>
             </>
           )}
@@ -547,9 +601,9 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
               cal={cal}
               lines={preview.template.lines}
               solutionLines={
-                (preview.gameId === "maze" && showMazeSolution) ||
-                (preview.gameId === "sudoku" && showSudokuSolution)
-                  ? preview.template.solutionLines : undefined
+                (preview.gameId === "maze" ? showMazeSolution : showSudokuSolution)
+                  ? preview.template.solutionLines
+                  : undefined
               }
               className="games-modal-preview"
             />
@@ -558,6 +612,20 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
       )}
     </div>
   );
+}
+
+function mazePlaceholderTemplate(cal: Calibration, t: (key: string, vars?: Record<string, string | number>) => string, size: MazeSize, type: MazeType): TemplateSpec {
+  const { width, height } = mazeRequestArea(cal);
+  return {
+    name: t("game.maze.name"),
+    lines: [],
+    width,
+    height,
+    details: [
+      { label: t("games.param.mazeSize"), value: t(`games.option.mazeSize.${size}`) },
+      { label: t("games.param.mazeType"), value: t(`games.option.mazeType.${type}`) },
+    ],
+  };
 }
 
 function PreviewSvg({ cal, lines, solutionLines, className = "" }: {

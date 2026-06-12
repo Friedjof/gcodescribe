@@ -21,8 +21,8 @@ export type GameDef = {
 export type DotsDensity = "relaxed" | "balanced" | "dense" | "extreme";
 export type DotsJitter = "straight" | "organic" | "wild";
 export type DotsPlayable = "sparse" | "balanced" | "full";
-export type MazeSize = "small" | "medium" | "large" | "extreme";
-export type MazeType = "classic" | "branchy" | "braid";
+export type MazeSize = "small" | "medium" | "large" | "huge" | "extreme";
+export type MazeType = "classic" | "masked" | "hex" | "polar";
 export type BattleshipsSize = "s8" | "s10" | "s12";
 export type SudokuDifficulty = "easy" | "medium" | "hard";
 
