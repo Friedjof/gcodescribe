@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type Calibration } from "../api";
+import { api, type Calibration, type ColoringPageResponse } from "../api";
 import { useI18n } from "../i18n";
 import { toPath } from "../paint/geometry";
 import type { Pt } from "../paint/geometry";
@@ -14,6 +14,8 @@ import {
   type MazeType,
   type BattleshipsSize,
   type SudokuDifficulty,
+  type ColoringMandalaMode,
+  type ColoringPatternMode,
   type TemplateSpec,
   type GeneratedPreview,
 } from "../games/types";
@@ -48,6 +50,14 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
   const [sudokuSeedInput, setSudokuSeedInput] = useState("");
   const [showSudokuSolution, setShowSudokuSolution] = useState(false);
   const [bingoSeed, setBingoSeed] = useState(() => randomSeed());
+  const [coloringMandalaSeed, setColoringMandalaSeed] = useState(() => randomMazeSeed());
+  const [coloringMandalaSeedManual, setColoringMandalaSeedManual] = useState(false);
+  const [coloringMandalaSeedInput, setColoringMandalaSeedInput] = useState("");
+  const [coloringMandalaMode, setColoringMandalaMode] = useState<ColoringMandalaMode>("flower");
+  const [coloringPatternSeed, setColoringPatternSeed] = useState(() => randomMazeSeed());
+  const [coloringPatternSeedManual, setColoringPatternSeedManual] = useState(false);
+  const [coloringPatternSeedInput, setColoringPatternSeedInput] = useState("");
+  const [coloringPatternMode, setColoringPatternMode] = useState<ColoringPatternMode>("truchet");
   const [preview, setPreview] = useState<GeneratedPreview | null>(null);
   const selectedGame = ALL_GAMES.find((game) => game.id === selected) ?? ALL_GAMES[0];
   const supported = SUPPORTED_GAMES.has(selectedGame.id);
@@ -64,7 +74,11 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
     try {
       autoTemplate = selectedGame.id === "maze"
         ? mazePlaceholderTemplate(cal, t, mazeSize, mazeType)
-        : buildTemplate(selectedGame.id, cal, t, {
+        : selectedGame.id === "coloringMandala"
+          ? coloringPlaceholderTemplate(cal, t, "mandala", coloringMandalaMode)
+          : selectedGame.id === "coloringPattern"
+            ? coloringPlaceholderTemplate(cal, t, "math_pattern", coloringPatternMode)
+            : buildTemplate(selectedGame.id, cal, t, {
           dotsBoxes: { density: dotsDensity, seed: dotsSeed, jitter: dotsJitter, playable: dotsPlayable },
           battleships: battleshipsSize,
           maze: mazeSeed,
@@ -125,6 +139,18 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
     setErr(null);
   };
 
+  const updateColoringMandalaMode = (mode: ColoringMandalaMode) => {
+    setColoringMandalaMode(mode);
+    setPreview(null);
+    setErr(null);
+  };
+
+  const updateColoringPatternMode = (mode: ColoringPatternMode) => {
+    setColoringPatternMode(mode);
+    setPreview(null);
+    setErr(null);
+  };
+
   const parseManualSeed = (value: string) => {
     if (!/^\d{5}$/.test(value)) {
       setErr(t("games.errorSeedLength"));
@@ -138,6 +164,8 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
     if (gameId === "dotsBoxes") return dotsSeedManual ? parseManualSeed(dotsSeedInput) : dotsSeed;
     if (gameId === "maze") return mazeSeedManual ? parseManualSeed(mazeSeedInput) : randomMazeSeed();
     if (gameId === "sudoku") return sudokuSeedManual ? parseManualSeed(sudokuSeedInput) : randomMazeSeed();
+    if (gameId === "coloringMandala") return coloringMandalaSeedManual ? parseManualSeed(coloringMandalaSeedInput) : randomMazeSeed();
+    if (gameId === "coloringPattern") return coloringPatternSeedManual ? parseManualSeed(coloringPatternSeedInput) : randomMazeSeed();
     if (gameId === "bingo") return bingoSeed;
     return 1;
   };
@@ -161,6 +189,28 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
         setMazeSeed(seed);
         setMazeSeedInput(String(seed).padStart(5, "0"));
         setShowMazeSolution(false);
+        setPreview({ gameId, template, seed });
+        setErr(null);
+        return;
+      }
+      if (gameId === "coloringMandala" || gameId === "coloringPattern") {
+        const { width, height } = coloringRequestArea(cal);
+        const isMandala = gameId === "coloringMandala";
+        const page = await api.getColoringPage(
+          isMandala ? "mandala" : "math_pattern",
+          isMandala ? coloringMandalaMode : coloringPatternMode,
+          seed,
+          width,
+          height
+        );
+        const template = buildColoringTemplate(page, t);
+        if (isMandala) {
+          setColoringMandalaSeed(seed);
+          setColoringMandalaSeedInput(String(seed).padStart(5, "0"));
+        } else {
+          setColoringPatternSeed(seed);
+          setColoringPatternSeedInput(String(seed).padStart(5, "0"));
+        }
         setPreview({ gameId, template, seed });
         setErr(null);
         return;
@@ -190,6 +240,8 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
       if (preview.gameId === "maze") nextSeed = mazeSeedManual ? preview.seed : randomMazeSeed();
       else if (preview.gameId === "sudoku") nextSeed = sudokuSeedManual ? preview.seed : randomMazeSeed();
       else if (preview.gameId === "dotsBoxes") nextSeed = dotsSeedManual ? preview.seed : randomMazeSeed();
+      else if (preview.gameId === "coloringMandala") nextSeed = coloringMandalaSeedManual ? preview.seed : randomMazeSeed();
+      else if (preview.gameId === "coloringPattern") nextSeed = coloringPatternSeedManual ? preview.seed : randomMazeSeed();
       else nextSeed = randomSeed();
     }
     setShowMazeSolution(false);
@@ -197,7 +249,7 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
     generatePreview(preview.gameId, nextSeed);
   };
 
-  const hasSettings = ["dotsBoxes", "battleships", "maze", "sudoku"].includes(selectedGame.id);
+  const hasSettings = ["dotsBoxes", "battleships", "maze", "sudoku", "coloringMandala", "coloringPattern"].includes(selectedGame.id);
 
   const createPageFromTemplate = (gameId: GameId, template: TemplateSpec) => {
     setBusy(true);
@@ -511,6 +563,90 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
                         </div>
                       </>
                     )}
+                    {selectedGame.id === "coloringMandala" && (
+                      <>
+                        <div className="games-setting-row">
+                          <span className="games-setting-label">{t("games.param.coloringMode")}</span>
+                          <Segmented<ColoringMandalaMode>
+                            value={coloringMandalaMode}
+                            onChange={updateColoringMandalaMode}
+                            options={[
+                              { value: "flower", label: t("games.option.coloring.flower") },
+                              { value: "star", label: t("games.option.coloring.star") },
+                              { value: "butterfly", label: t("games.option.coloring.butterfly") },
+                              { value: "sun", label: t("games.option.coloring.sun") },
+                              { value: "nature", label: t("games.option.coloring.nature") },
+                            ]}
+                          />
+                        </div>
+                        <div className="games-setting-row">
+                          {coloringMandalaSeedManual ? (
+                            <>
+                              <span className="games-setting-label">{t("games.param.seed")}</span>
+                              <div className="games-seed-row">
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  pattern="[0-9]*"
+                                  className="games-seed-input"
+                                  value={coloringMandalaSeedInput}
+                                  onChange={(e) => { setColoringMandalaSeedInput(e.target.value); setPreview(null); setErr(null); }}
+                                />
+                                <button type="button" className="games-seed-toggle" onClick={() => { setColoringMandalaSeedManual(false); setPreview(null); setErr(null); }}>
+                                  {t("games.maze.seedAuto")}
+                                </button>
+                              </div>
+                            </>
+                          ) : (
+                            <button type="button" className="games-seed-toggle" onClick={() => { setColoringMandalaSeedInput(String(coloringMandalaSeed).padStart(5, "0")); setColoringMandalaSeedManual(true); }}>
+                              {t("games.maze.seedManual")}
+                            </button>
+                          )}
+                        </div>
+                      </>
+                    )}
+                    {selectedGame.id === "coloringPattern" && (
+                      <>
+                        <div className="games-setting-row">
+                          <span className="games-setting-label">{t("games.param.coloringMode")}</span>
+                          <Segmented<ColoringPatternMode>
+                            value={coloringPatternMode}
+                            onChange={updateColoringPatternMode}
+                            options={[
+                              { value: "truchet", label: t("games.option.coloring.truchet") },
+                              { value: "hex_mosaic", label: t("games.option.coloring.hexMosaic") },
+                              { value: "voronoi", label: t("games.option.coloring.voronoi") },
+                              { value: "wave_field", label: t("games.option.coloring.waveField") },
+                              { value: "penrose", label: t("games.option.coloring.penrose") },
+                            ]}
+                          />
+                        </div>
+                        <div className="games-setting-row">
+                          {coloringPatternSeedManual ? (
+                            <>
+                              <span className="games-setting-label">{t("games.param.seed")}</span>
+                              <div className="games-seed-row">
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  pattern="[0-9]*"
+                                  className="games-seed-input"
+                                  value={coloringPatternSeedInput}
+                                  onChange={(e) => { setColoringPatternSeedInput(e.target.value); setPreview(null); setErr(null); }}
+                                />
+                                <button type="button" className="games-seed-toggle" onClick={() => { setColoringPatternSeedManual(false); setPreview(null); setErr(null); }}>
+                                  {t("games.maze.seedAuto")}
+                                </button>
+                              </div>
+                            </>
+                          ) : (
+                            <button type="button" className="games-seed-toggle" onClick={() => { setColoringPatternSeedInput(String(coloringPatternSeed).padStart(5, "0")); setColoringPatternSeedManual(true); }}>
+                              {t("games.maze.seedManual")}
+                            </button>
+                          )}
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               )}
@@ -626,6 +762,54 @@ function mazePlaceholderTemplate(cal: Calibration, t: (key: string, vars?: Recor
       { label: t("games.param.mazeType"), value: t(`games.option.mazeType.${type}`) },
     ],
   };
+}
+
+function coloringRequestArea(cal: Calibration) {
+  return {
+    width: Math.max(60, cal.plot_width - 8),
+    height: Math.max(60, cal.plot_height - 8),
+  };
+}
+
+function coloringPlaceholderTemplate(
+  cal: Calibration,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+  fn: "mandala" | "math_pattern",
+  mode: string,
+): TemplateSpec {
+  const { width, height } = coloringRequestArea(cal);
+  return {
+    name: fn === "mandala" ? t("game.coloringMandala.name") : t("game.coloringPattern.name"),
+    lines: [],
+    width,
+    height,
+    details: [
+      { label: t("games.param.coloringMode"), value: t(`games.option.coloring.${modeLabelKey(mode)}`) },
+    ],
+  };
+}
+
+function buildColoringTemplate(
+  page: ColoringPageResponse,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): TemplateSpec {
+  const isMandala = page.function === "mandala";
+  return {
+    name: isMandala ? t("game.coloringMandala.name") : t("game.coloringPattern.name"),
+    lines: page.lines as Pt[][],
+    width: page.width,
+    height: page.height,
+    details: [
+      { label: t("games.param.coloringMode"), value: t(`games.option.coloring.${modeLabelKey(page.mode)}`) },
+      { label: t("games.param.seed"), value: String(page.seed) },
+    ],
+  };
+}
+
+function modeLabelKey(mode: string) {
+  if (mode === "hex_mosaic") return "hexMosaic";
+  if (mode === "wave_field") return "waveField";
+  return mode;
 }
 
 function PreviewSvg({ cal, lines, solutionLines, className = "" }: {

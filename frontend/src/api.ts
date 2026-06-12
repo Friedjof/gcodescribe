@@ -93,6 +93,18 @@ export interface MazeResponse {
   metadata: Record<string, string | number | boolean>;
 }
 
+export interface ColoringPageResponse {
+  function: "mandala" | "math_pattern";
+  mode: string;
+  seed: string;
+  width: number;
+  height: number;
+  viewBox: string;
+  svg: string;
+  lines: number[][][];
+  metadata: Record<string, string | number | boolean>;
+}
+
 // --- gallery (event submissions) ---
 export interface GalleryScore {
   total: number;
@@ -203,6 +215,10 @@ export const api = {
   getMaze: (type: MazeResponse["type"], seed: number, size: string, width: number, height: number) => {
     const params = new URLSearchParams({ type, seed: String(seed), size: String(mazeSizeValue(size)), width: String(Math.round(width)), height: String(Math.round(height)) });
     return req<MazeResponse>(`/api/maze?${params.toString()}`);
+  },
+  getColoringPage: (fn: ColoringPageResponse["function"], mode: string, seed: number, width: number, height: number) => {
+    const params = new URLSearchParams({ function: fn, mode, seed: String(seed), width: String(Math.round(width)), height: String(Math.round(height)) });
+    return req<ColoringPageResponse>(`/api/coloring-pages?${params.toString()}`);
   },
   saveCalibration: (c: Partial<Calibration>) =>
     req<Calibration>("/api/calibration", {
