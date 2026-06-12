@@ -48,7 +48,7 @@ export function buildSudokuTemplate(
   }
 
   // Seed label — plotted, top-right above the board.
-  const seedStr = String(settings.seed).padStart(5, "0");
+  const seedStr = `${settings.difficulty} ${String(settings.seed).padStart(5, "0")}`;
   const seedTextH = 5.5;
   const seedTextW = seedStr.length * 5.5 * 0.9 * (seedTextH / 8);
   const seedX = x0 + board - seedTextW;

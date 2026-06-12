@@ -5,6 +5,8 @@ import { gameTextWorld } from "./lettering";
 import type { GameId } from "./types";
 import { PAGE_MARGIN } from "./constants";
 
+const GEOMETRY_EPS = 1e-6;
+
 export function mulberry32(seed: number) {
   let state = seed >>> 0;
   return () => {
@@ -54,6 +56,57 @@ export function circle(center: Pt, radius: number, segments = 14): Pt[] {
     pts.push([center[0] + Math.cos(angle) * radius, center[1] + Math.sin(angle) * radius]);
   }
   return pts;
+}
+
+export function mergeAxisAlignedSegments(lines: Pt[][]): Pt[][] {
+  const horizontal = new Map<string, Array<[number, number, number]>>();
+  const vertical = new Map<string, Array<[number, number, number]>>();
+  const other: Pt[][] = [];
+  const key = (value: number) => value.toFixed(6);
+
+  for (const line of lines) {
+    if (line.length !== 2) { other.push(line); continue; }
+    const [[x1, y1], [x2, y2]] = line;
+    if (y1 === y2) {
+      const group = horizontal.get(key(y1)) ?? [];
+      group.push([Math.min(x1, x2), Math.max(x1, x2), y1]);
+      horizontal.set(key(y1), group);
+    } else if (x1 === x2) {
+      const group = vertical.get(key(x1)) ?? [];
+      group.push([Math.min(y1, y2), Math.max(y1, y2), x1]);
+      vertical.set(key(x1), group);
+    } else {
+      other.push(line);
+    }
+  }
+
+  const merged: Pt[][] = [...other];
+  for (const segments of horizontal.values()) {
+    segments.sort((a, b) => a[2] - b[2] || a[0] - b[0]);
+    for (const [start, end, y] of mergeIntervals(segments)) {
+      merged.push([[start, y], [end, y]]);
+    }
+  }
+  for (const segments of vertical.values()) {
+    segments.sort((a, b) => a[2] - b[2] || a[0] - b[0]);
+    for (const [start, end, x] of mergeIntervals(segments)) {
+      merged.push([[x, start], [x, end]]);
+    }
+  }
+  return merged;
+}
+
+function mergeIntervals(segments: Array<[number, number, number]>): Array<[number, number, number]> {
+  const merged: Array<[number, number, number]> = [];
+  for (const [start, end, axis] of segments) {
+    const last = merged[merged.length - 1];
+    if (last && start <= last[1] + GEOMETRY_EPS) {
+      last[1] = Math.max(last[1], end);
+    } else {
+      merged.push([start, end, axis]);
+    }
+  }
+  return merged;
 }
 
 export function centerText(text: string, center: Pt, height: number, maxWidth?: number): Pt[][] {

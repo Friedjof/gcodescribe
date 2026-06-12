@@ -1,7 +1,7 @@
 import type { Calibration } from "../api";
 import type { Pt } from "../paint/geometry";
 import type { DotsDensity, DotsJitter, DotsPlayable, TemplateSpec, Translator } from "./types";
-import { clamp, formatMm, circle, usableArea, centeredOrigin, mulberry32 } from "./utils";
+import { clamp, formatMm, circle, usableArea, centeredOrigin, mulberry32, mergeAxisAlignedSegments } from "./utils";
 
 // ─── Cell encoding ─────────────────────────────────────────────────────────────
 // A cell (col, row) is encoded as col + row * STRIDE.
@@ -236,10 +236,10 @@ export function buildDotsBoxesTemplate(
   const [x0, y0] = centeredOrigin(boardW, boardH, cal, t);
 
   const borderWalls = collectBorderWalls(cells);
-  const wallLines: Pt[][] = borderWalls.map(([c1, r1, c2, r2]) => [
+  const wallLines = mergeAxisAlignedSegments(borderWalls.map(([c1, r1, c2, r2]) => [
     [x0 + (c1 - minC) * cell, y0 + (r1 - minR) * cell],
     [x0 + (c2 - minC) * cell, y0 + (r2 - minR) * cell],
-  ]);
+  ]));
 
   const lines: Pt[][] = [
     ...dots.map(([c, r]) => circle([x0 + (c - minC) * cell, y0 + (r - minR) * cell], dot)),
