@@ -9,13 +9,13 @@ from fastapi.staticfiles import StaticFiles
 from ..octoprint import OctoPrintError
 from ..pipeline import PlotterError
 from ..services import ServiceError
-from .routes import calibration, coloring_pages, gallery, jobs, maze, pages, paper, printer, sources
+from .routes import calibration, coloring_pages, gallery, jobs, maze, pages, paper, printer, profiles, sources
 
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Plotter", version="0.2.0")
 
-    for module in (calibration, coloring_pages, gallery, jobs, maze, pages, paper, printer, sources):
+    for module in (calibration, coloring_pages, gallery, jobs, maze, pages, paper, printer, profiles, sources):
         app.include_router(module.router, prefix="/api")
 
     # Domain errors are raised by the service layer and translated here, so

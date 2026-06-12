@@ -64,6 +64,15 @@ class Calibration:
 
     def save(self) -> None:
         self.path().write_text(json.dumps(asdict(self), indent=2))
+        # The profile store is the source of truth; this file is only the
+        # active-profile mirror for legacy callers. Push the change into the
+        # active profile (lazy import — services may not be loadable in
+        # stripped-down contexts, and a hard import would be circular).
+        try:
+            from .services.profiles import sync_active_profile_calibration
+        except ImportError:
+            return
+        sync_active_profile_calibration(self)
 
     def as_dict(self) -> dict:
         return asdict(self)
