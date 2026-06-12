@@ -146,6 +146,13 @@ export interface GallerySvg {
   height: number;
 }
 
+/** Live plottability rating of a paint page (same scale as the gallery). */
+export interface PageScore {
+  score: GalleryScore | null;
+  metrics: GalleryMetrics | null;
+  reason: string | null;
+}
+
 // --- paint document (multi-page) ---
 export interface PageGrid {
   step: number;
@@ -254,6 +261,18 @@ export const api = {
     req<PageIndex>(`/api/pages/${id}/activate`, { method: "POST" }),
   pageGcode: (id: string) =>
     req<Job>(`/api/pages/${id}/gcode`, { method: "POST" }),
+  pageScore: (id: string, objects?: SceneObject[]) =>
+    req<PageScore>(`/api/pages/${id}/score`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ objects }),
+    }),
+  pagePreview3D: (id: string, objects?: SceneObject[]) =>
+    req<GcodePreview3D>(`/api/pages/${id}/preview3d`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ objects }),
+    }),
 
   listJobs: () => req<Job[]>("/api/jobs"),
   deleteJob: (name: string) =>
@@ -381,6 +400,12 @@ export const api = {
   gallerySvg: (id: string) => req<GallerySvg>(`/api/gallery/${id}/svg`),
   galleryGcode3D: (id: string) =>
     req<GcodePreview3D>(`/api/gallery/${id}/gcode/preview3d`),
+  gallerySetTitle: (id: string, title: string) =>
+    req<GalleryItem>(`/api/gallery/${id}/title`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title }),
+    }),
   galleryArchive: (id: string, archived: boolean) =>
     req<GalleryItem>(`/api/gallery/${id}/${archived ? "archive" : "unarchive"}`, {
       method: "POST",

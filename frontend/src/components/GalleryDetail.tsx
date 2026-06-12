@@ -1,23 +1,16 @@
 import { useEffect, useState } from "react";
 import { api, type GalleryItem, type GallerySvg, type GcodePreview3D } from "../api";
+import { fmtBytes, fmtDuration } from "../format";
 import { useI18n } from "../i18n";
 import { localize, type Pt } from "../paint/geometry";
 import Gcode3D from "./Gcode3D";
+import Gcode3DOverlay from "./Gcode3DOverlay";
 import Modal from "./Modal";
 import PolylinePreview from "./PolylinePreview";
 import ScoreBadge from "./ScoreBadge";
 import Segmented from "./Segmented";
 
 type View = "2d" | "3d";
-
-function fmtDuration(s: number) {
-  const m = Math.floor(s / 60);
-  return `${m}:${String(Math.round(s % 60)).padStart(2, "0")} min`;
-}
-
-function fmtBytes(n: number) {
-  return n < 1024 * 1024 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1024 / 1024).toFixed(2)} MB`;
-}
 
 /** Popup inspection of one submission: 2D artwork by default, switchable to
  * the generated G-code in 3D (with fullscreen), plus admin actions. */
@@ -88,6 +81,17 @@ export default function GalleryDetail({
       .finally(() => setBusy(false));
   };
 
+  const editTitle = () => {
+    const next = window.prompt(t("gallery.titlePrompt"), item.title);
+    if (next == null || next.trim() === item.title) return;
+    setBusy(true);
+    api
+      .gallerySetTitle(item.id, next)
+      .then(onChanged)
+      .catch(fail)
+      .finally(() => setBusy(false));
+  };
+
   const setArchived = (archived: boolean) => {
     setBusy(true);
     api
@@ -115,7 +119,11 @@ export default function GalleryDetail({
         className="gallery-modal"
         title={
           <>
-            {item.title || t("gallery.untitled")} <ScoreBadge score={item.score} />
+            {item.title || t("gallery.untitled")}{" "}
+            <button className="ghost tiny" title={t("gallery.editTitle")} disabled={busy} onClick={editTitle}>
+              ✎
+            </button>{" "}
+            <ScoreBadge score={item.score} />
           </>
         }
         headerActions={
@@ -198,11 +206,7 @@ export default function GalleryDetail({
         </div>
       </Modal>
       {fullscreen && gcode && (
-        <div className="g3d-fullscreen" onClick={() => setFullscreen(false)}>
-          <div className="g3d-fullscreen-view" onClick={(e) => e.stopPropagation()}>
-            <Gcode3D data={gcode} chrome={false} showTravels={showTravels} />
-          </div>
-        </div>
+        <Gcode3DOverlay data={gcode} showTravels={showTravels} onClose={() => setFullscreen(false)} />
       )}
     </>
   );

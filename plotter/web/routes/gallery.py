@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from pydantic import BaseModel
 
 from ...gcode_preview import parse_gcode, parse_gcode_3d
 from ...services.gallery import GalleryService
@@ -56,6 +57,15 @@ def submission_gcode_preview_3d(item_id: str) -> dict:
 
 
 # -- admin actions (to be protected once the admin login exists) ---------------
+
+
+class TitleRequest(BaseModel):
+    title: str = ""
+
+
+@router.patch("/gallery/{item_id}/title")
+def set_submission_title(item_id: str, req: TitleRequest) -> dict:
+    return service().set_title(item_id, req.title)
 
 
 @router.post("/gallery/{item_id}/archive")

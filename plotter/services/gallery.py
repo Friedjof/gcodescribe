@@ -10,7 +10,7 @@ import numpy as np
 
 from ..calibration import Calibration, data_dir
 from ..drawing import load_svg_drawing, placed_gcode
-from ..gallery_metrics import analyze_gcode, metrics_dict, score_metrics
+from ..gallery_metrics import evaluate_gcode
 from ..pipeline import PlotterError
 from ..trace import IMAGE_DPI, trace_image_to_svg
 from .errors import ServiceError
@@ -83,7 +83,6 @@ class GalleryService:
             )
         (item_dir / _GCODE_FILE).write_text(gcode)
 
-        metrics = analyze_gcode(gcode)
         return {
             "id": item_id,
             "title": title,
@@ -94,8 +93,7 @@ class GalleryService:
             "width": round(drawing.width, 3),
             "height": round(drawing.height, 3),
             "lines": len(drawing.polylines),
-            "metrics": metrics_dict(metrics),
-            "score": score_metrics(metrics, MAX_GCODE_BYTES),
+            **evaluate_gcode(gcode, MAX_GCODE_BYTES),
         }
 
     @staticmethod
@@ -161,8 +159,14 @@ class GalleryService:
     def set_status(self, item_id: str, status: str) -> dict:
         if status not in ("active", "archived"):
             raise ServiceError(f"Unbekannter Status: {status}")
+        return self._update_meta(item_id, status=status)
+
+    def set_title(self, item_id: str, title: str) -> dict:
+        return self._update_meta(item_id, title=title.strip()[:MAX_TITLE_LEN])
+
+    def _update_meta(self, item_id: str, **fields) -> dict:
         meta = self.get(item_id)
-        meta["status"] = status
+        meta.update(fields)
         (self.root / item_id / "meta.json").write_text(json.dumps(meta, indent=2))
         return meta
 

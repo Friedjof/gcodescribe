@@ -12,7 +12,7 @@ export default function Gallery({ onOpenPaint }: { onOpenPaint: () => void }) {
   const { t, lang } = useI18n();
   const [items, setItems] = useState<GalleryItem[]>([]);
   const [showArchived, setShowArchived] = useState(false);
-  const [selected, setSelected] = useState<GalleryItem | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   const refresh = () =>
@@ -32,9 +32,12 @@ export default function Gallery({ onOpenPaint }: { onOpenPaint: () => void }) {
 
   const visible = items.filter((i) => showArchived || i.status === "active");
   const archivedCount = items.length - items.filter((i) => i.status === "active").length;
+  // Resolve from the list so the open detail reflects refreshes (e.g. a new
+  // title) and closes by itself once the item is deleted.
+  const selected = items.find((i) => i.id === selectedId) ?? null;
 
   return (
-    <div className="single-col">
+    <div className="gallery-page">
       <section className="card gallery-card">
         <div className="gallery-head">
           <div>
@@ -57,7 +60,7 @@ export default function Gallery({ onOpenPaint }: { onOpenPaint: () => void }) {
         <div className="gallery-scroll">
           <div className="gallery-grid">
             {visible.map((item) => (
-              <GalleryCard key={item.id} item={item} lang={lang} onOpen={() => setSelected(item)} />
+              <GalleryCard key={item.id} item={item} lang={lang} onOpen={() => setSelectedId(item.id)} />
             ))}
           </div>
         </div>
@@ -66,11 +69,8 @@ export default function Gallery({ onOpenPaint }: { onOpenPaint: () => void }) {
       {selected && (
         <GalleryDetail
           item={selected}
-          onClose={() => setSelected(null)}
-          onChanged={() => {
-            refresh();
-            setSelected(null);
-          }}
+          onClose={() => setSelectedId(null)}
+          onChanged={refresh}
           onOpenPaint={onOpenPaint}
         />
       )}

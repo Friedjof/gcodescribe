@@ -308,6 +308,7 @@ input:focus, select:focus, textarea:focus {
   font-variant-numeric: tabular-nums;
   color: var(--muted);
   transition: color 0.3s ease;
+  white-space: nowrap; /* labels like "G-code" must never wrap */
 }
 .seg button:hover:not(.active), .step-select button:hover:not(.active) {
   background: none;
@@ -652,7 +653,10 @@ input:focus, select:focus, textarea:focus {
   align-items: center;
   gap: 8px;
   margin-left: auto;
+  flex: 0 0 auto;
 }
+/* Toggles in the header keep their natural width so labels never wrap. */
+.modal-head-actions .seg { width: auto; margin-bottom: 0; }
 .modal-close {
   flex: 0 0 auto;
   background: none;
@@ -1466,6 +1470,12 @@ kbd {
 .paint-style-panel .fields.compact { grid-template-columns: 1fr 1fr; gap: 6px; }
 .style-check { margin: 0; font-size: 13px; }
 
+.paint-canvas-wrap {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+}
 .paint-canvas {
   width: 100%;
   flex: 1 1 auto;
@@ -1475,6 +1485,106 @@ kbd {
   border: 1px solid var(--border);
   border-radius: 12px;
   overflow: hidden;
+}
+
+/* Live plottability score floating over the canvas (top-left). */
+.plot-score {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 6;
+}
+.plot-score-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(13, 13, 15, 0.82);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  font-size: 12.5px;
+  cursor: default;
+}
+.plot-score-chip .plot-score-label { color: var(--muted); }
+.plot-score-chip strong { font-size: 14px; font-variant-numeric: tabular-nums; }
+.plot-score-chip.ok strong { color: var(--ok); }
+.plot-score-chip.warn strong { color: var(--warn); }
+.plot-score-chip.err strong { color: var(--err); }
+.plot-score-chip.off strong { color: var(--muted); }
+/* Smooth hover dropdown with the full breakdown. */
+.plot-score-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 270px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(20, 20, 23, 0.96);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-6px);
+  transition: opacity 0.25s ease, transform 0.25s ease, visibility 0.25s;
+}
+.plot-score:hover .plot-score-panel {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+.plot-score-rows { display: flex; flex-direction: column; gap: 6px; }
+.plot-score-row {
+  display: grid;
+  grid-template-columns: 58px 1fr 28px;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.plot-score-row span { color: var(--muted); }
+.plot-score-row em {
+  font-style: normal;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.plot-score-bar {
+  height: 5px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  overflow: hidden;
+}
+.plot-score-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+.plot-score-bar i.ok { background: var(--ok); }
+.plot-score-bar i.warn { background: var(--warn); }
+.plot-score-bar i.err { background: var(--err); }
+.plot-score-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 3px 12px;
+  margin: 10px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+}
+.plot-score-facts dt { color: var(--muted); }
+.plot-score-facts dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.plot-score-insights {
+  margin: 10px 0 0;
+  padding: 10px 0 0 16px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 .paint-canvas svg {
   width: 100%;
@@ -1591,6 +1701,10 @@ kbd {
 .score-badge.warn { background: rgba(255, 214, 10, 0.14); color: var(--warn); }
 .score-badge.err { background: rgba(255, 69, 58, 0.14); color: var(--err); }
 
+/* The gallery spans the full app width (same as the navbar) so the grid can
+   fit as many thumbnails per row as the screen allows. */
+.gallery-page { width: 100%; }
+
 .gallery-head {
   display: flex;
   align-items: flex-start;
@@ -1642,11 +1756,11 @@ kbd {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #fbfbfd;
+  background: var(--panel-2); /* dark gray, matching the designer canvas */
   border-bottom: 1px solid var(--border);
 }
 .gallery-thumb .poly-preview { width: 100%; height: 100%; }
-.gallery-thumb .poly-preview path { stroke: #1c1c1e; }
+.gallery-thumb .poly-preview path { stroke: var(--busy); }
 .gallery-thumb .score-badge { position: absolute; top: 7px; right: 7px; }
 .gallery-flag {
   position: absolute;
@@ -1690,9 +1804,9 @@ kbd {
   width: 100%;
   height: 100%;
   max-height: 52vh;
-  background: #fbfbfd;
+  background: var(--panel-2);
 }
-.gallery-stage .gallery-stage-svg path { stroke: #1c1c1e; }
+.gallery-stage .gallery-stage-svg path { stroke: var(--busy); }
 .gallery-metrics {
   display: grid;
   grid-template-columns: max-content 1fr max-content 1fr;

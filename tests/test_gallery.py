@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 import pytest
 
-from plotter.gallery_metrics import analyze_gcode, score_metrics
+from plotter.gallery_metrics import analyze_gcode, evaluate_gcode, metrics_dict, score_metrics
 from plotter.services.gallery import GalleryService
 from plotter.services.upload_validation import (
     MAX_GCODE_BYTES,
@@ -77,6 +77,14 @@ class TestMetrics:
         assert s["time"] == 100
         assert s["detail"] < 50
 
+    def test_evaluate_is_the_shared_entry_point(self):
+        result = evaluate_gcode(GCODE, MAX_GCODE_BYTES)
+        m = analyze_gcode(GCODE)
+        assert result == {
+            "metrics": metrics_dict(m),
+            "score": score_metrics(m, MAX_GCODE_BYTES),
+        }
+
 
 class TestValidation:
     def test_sniff_accepts_real_files(self):
@@ -133,6 +141,15 @@ class TestGalleryService:
         with pytest.raises(UnsupportedUpload):
             svc.create("fake.png", b"not a png at all")
         assert list(svc.root.iterdir()) == []
+
+    def test_set_title(self, cal):
+        svc = GalleryService()
+        meta = svc.create("art.svg", SVG, title="Alt")
+        updated = svc.set_title(meta["id"], "  Neuer Titel  ")
+        assert updated["title"] == "Neuer Titel"
+        assert svc.get(meta["id"])["title"] == "Neuer Titel"
+        # over-long titles are clipped just like on upload
+        assert len(svc.set_title(meta["id"], "x" * 200)["title"]) == 80
 
     def test_archive_and_delete(self, cal):
         svc = GalleryService()
