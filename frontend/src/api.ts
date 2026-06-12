@@ -17,6 +17,23 @@ export interface Calibration {
   paper_margin: number;
 }
 
+export interface AuthSession {
+  configured: boolean;
+  authenticated: boolean;
+  username: string | null;
+}
+
+export interface AuthSetupStart {
+  setupId: string;
+  totpSecret: string;
+  otpauthUri: string;
+}
+
+export interface AuthSetupFinish {
+  expires: number;
+  recoveryCodes: string[];
+}
+
 // --- calibration profiles ---
 export interface CalibrationProfileSummary {
   id: string;
@@ -255,7 +272,7 @@ export interface PageIndex {
 }
 
 async function req<T>(url: string, opts?: RequestInit): Promise<T> {
-  const res = await fetch(url, opts);
+  const res = await fetch(url, { credentials: "same-origin", ...opts });
   if (!res.ok) {
     let detail = res.statusText;
     try {
@@ -278,6 +295,27 @@ function mazeSizeValue(size: string) {
 }
 
 export const api = {
+  authSession: () => req<AuthSession>("/api/auth/session"),
+  authSetupStart: (username: string, password: string) =>
+    req<AuthSetupStart>("/api/auth/setup/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    }),
+  authSetupFinish: (setupId: string, code: string) =>
+    req<AuthSetupFinish>("/api/auth/setup/finish", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ setupId, code }),
+    }),
+  authLogin: (username: string, password: string, totpCode: string, recoveryCode: string) =>
+    req<{ expires: number }>("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password, totpCode, recoveryCode }),
+    }),
+  authLogout: () => req<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),
+
   getCalibration: () => req<Calibration>("/api/calibration"),
 
   // --- calibration profiles ---

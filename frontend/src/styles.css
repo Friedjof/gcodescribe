@@ -2074,3 +2074,72 @@ kbd {
   padding: 0;
   font-size: 12.5px;
 }
+.auth-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: radial-gradient(1200px 600px at 50% -200px, #1d1d22 0%, var(--bg) 60%);
+}
+
+.auth-card {
+  width: min(560px, 100%);
+  display: grid;
+  gap: 16px;
+}
+
+.auth-card h1,
+.auth-card h2 {
+  margin: 0;
+}
+
+.auth-form {
+  display: grid;
+  gap: 12px;
+}
+
+.auth-form label {
+  display: grid;
+  gap: 6px;
+  font-weight: 700;
+}
+
+.auth-form input,
+.auth-form textarea {
+  width: 100%;
+}
+
+.auth-form textarea {
+  min-height: 88px;
+  resize: vertical;
+}
+
+.checkline {
+  display: flex !important;
+  grid-template-columns: none !important;
+  align-items: center;
+  gap: 8px !important;
+  font-weight: 500 !important;
+}
+
+.checkline input {
+  width: auto;
+}
+
+.recovery-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.recovery-list code {
+  display: block;
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  text-align: center;
+  letter-spacing: 0.08em;
+}

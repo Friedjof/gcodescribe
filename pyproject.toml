@@ -20,6 +20,8 @@ dependencies = [
     "networkx>=3.5",
     "reportlab>=4.5.1",
     "fonttools>=4.60.0",
+    "argon2-cffi>=25.1.0",
+    "pyotp>=2.9.0",
 ]
 
 [project.scripts]

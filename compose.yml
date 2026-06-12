@@ -9,6 +9,8 @@ services:
       OCTOPRINT_API_KEY: "${OCTOPRINT_API_KEY:-}"
       OCTOPRINT_VERIFY_SSL: "${OCTOPRINT_VERIFY_SSL:-true}"
       REDIS_URL: "redis://redis:6379/0"
+      PLOTTER_AUTH_SESSION_TTL: "${PLOTTER_AUTH_SESSION_TTL:-1209600}"
+      PLOTTER_AUTH_COOKIE_SECURE: "${PLOTTER_AUTH_COOKIE_SECURE:-false}"
     volumes:
       - gcodescribe-data:/data
     depends_on:

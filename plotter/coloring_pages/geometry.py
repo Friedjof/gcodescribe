@@ -61,3 +61,36 @@ def diamond(cx: float, cy: float, angle: float, inner: float, outer: float, widt
 
 def rect(x: float, y: float, w: float, h: float) -> Polyline:
     return closed_polygon([(x, y), (x + w, y), (x + w, y + h), (x, y + h)])
+
+
+def arc(cx: float, cy: float, r: float, a0: float, a1: float, segments: int = 16) -> Polyline:
+    return [polar(cx, cy, r, a0 + (a1 - a0) * i / segments) for i in range(segments + 1)]
+
+
+def heart(cx: float, cy: float, angle: float, center_r: float, size: float, samples: int = 28) -> Polyline:
+    """Heart placed on the ring at center_r, lobes pointing away from the center."""
+    ux, uy = math.cos(angle), math.sin(angle)
+    px, py = -uy, ux
+    pts: list[Point] = []
+    for i in range(samples):
+        t = math.tau * i / samples
+        hx = 16 * math.sin(t) ** 3 / 17
+        hy = (13 * math.cos(t) - 5 * math.cos(2 * t) - 2 * math.cos(3 * t) - math.cos(4 * t)) / 17
+        bx = cx + ux * center_r
+        by = cy + uy * center_r
+        pts.append((bx + ux * hy * size + px * hx * size, by + uy * hy * size + py * hx * size))
+    return closed_polygon(pts)
+
+
+def bud(cx: float, cy: float, angle: float, inner: float, outer: float, half_width: float, samples: int = 14) -> Polyline:
+    """Drop/bud shape: round base near inner radius, pointed tip at outer radius."""
+    left: list[Point] = []
+    right: list[Point] = []
+    for i in range(samples + 1):
+        t = i / samples
+        r = inner + (outer - inner) * t
+        hw = half_width * math.sin(math.pi * min(1.0, t * 1.18)) ** 0.75
+        a_off = hw / max(r, 1e-6)
+        left.append(polar(cx, cy, r, angle - a_off))
+        right.append(polar(cx, cy, r, angle + a_off))
+    return closed_polygon([*left, *reversed(right)])

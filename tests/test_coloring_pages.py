@@ -9,8 +9,11 @@ from plotter.coloring_pages import ColoringPageGenerator, generate_coloring_page
 from plotter.coloring_pages.seed import normalize_seed
 
 
-MANDALA_MODES = ["flower", "star", "butterfly", "sun", "nature"]
-PATTERN_MODES = ["truchet", "voronoi", "hex_mosaic", "wave_field", "penrose"]
+MANDALA_MODES = ["flower", "star", "butterfly", "sun", "nature", "magic"]
+PATTERN_MODES = [
+    "truchet", "voronoi", "hex_mosaic", "wave_field", "penrose",
+    "scales", "stained_glass", "bubbles", "spiral",
+]
 
 
 def _metadata(svg: str) -> dict:
@@ -87,6 +90,34 @@ def test_complexity_changes_mandala_structure_deterministically():
 
     assert simple.svg != complex_page.svg
     assert len(complex_page.polylines) > len(simple.polylines)
+
+
+@pytest.mark.parametrize("mode", MANDALA_MODES)
+def test_different_seeds_produce_different_mandalas(mode):
+    gen = ColoringPageGenerator()
+    pages = [gen.generate_mandala_page(f"seed-{i}", mode, 180, 220, complexity=0.5).svg for i in range(8)]
+    assert len(set(pages)) == len(pages)
+
+
+@pytest.mark.parametrize("mode", PATTERN_MODES)
+def test_different_seeds_produce_different_patterns(mode):
+    gen = ColoringPageGenerator()
+    pages = [gen.generate_math_pattern_page(f"seed-{i}", mode, 180, 220, complexity=0.5).svg for i in range(8)]
+    assert len(set(pages)) == len(pages)
+
+
+def test_mandala_ring_styles_vary_with_seed():
+    gen = ColoringPageGenerator()
+    combos = {
+        tuple(gen.generate_mandala_page(f"s{i}", "magic", 180, 220, complexity=0.6).metadata["ring_styles"])
+        for i in range(12)
+    }
+    assert len(combos) >= 8
+
+
+def test_invalid_mandala_mode_raises():
+    with pytest.raises(ValueError):
+        ColoringPageGenerator().generate_mandala_page("demo", "no-such-mode", 164, 200)
 
 
 def test_coloring_page_route_clamps_to_plot_area(workspace):

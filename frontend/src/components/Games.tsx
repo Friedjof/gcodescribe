@@ -59,7 +59,7 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
   const [coloringPatternSeed, setColoringPatternSeed] = useState(() => randomMazeSeed());
   const [coloringPatternSeedManual, setColoringPatternSeedManual] = useState(false);
   const [coloringPatternSeedInput, setColoringPatternSeedInput] = useState("");
-  const [coloringPatternMode, setColoringPatternMode] = useState<ColoringPatternMode>("truchet");
+  const [coloringPatternMode, setColoringPatternMode] = useState<ColoringPatternMode>("scales");
   const [coloringPatternComplexity, setColoringPatternComplexity] = useState(0.4);
   const [coloringPatternShowSeed, setColoringPatternShowSeed] = useState(false);
   const [preview, setPreview] = useState<GeneratedPreview | null>(null);
@@ -582,6 +582,7 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
                               { value: "butterfly", label: t("games.option.coloring.butterfly") },
                               { value: "sun", label: t("games.option.coloring.sun") },
                               { value: "nature", label: t("games.option.coloring.nature") },
+                              { value: "magic", label: t("games.option.coloring.magic") },
                             ]}
                           />
                         </div>
@@ -631,8 +632,12 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
                             value={coloringPatternMode}
                             onChange={updateColoringPatternMode}
                             options={[
-                              { value: "truchet", label: t("games.option.coloring.truchet") },
+                              { value: "scales", label: t("games.option.coloring.scales") },
+                              { value: "bubbles", label: t("games.option.coloring.bubbles") },
+                              { value: "spiral", label: t("games.option.coloring.spiral") },
+                              { value: "stained_glass", label: t("games.option.coloring.stainedGlass") },
                               { value: "hex_mosaic", label: t("games.option.coloring.hexMosaic") },
+                              { value: "truchet", label: t("games.option.coloring.truchet") },
                               { value: "voronoi", label: t("games.option.coloring.voronoi") },
                               { value: "wave_field", label: t("games.option.coloring.waveField") },
                               { value: "penrose", label: t("games.option.coloring.penrose") },
@@ -845,6 +850,7 @@ function buildColoringTemplate(
 function modeLabelKey(mode: string) {
   if (mode === "hex_mosaic") return "hexMosaic";
   if (mode === "wave_field") return "waveField";
+  if (mode === "stained_glass") return "stainedGlass";
   return mode;
 }
 

@@ -75,6 +75,12 @@ docker compose up --build
 Open <http://localhost:8000>. Calibration and generated jobs are persisted in
 the `gcodescribe-data` volume (`/data`).
 
+On first opening the admin app, create the local admin account and enroll a
+TOTP authenticator. The public `/upload` page stays available without login;
+the normal app and API are protected by the admin session. Plain HTTP works for
+local/LAN use, but passwords, TOTP codes and session cookies can be observed on
+the network; use HTTPS if the controller is exposed beyond a trusted setup.
+
 > PDF support works out of the box (`poppler-utils` provides `pdftocairo`,
 > `pdftoppm` and `pdfinfo`; OpenCV does the tracing). For Office documents,
 > add `libreoffice-core` to the runtime stage in the `Dockerfile`.
@@ -114,6 +120,8 @@ backend serves automatically.
 | `PLOTTER_HOST`      | Bind host                           | `0.0.0.0` |
 | `PLOTTER_PORT`      | Bind port                           | `8000`    |
 | `REDIS_URL`         | Position cache (falls back to a file store under `<data>/state/` if unreachable) | `redis://localhost:6379/0` |
+| `PLOTTER_AUTH_SESSION_TTL` | Admin session lifetime in seconds | `1209600` |
+| `PLOTTER_AUTH_COOKIE_SECURE` | Mark session cookie HTTPS-only | `false` |
 
 Calibration values (bed/plot size, origin, pen Z, feedrates) are edited in the
 UI and stored as profiles under `<data>/profiles/` — one JSON file per profile

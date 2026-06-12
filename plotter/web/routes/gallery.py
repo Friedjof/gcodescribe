@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from ...gcode_preview import parse_gcode, parse_gcode_3d
 from ...services.gallery import GalleryService
 from ...services.upload_validation import MAX_UPLOAD_BYTES
+from ..auth import require_admin
 
 router = APIRouter(tags=["gallery"])
 
@@ -32,27 +33,30 @@ async def create_submission(
 
 
 @router.get("/gallery")
-def list_submissions(include_archived: bool = True) -> list[dict]:
+def list_submissions(
+    include_archived: bool = True,
+    _: dict = Depends(require_admin),
+) -> list[dict]:
     return service().list(include_archived=include_archived)
 
 
 @router.get("/gallery/{item_id}")
-def get_submission(item_id: str) -> dict:
+def get_submission(item_id: str, _: dict = Depends(require_admin)) -> dict:
     return service().get(item_id)
 
 
 @router.get("/gallery/{item_id}/svg")
-def submission_svg(item_id: str) -> dict:
+def submission_svg(item_id: str, _: dict = Depends(require_admin)) -> dict:
     return service().svg_preview(item_id)
 
 
 @router.get("/gallery/{item_id}/gcode/preview")
-def submission_gcode_preview(item_id: str) -> dict:
+def submission_gcode_preview(item_id: str, _: dict = Depends(require_admin)) -> dict:
     return parse_gcode(service().gcode_path(item_id))
 
 
 @router.get("/gallery/{item_id}/gcode/preview3d")
-def submission_gcode_preview_3d(item_id: str) -> dict:
+def submission_gcode_preview_3d(item_id: str, _: dict = Depends(require_admin)) -> dict:
     return parse_gcode_3d(service().gcode_path(item_id))
 
 
@@ -64,21 +68,21 @@ class TitleRequest(BaseModel):
 
 
 @router.patch("/gallery/{item_id}/title")
-def set_submission_title(item_id: str, req: TitleRequest) -> dict:
+def set_submission_title(item_id: str, req: TitleRequest, _: dict = Depends(require_admin)) -> dict:
     return service().set_title(item_id, req.title)
 
 
 @router.post("/gallery/{item_id}/archive")
-def archive_submission(item_id: str) -> dict:
+def archive_submission(item_id: str, _: dict = Depends(require_admin)) -> dict:
     return service().set_status(item_id, "archived")
 
 
 @router.post("/gallery/{item_id}/unarchive")
-def unarchive_submission(item_id: str) -> dict:
+def unarchive_submission(item_id: str, _: dict = Depends(require_admin)) -> dict:
     return service().set_status(item_id, "active")
 
 
 @router.delete("/gallery/{item_id}")
-def delete_submission(item_id: str) -> dict:
+def delete_submission(item_id: str, _: dict = Depends(require_admin)) -> dict:
     service().delete(item_id)
     return {"ok": True}

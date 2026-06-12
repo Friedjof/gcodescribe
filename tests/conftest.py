@@ -4,6 +4,7 @@ import pytest
 
 import plotter.document as document
 import plotter.position as position
+import plotter.services.auth as auth
 from plotter.calibration import Calibration
 
 
@@ -12,11 +13,14 @@ def workspace(tmp_path, monkeypatch):
     """Isolated data dir + file state store + fresh singletons."""
     monkeypatch.setenv("PLOTTER_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("REDIS_URL", "redis://localhost:1/0")  # unreachable -> file store
+    monkeypatch.setenv("PLOTTER_AUTH_TEST_BYPASS", "true")
     position._tracker = None
     document._doc = None
+    auth._store = None
     yield tmp_path
     position._tracker = None
     document._doc = None
+    auth._store = None
 
 
 @pytest.fixture

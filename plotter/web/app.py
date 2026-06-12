@@ -2,21 +2,47 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from ..octoprint import OctoPrintError
 from ..pipeline import PlotterError
 from ..services import ServiceError
-from .routes import calibration, coloring_pages, gallery, jobs, maze, pages, paper, printer, profiles, sources
+from .auth import require_admin
+from .routes import (
+    auth,
+    calibration,
+    coloring_pages,
+    gallery,
+    jobs,
+    maze,
+    pages,
+    paper,
+    printer,
+    profiles,
+    sources,
+)
 
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Plotter", version="0.2.0")
 
-    for module in (calibration, coloring_pages, gallery, jobs, maze, pages, paper, printer, profiles, sources):
-        app.include_router(module.router, prefix="/api")
+    app.include_router(auth.router, prefix="/api")
+    app.include_router(gallery.router, prefix="/api")
+    protected_modules = (
+        calibration,
+        coloring_pages,
+        jobs,
+        maze,
+        pages,
+        paper,
+        printer,
+        profiles,
+        sources,
+    )
+    for module in protected_modules:
+        app.include_router(module.router, prefix="/api", dependencies=[Depends(require_admin)])
 
     # Domain errors are raised by the service layer and translated here, so
     # the route handlers stay free of try/except boilerplate.
