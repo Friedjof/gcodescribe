@@ -879,11 +879,11 @@ function SeedVisibilityToggle({ checked, onChange, label, onText, offText }: {
   offText: string;
 }) {
   return (
-    <div className="games-setting-row games-toggle-row">
-      <span className="games-setting-label">{label}</span>
+    <div className="games-setting-row">
       <button
         type="button"
         className={`games-toggle ${checked ? "on" : ""}`}
+        aria-label={label}
         aria-pressed={checked}
         onClick={() => onChange(!checked)}
       >

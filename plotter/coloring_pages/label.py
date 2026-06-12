@@ -14,11 +14,12 @@ _SEGMENTS = {
     "8": "abcdefg",
     "9": "abfgcd",
     "-": "g",
+    " ": "",
 }
 
 
-def seed_label_lines(seed: int | str, width_mm: float, height_mm: float, margin_mm: float) -> list[Polyline]:
-    text = str(seed)[:16]
+def seed_label_lines(seed: int | str, complexity: float, width_mm: float, height_mm: float, margin_mm: float) -> list[Polyline]:
+    text = f"{str(seed)[:12]}-{round(complexity * 100)}%"
     scale = 3.0
     char_w = scale * 1.25
     gap = scale * 0.45
@@ -33,6 +34,12 @@ def seed_label_lines(seed: int | str, width_mm: float, height_mm: float, margin_
 
 
 def _char_lines(ch: str, x: float, y: float, s: float) -> list[Polyline]:
+    if ch == "%":
+        return [
+            [(x, y + s * 1.9), (x + s, y + s * 0.1)],
+            [(x + s * 0.12, y + s * 0.18), (x + s * 0.32, y + s * 0.18), (x + s * 0.32, y + s * 0.38), (x + s * 0.12, y + s * 0.38), (x + s * 0.12, y + s * 0.18)],
+            [(x + s * 0.68, y + s * 1.62), (x + s * 0.88, y + s * 1.62), (x + s * 0.88, y + s * 1.82), (x + s * 0.68, y + s * 1.82), (x + s * 0.68, y + s * 1.62)],
+        ]
     segs = _SEGMENTS.get(ch.upper())
     if not segs:
         return _fallback_char(x, y, s)

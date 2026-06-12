@@ -1029,23 +1029,11 @@ kbd {
   flex: 0 0 auto;
 }
 
-.games-toggle-row {
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-}
-
-.games-toggle-row .games-setting-label {
-  flex: 1 1 auto;
-}
-
 .games-toggle {
   display: flex;
   align-items: center;
   gap: 10px;
-  flex: 0 0 auto;
-  justify-content: flex-end;
+  width: 100%;
   min-height: 38px;
   padding: 8px 10px;
   border: 1px solid var(--border);

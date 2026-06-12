@@ -108,7 +108,7 @@ class ColoringPageGenerator:
             outer_frame,
         )
         if show_seed:
-            lines.extend(seed_label_lines(seed, width_mm, height_mm, margin_mm))
+            lines.extend(seed_label_lines(seed, complexity, width_mm, height_mm, margin_mm))
         lines = rounded_lines(lines)
         self.validate_plotter_safety(lines, width_mm, height_mm)
         metadata = self.add_metadata({
@@ -209,7 +209,7 @@ class ColoringPageGenerator:
             outer_frame,
         )
         if show_seed:
-            lines.extend(seed_label_lines(seed, width_mm, height_mm, margin_mm))
+            lines.extend(seed_label_lines(seed, complexity, width_mm, height_mm, margin_mm))
         lines = rounded_lines(lines)
         self.validate_plotter_safety(lines, width_mm, height_mm)
         metadata = self.add_metadata({
