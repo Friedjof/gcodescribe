@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .label import seed_label_lines
 from .mandala import mandala_lines
 from .math_patterns import pattern_lines
 from .seed import create_rng, normalize_seed
@@ -46,6 +47,7 @@ class ColoringPageGenerator:
         symmetry_strength: float = 1.0,
         closed_shapes_only: bool = True,
         outer_frame: bool = True,
+        show_seed: bool = False,
         output_format: str = "svg",
     ) -> str:
         return self.generate_mandala_page(
@@ -64,6 +66,7 @@ class ColoringPageGenerator:
             symmetry_strength,
             closed_shapes_only,
             outer_frame,
+            show_seed,
             output_format,
         ).svg
 
@@ -84,6 +87,7 @@ class ColoringPageGenerator:
         symmetry_strength: float = 1.0,
         closed_shapes_only: bool = True,
         outer_frame: bool = True,
+        show_seed: bool = False,
         output_format: str = "svg",
     ) -> ColoringPage:
         if output_format != "svg":
@@ -103,6 +107,8 @@ class ColoringPageGenerator:
             min_gap_mm,
             outer_frame,
         )
+        if show_seed:
+            lines.extend(seed_label_lines(seed, width_mm, height_mm, margin_mm))
         lines = rounded_lines(lines)
         self.validate_plotter_safety(lines, width_mm, height_mm)
         metadata = self.add_metadata({
@@ -122,6 +128,7 @@ class ColoringPageGenerator:
             "symmetry_strength": symmetry_strength,
             "closed_shapes_only": closed_shapes_only,
             "outer_frame": outer_frame,
+            "show_seed": show_seed,
             **derived,
         })
         svg = self.create_svg_canvas(width_mm, height_mm, lines, metadata, stroke_width_mm)
@@ -143,6 +150,7 @@ class ColoringPageGenerator:
         density: float = 0.5,
         closed_shapes_only: bool = True,
         outer_frame: bool = True,
+        show_seed: bool = False,
         output_format: str = "svg",
     ) -> str:
         return self.generate_math_pattern_page(
@@ -160,6 +168,7 @@ class ColoringPageGenerator:
             density,
             closed_shapes_only,
             outer_frame,
+            show_seed,
             output_format,
         ).svg
 
@@ -179,6 +188,7 @@ class ColoringPageGenerator:
         density: float = 0.5,
         closed_shapes_only: bool = True,
         outer_frame: bool = True,
+        show_seed: bool = False,
         output_format: str = "svg",
     ) -> ColoringPage:
         if output_format != "svg":
@@ -198,6 +208,8 @@ class ColoringPageGenerator:
             density,
             outer_frame,
         )
+        if show_seed:
+            lines.extend(seed_label_lines(seed, width_mm, height_mm, margin_mm))
         lines = rounded_lines(lines)
         self.validate_plotter_safety(lines, width_mm, height_mm)
         metadata = self.add_metadata({
@@ -218,6 +230,7 @@ class ColoringPageGenerator:
             "density": density,
             "closed_shapes_only": closed_shapes_only,
             "outer_frame": outer_frame,
+            "show_seed": show_seed,
             **derived,
         })
         svg = self.create_svg_canvas(width_mm, height_mm, lines, metadata, stroke_width_mm)

@@ -49,5 +49,15 @@ def leaf(cx: float, cy: float, angle: float, inner: float, outer: float, width_a
     return closed_polygon([base, left, tip, right])
 
 
+def diamond(cx: float, cy: float, angle: float, inner: float, outer: float, width: float) -> Polyline:
+    mid = (inner + outer) / 2
+    return closed_polygon([
+        polar(cx, cy, inner, angle),
+        polar(cx, cy, mid, angle - width),
+        polar(cx, cy, outer, angle),
+        polar(cx, cy, mid, angle + width),
+    ])
+
+
 def rect(x: float, y: float, w: float, h: float) -> Polyline:
     return closed_polygon([(x, y), (x + w, y), (x + w, y + h), (x, y + h)])

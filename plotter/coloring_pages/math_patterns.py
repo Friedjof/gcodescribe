@@ -35,36 +35,41 @@ def pattern_lines(
     cell = cell_size_mm or defaults["cell_size_mm"]
     complexity = complexity if complexity is not None else defaults["complexity"]
     jitter = defaults["jitter"] if jitter is None else jitter
-    cell = max(cell, min_gap_mm, _age_cell(age_group))
+    cell = max(cell * (1.2 - complexity * 0.35), min_gap_mm, _age_cell(age_group))
     x0, y0 = margin_mm, margin_mm
     w, h = width_mm - margin_mm * 2, height_mm - margin_mm * 2
     lines: list[Polyline] = [rect(x0, y0, w, h)] if outer_frame else []
     if mode == "truchet":
-        _truchet(lines, rng, x0, y0, w, h, cell)
+        _truchet(lines, rng, x0, y0, w, h, cell, complexity)
     elif mode == "hex_mosaic":
-        _hex(lines, rng, x0, y0, w, h, cell, jitter)
+        _hex(lines, rng, x0, y0, w, h, cell, jitter, complexity)
     elif mode == "voronoi":
-        _voronoi_like(lines, rng, x0, y0, w, h, cell, jitter, density)
+        _voronoi_like(lines, rng, x0, y0, w, h, cell, jitter, density, complexity)
     elif mode == "wave_field":
         _waves(lines, rng, x0, y0, w, h, cell, complexity, density)
     else:
-        _penrose_like(lines, x0, y0, w, h, cell)
+        _penrose_like(lines, rng, x0, y0, w, h, cell, complexity)
     return lines, {"cell_size_mm": round(cell, 3)}
 
 
-def _truchet(lines: list[Polyline], rng: random.Random, x0: float, y0: float, w: float, h: float, cell: float) -> None:
+def _truchet(lines: list[Polyline], rng: random.Random, x0: float, y0: float, w: float, h: float, cell: float, complexity: float) -> None:
     cols, rows = max(1, int(w // cell)), max(1, int(h // cell))
     sx, sy = w / cols, h / rows
     for row in range(rows):
         for col in range(cols):
             x, y = x0 + col * sx, y0 + row * sy
             lines.append(rect(x, y, sx, sy))
-            if rng.random() < 0.5:
+            variant = rng.randrange(4 if complexity > 0.55 else 2)
+            if variant == 0:
                 lines.append(_arc(x, y, sx, sy, 0))
                 lines.append(_arc(x + sx, y + sy, sx, sy, 2))
-            else:
+            elif variant == 1:
                 lines.append(_arc(x + sx, y, sx, sy, 1))
                 lines.append(_arc(x, y + sy, sx, sy, 3))
+            elif variant == 2:
+                lines.append([(x, y + sy / 2), (x + sx / 2, y), (x + sx, y + sy / 2), (x + sx / 2, y + sy), (x, y + sy / 2)])
+            else:
+                lines.append(circle(x + sx / 2, y + sy / 2, min(sx, sy) * 0.27, 20))
 
 
 def _arc(cx: float, cy: float, w: float, h: float, quadrant: int) -> Polyline:
@@ -72,7 +77,7 @@ def _arc(cx: float, cy: float, w: float, h: float, quadrant: int) -> Polyline:
     return [(cx + math.cos(start + i * math.pi / 18) * w / 2, cy + math.sin(start + i * math.pi / 18) * h / 2) for i in range(10)]
 
 
-def _hex(lines: list[Polyline], rng: random.Random, x0: float, y0: float, w: float, h: float, cell: float, jitter: float) -> None:
+def _hex(lines: list[Polyline], rng: random.Random, x0: float, y0: float, w: float, h: float, cell: float, jitter: float, complexity: float) -> None:
     r = cell / 2
     dy = r * math.sqrt(3)
     row = 0
@@ -83,12 +88,15 @@ def _hex(lines: list[Polyline], rng: random.Random, x0: float, y0: float, w: flo
             jx = (rng.random() - 0.5) * r * jitter
             jy = (rng.random() - 0.5) * r * jitter
             lines.append(regular_polygon(x + jx, y + jy, r * 0.9, 6, math.pi / 6))
+            if complexity > 0.45 and rng.random() < complexity * 0.55:
+                sides = rng.choice([3, 4, 6])
+                lines.append(regular_polygon(x + jx, y + jy, r * rng.uniform(0.25, 0.48), sides, rng.uniform(0, math.tau)))
             x += r * 3
         y += dy
         row += 1
 
 
-def _voronoi_like(lines: list[Polyline], rng: random.Random, x0: float, y0: float, w: float, h: float, cell: float, jitter: float, density: float) -> None:
+def _voronoi_like(lines: list[Polyline], rng: random.Random, x0: float, y0: float, w: float, h: float, cell: float, jitter: float, density: float, complexity: float) -> None:
     cols, rows = max(2, int(w // cell)), max(2, int(h // cell))
     sx, sy = w / cols, h / rows
     for row in range(rows):
@@ -102,6 +110,8 @@ def _voronoi_like(lines: list[Polyline], rng: random.Random, x0: float, y0: floa
                 a = math.tau * i / sides + rng.uniform(-0.12, 0.12) * jitter
                 pts.append((cx + math.cos(a) * rr, cy + math.sin(a) * rr))
             lines.append(closed_polygon(pts))
+            if complexity > 0.5 and rng.random() < complexity * 0.45:
+                lines.append(circle(cx, cy, rr * rng.uniform(0.18, 0.34), sides * 4))
 
 
 def _waves(lines: list[Polyline], rng: random.Random, x0: float, y0: float, w: float, h: float, cell: float, complexity: float, density: float) -> None:
@@ -121,7 +131,7 @@ def _waves(lines: list[Polyline], rng: random.Random, x0: float, y0: float, w: f
         lines.append(pts)
 
 
-def _penrose_like(lines: list[Polyline], x0: float, y0: float, w: float, h: float, cell: float) -> None:
+def _penrose_like(lines: list[Polyline], rng: random.Random, x0: float, y0: float, w: float, h: float, cell: float, complexity: float) -> None:
     r = cell * 0.55
     dy = math.sin(math.pi / 5) * r * 2
     rows = int((h - 2 * r) / dy) + 1
@@ -132,8 +142,11 @@ def _penrose_like(lines: list[Polyline], x0: float, y0: float, w: float, h: floa
             x = x0 + r + col * r * 1.8 + (row % 2) * r * 0.9
             if x + r > x0 + w or y + r > y0 + h:
                 continue
-            lines.append(regular_polygon(x, y, r, 5, (row + col) * math.pi / 5))
-            lines.append(regular_polygon(x, y, r * 0.52, 5, (row + col + 1) * math.pi / 5))
+            rot = (row + col) * math.pi / 5 + rng.choice([0, 0.2, -0.2]) * complexity
+            lines.append(regular_polygon(x, y, r, 5, rot))
+            lines.append(regular_polygon(x, y, r * rng.uniform(0.42, 0.62), 5, rot + math.pi / 5))
+            if complexity > 0.6 and rng.random() < 0.35:
+                lines.append(regular_polygon(x, y, r * 0.26, rng.choice([3, 4, 5]), rot * 0.5))
 
 
 def _age_cell(age_group: str) -> float:

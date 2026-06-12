@@ -1019,6 +1019,81 @@ kbd {
   align-items: center;
 }
 
+.games-complexity-row input[type="range"] {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+}
+
+.games-complexity-row .games-chip {
+  flex: 0 0 auto;
+}
+
+.games-toggle-row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.games-toggle-row .games-setting-label {
+  flex: 1 1 auto;
+}
+
+.games-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  text-align: left;
+  cursor: pointer;
+}
+
+.games-toggle:hover,
+.games-toggle:focus-visible {
+  border-color: var(--accent);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.games-toggle.on {
+  color: var(--text);
+  border-color: var(--accent);
+  background: rgba(82, 168, 255, 0.14);
+}
+
+.games-toggle-track {
+  position: relative;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 20px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid var(--border);
+}
+
+.games-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform 0.14s ease, background 0.14s ease;
+}
+
+.games-toggle.on .games-toggle-thumb {
+  transform: translateX(18px);
+  background: var(--accent);
+}
+
 .games-seed-input {
   width: 90px;
   text-align: center;

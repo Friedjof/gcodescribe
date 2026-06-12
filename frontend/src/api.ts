@@ -216,8 +216,8 @@ export const api = {
     const params = new URLSearchParams({ type, seed: String(seed), size: String(mazeSizeValue(size)), width: String(Math.round(width)), height: String(Math.round(height)) });
     return req<MazeResponse>(`/api/maze?${params.toString()}`);
   },
-  getColoringPage: (fn: ColoringPageResponse["function"], mode: string, seed: number, width: number, height: number) => {
-    const params = new URLSearchParams({ function: fn, mode, seed: String(seed), width: String(Math.round(width)), height: String(Math.round(height)) });
+  getColoringPage: (fn: ColoringPageResponse["function"], mode: string, seed: number, width: number, height: number, complexity: number, showSeed: boolean) => {
+    const params = new URLSearchParams({ function: fn, mode, seed: String(seed), width: String(Math.round(width)), height: String(Math.round(height)), complexity: String(complexity), show_seed: String(showSeed) });
     return req<ColoringPageResponse>(`/api/coloring-pages?${params.toString()}`);
   },
   saveCalibration: (c: Partial<Calibration>) =>

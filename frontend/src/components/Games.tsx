@@ -54,10 +54,14 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
   const [coloringMandalaSeedManual, setColoringMandalaSeedManual] = useState(false);
   const [coloringMandalaSeedInput, setColoringMandalaSeedInput] = useState("");
   const [coloringMandalaMode, setColoringMandalaMode] = useState<ColoringMandalaMode>("flower");
+  const [coloringMandalaComplexity, setColoringMandalaComplexity] = useState(0.4);
+  const [coloringMandalaShowSeed, setColoringMandalaShowSeed] = useState(false);
   const [coloringPatternSeed, setColoringPatternSeed] = useState(() => randomMazeSeed());
   const [coloringPatternSeedManual, setColoringPatternSeedManual] = useState(false);
   const [coloringPatternSeedInput, setColoringPatternSeedInput] = useState("");
   const [coloringPatternMode, setColoringPatternMode] = useState<ColoringPatternMode>("truchet");
+  const [coloringPatternComplexity, setColoringPatternComplexity] = useState(0.4);
+  const [coloringPatternShowSeed, setColoringPatternShowSeed] = useState(false);
   const [preview, setPreview] = useState<GeneratedPreview | null>(null);
   const selectedGame = ALL_GAMES.find((game) => game.id === selected) ?? ALL_GAMES[0];
   const supported = SUPPORTED_GAMES.has(selectedGame.id);
@@ -75,9 +79,9 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
       autoTemplate = selectedGame.id === "maze"
         ? mazePlaceholderTemplate(cal, t, mazeSize, mazeType)
         : selectedGame.id === "coloringMandala"
-          ? coloringPlaceholderTemplate(cal, t, "mandala", coloringMandalaMode)
+          ? coloringPlaceholderTemplate(cal, t, "mandala", coloringMandalaMode, coloringMandalaComplexity, coloringMandalaShowSeed)
           : selectedGame.id === "coloringPattern"
-            ? coloringPlaceholderTemplate(cal, t, "math_pattern", coloringPatternMode)
+            ? coloringPlaceholderTemplate(cal, t, "math_pattern", coloringPatternMode, coloringPatternComplexity, coloringPatternShowSeed)
             : buildTemplate(selectedGame.id, cal, t, {
           dotsBoxes: { density: dotsDensity, seed: dotsSeed, jitter: dotsJitter, playable: dotsPlayable },
           battleships: battleshipsSize,
@@ -201,7 +205,9 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
           isMandala ? coloringMandalaMode : coloringPatternMode,
           seed,
           width,
-          height
+          height,
+          isMandala ? coloringMandalaComplexity : coloringPatternComplexity,
+          isMandala ? coloringMandalaShowSeed : coloringPatternShowSeed
         );
         const template = buildColoringTemplate(page, t);
         if (isMandala) {
@@ -579,6 +585,18 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
                             ]}
                           />
                         </div>
+                        <ComplexityControl
+                          value={coloringMandalaComplexity}
+                          onChange={(value) => { setColoringMandalaComplexity(value); setPreview(null); setErr(null); }}
+                          label={t("games.param.complexity")}
+                        />
+                        <SeedVisibilityToggle
+                          checked={coloringMandalaShowSeed}
+                          onChange={(checked) => { setColoringMandalaShowSeed(checked); setPreview(null); setErr(null); }}
+                          label={t("games.param.showSeed")}
+                          onText={t("games.seedVisible")}
+                          offText={t("games.seedHidden")}
+                        />
                         <div className="games-setting-row">
                           {coloringMandalaSeedManual ? (
                             <>
@@ -621,6 +639,18 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
                             ]}
                           />
                         </div>
+                        <ComplexityControl
+                          value={coloringPatternComplexity}
+                          onChange={(value) => { setColoringPatternComplexity(value); setPreview(null); setErr(null); }}
+                          label={t("games.param.complexity")}
+                        />
+                        <SeedVisibilityToggle
+                          checked={coloringPatternShowSeed}
+                          onChange={(checked) => { setColoringPatternShowSeed(checked); setPreview(null); setErr(null); }}
+                          label={t("games.param.showSeed")}
+                          onText={t("games.seedVisible")}
+                          offText={t("games.seedHidden")}
+                        />
                         <div className="games-setting-row">
                           {coloringPatternSeedManual ? (
                             <>
@@ -776,6 +806,8 @@ function coloringPlaceholderTemplate(
   t: (key: string, vars?: Record<string, string | number>) => string,
   fn: "mandala" | "math_pattern",
   mode: string,
+  complexity: number,
+  showSeed: boolean,
 ): TemplateSpec {
   const { width, height } = coloringRequestArea(cal);
   return {
@@ -785,6 +817,8 @@ function coloringPlaceholderTemplate(
     height,
     details: [
       { label: t("games.param.coloringMode"), value: t(`games.option.coloring.${modeLabelKey(mode)}`) },
+      { label: t("games.param.complexity"), value: `${Math.round(complexity * 100)}%` },
+      { label: t("games.param.showSeed"), value: t(showSeed ? "common.yes" : "common.no") },
     ],
   };
 }
@@ -802,6 +836,8 @@ function buildColoringTemplate(
     details: [
       { label: t("games.param.coloringMode"), value: t(`games.option.coloring.${modeLabelKey(page.mode)}`) },
       { label: t("games.param.seed"), value: String(page.seed) },
+      { label: t("games.param.complexity"), value: `${Math.round(Number(page.metadata.complexity ?? 0) * 100)}%` },
+      { label: t("games.param.showSeed"), value: t(page.metadata.show_seed ? "common.yes" : "common.no") },
     ],
   };
 }
@@ -810,6 +846,54 @@ function modeLabelKey(mode: string) {
   if (mode === "hex_mosaic") return "hexMosaic";
   if (mode === "wave_field") return "waveField";
   return mode;
+}
+
+function ComplexityControl({ value, onChange, label }: {
+  value: number;
+  onChange: (value: number) => void;
+  label: string;
+}) {
+  return (
+    <div className="games-setting-row">
+      <span className="games-setting-label">{label}</span>
+      <div className="games-seed-row games-complexity-row">
+        <input
+          type="range"
+          min="0"
+          max="1"
+          step="0.05"
+          value={value}
+          onChange={(e) => onChange(Number(e.target.value))}
+        />
+        <span className="games-chip">{Math.round(value * 100)}%</span>
+      </div>
+    </div>
+  );
+}
+
+function SeedVisibilityToggle({ checked, onChange, label, onText, offText }: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  label: string;
+  onText: string;
+  offText: string;
+}) {
+  return (
+    <div className="games-setting-row games-toggle-row">
+      <span className="games-setting-label">{label}</span>
+      <button
+        type="button"
+        className={`games-toggle ${checked ? "on" : ""}`}
+        aria-pressed={checked}
+        onClick={() => onChange(!checked)}
+      >
+        <span className="games-toggle-track" aria-hidden="true">
+          <span className="games-toggle-thumb" />
+        </span>
+        <span>{checked ? onText : offText}</span>
+      </button>
+    </div>
+  );
 }
 
 function PreviewSvg({ cal, lines, solutionLines, className = "" }: {

@@ -69,6 +69,26 @@ def test_generate_coloring_page_dispatches_to_svg():
     assert meta["normalized_seed"] == normalize_seed("sunny-42")
 
 
+def test_show_seed_adds_visible_plotter_lines_but_keeps_metadata():
+    gen = ColoringPageGenerator()
+    hidden = gen.generate_mandala_page("12345", "flower", 164, 200, show_seed=False)
+    visible = gen.generate_mandala_page("12345", "flower", 164, 200, show_seed=True)
+
+    assert len(visible.polylines) > len(hidden.polylines)
+    assert _metadata(hidden.svg)["seed"] == "12345"
+    assert _metadata(hidden.svg)["show_seed"] is False
+    assert _metadata(visible.svg)["show_seed"] is True
+
+
+def test_complexity_changes_mandala_structure_deterministically():
+    gen = ColoringPageGenerator()
+    simple = gen.generate_mandala_page("demo", "nature", 164, 200, complexity=0.1)
+    complex_page = gen.generate_mandala_page("demo", "nature", 164, 200, complexity=0.9)
+
+    assert simple.svg != complex_page.svg
+    assert len(complex_page.polylines) > len(simple.polylines)
+
+
 def test_coloring_page_route_clamps_to_plot_area(workspace):
     from fastapi.testclient import TestClient
 
