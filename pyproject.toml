@@ -17,6 +17,7 @@ dependencies = [
     "redis>=8.0.0",
     "opencv-python-headless>=4.13.0.92",
     "numpy>=2.4.6",
+    "networkx>=3.5",
     "reportlab>=4.5.1",
     "fonttools>=4.60.0",
 ]
