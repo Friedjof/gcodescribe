@@ -93,6 +93,47 @@ export interface MazeResponse {
   metadata: Record<string, string | number | boolean>;
 }
 
+// --- gallery (event submissions) ---
+export interface GalleryScore {
+  total: number;
+  time: number;
+  lifts: number;
+  size: number;
+  detail: number;
+}
+
+export interface GalleryMetrics {
+  size_bytes: number;
+  command_count: number;
+  pen_lifts: number;
+  polyline_count: number;
+  point_count: number;
+  draw_mm: number;
+  travel_mm: number;
+  duration_s: number;
+  points_per_mm: number;
+}
+
+export interface GalleryItem {
+  id: string;
+  title: string;
+  filename: string;
+  kind: "svg" | "png" | "jpeg";
+  created: number;
+  status: "active" | "archived";
+  width: number;
+  height: number;
+  lines: number;
+  metrics: GalleryMetrics;
+  score: GalleryScore;
+}
+
+export interface GallerySvg {
+  polylines: number[][][];
+  width: number;
+  height: number;
+}
+
 // --- paint document (multi-page) ---
 export interface PageGrid {
   step: number;
@@ -313,6 +354,23 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ page, x, y, width }),
     }),
+  galleryUpload: (file: File, title: string) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("title", title);
+    return req<GalleryItem>("/api/gallery", { method: "POST", body: fd });
+  },
+  galleryList: (includeArchived = true) =>
+    req<GalleryItem[]>(`/api/gallery?include_archived=${includeArchived}`),
+  gallerySvg: (id: string) => req<GallerySvg>(`/api/gallery/${id}/svg`),
+  galleryGcode3D: (id: string) =>
+    req<GcodePreview3D>(`/api/gallery/${id}/gcode/preview3d`),
+  galleryArchive: (id: string, archived: boolean) =>
+    req<GalleryItem>(`/api/gallery/${id}/${archived ? "archive" : "unarchive"}`, {
+      method: "POST",
+    }),
+  galleryDelete: (id: string) => req(`/api/gallery/${id}`, { method: "DELETE" }),
+
   textPolylines: (text: string, font: string, size: number) =>
     req<{ polylines: number[][][] }>("/api/paint/text-polylines", {
       method: "POST",

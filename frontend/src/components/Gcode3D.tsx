@@ -8,15 +8,32 @@ type V3 = [number, number, number];
  * Lightweight interactive 3D viewer for a G-code tool path (Canvas 2D, no
  * external 3D dependency). Drag to orbit, scroll to zoom, right-drag to pan.
  */
-export default function Gcode3D({ data, chrome = true }: { data: GcodePreview3D; chrome?: boolean }) {
+export default function Gcode3D({
+  data,
+  chrome = true,
+  showTravels: travelsProp,
+  resetToken = 0,
+}: {
+  data: GcodePreview3D;
+  chrome?: boolean;
+  // Controlled mode for hosts that render their own controls (e.g. in a
+  // modal footer): pass showTravels and bump resetToken to reset the view.
+  showTravels?: boolean;
+  resetToken?: number;
+}) {
   const { t } = useI18n();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const view = useRef({ yaw: -0.7, pitch: 1.0, zoom: 1, panX: 0, panY: 0 });
   const drag = useRef<{ x: number; y: number; mode: "orbit" | "pan" } | null>(null);
   const renderRef = useRef<() => void>(() => {});
-  const [showTravels, setShowTravels] = useState(true);
+  const [travelsState, setShowTravels] = useState(true);
+  const showTravels = travelsProp ?? travelsState;
   const showTravelsRef = useRef(showTravels);
   showTravelsRef.current = showTravels;
+
+  useEffect(() => {
+    renderRef.current();
+  }, [showTravels]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -179,6 +196,10 @@ export default function Gcode3D({ data, chrome = true }: { data: GcodePreview3D;
     view.current = { yaw: -0.7, pitch: 1.0, zoom: 1, panX: 0, panY: 0 };
     renderRef.current();
   };
+
+  useEffect(() => {
+    if (resetToken) resetView();
+  }, [resetToken]);
 
   return (
     <div className="g3d">
