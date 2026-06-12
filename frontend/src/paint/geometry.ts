@@ -9,7 +9,9 @@ export interface Transform {
   x: number; // world position of the object's center
   y: number;
   rotation: number; // radians
-  scale: number;
+  scale: number;    // uniform fallback; prefer scaleX/scaleY when set
+  scaleX?: number;
+  scaleY?: number;
 }
 
 export const IDENTITY: Transform = { x: 0, y: 0, rotation: 0, scale: 1 };
@@ -97,10 +99,12 @@ export function localize(world: Pt[][]): { local: Pt[][]; cx: number; cy: number
 
 export function transformPolylines(local: Pt[][], t: Transform): Pt[][] {
   const cos = Math.cos(t.rotation), sin = Math.sin(t.rotation);
+  const sx = t.scaleX ?? t.scale;
+  const sy = t.scaleY ?? t.scale;
   return local.map((line) =>
     line.map(([x, y]) => {
-      const sx = x * t.scale, sy = y * t.scale;
-      return [t.x + sx * cos - sy * sin, t.y + sx * sin + sy * cos] as Pt;
+      const rx = x * sx, ry = y * sy;
+      return [t.x + rx * cos - ry * sin, t.y + rx * sin + ry * cos] as Pt;
     })
   );
 }

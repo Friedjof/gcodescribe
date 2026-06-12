@@ -15,8 +15,9 @@ Polyline = list[Point]
 
 
 def _transform_point(point: list | tuple, transform: dict) -> Point:
-    x = float(point[0]) * float(transform.get("scale", 1.0))
-    y = float(point[1]) * float(transform.get("scale", 1.0))
+    scale = float(transform.get("scale", 1.0))
+    x = float(point[0]) * float(transform.get("scaleX") or scale)
+    y = float(point[1]) * float(transform.get("scaleY") or scale)
     rot = float(transform.get("rotation", 0.0))
     cos_r, sin_r = math.cos(rot), math.sin(rot)
     return (

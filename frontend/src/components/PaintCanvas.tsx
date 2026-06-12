@@ -11,11 +11,44 @@ import {
   simplify,
   localize,
   objectWorldBounds,
+  bounds,
   snapPt,
   toPath,
 } from "../paint/geometry";
 
 export type Tool = "select" | "pen" | "line" | "rect" | "circle" | "semicircle" | "text";
+
+/**
+ * Clamp a transform so the object's world bounding box stays within [0,W]×[0,H].
+ * First scales down if the object is larger than the canvas, then shifts to fit.
+ */
+function clampedTransform(t: Transform, local: Pt[][], W: number, H: number): Transform {
+  if (!local.length) return t;
+  const [bx0, by0, bx1, by1] = objectWorldBounds(local, t);
+  // Fast path — already in bounds.
+  if (bx0 >= 0 && by0 >= 0 && bx1 <= W && by1 <= H) return t;
+
+  const bw = bx1 - bx0, bh = by1 - by0;
+  const sx = t.scaleX ?? t.scale;
+  const sy = t.scaleY ?? t.scale;
+
+  // If the object is larger than the canvas, scale it down uniformly to fit.
+  const shrink = Math.min(bw > W ? W / bw : 1, bh > H ? H / bh : 1);
+  const nsx = sx * shrink;
+  const nsy = sy * shrink;
+  const shrunken: Transform = shrink < 1
+    ? { ...t, x: W / 2, y: H / 2, scaleX: nsx, scaleY: nsy, scale: Math.max(nsx, nsy) }
+    : t;
+
+  // After potential shrink, get the new bounds and shift into the canvas.
+  const [nx0, ny0, nx1, ny1] = objectWorldBounds(local, shrunken);
+  let dx = 0, dy = 0;
+  if (nx0 < 0) dx = -nx0; else if (nx1 > W) dx = W - nx1;
+  if (ny0 < 0) dy = -ny0; else if (ny1 > H) dy = H - ny1;
+  return { ...shrunken, x: shrunken.x + dx, y: shrunken.y + dy };
+}
+
+type ResizeEdge = "tl" | "tc" | "tr" | "ml" | "mr" | "bl" | "bc" | "br";
 
 function shapeWorld(tool: Tool, pts: Pt[]): Pt[][] {
   if (tool === "pen") return pts.length > 1 ? [pts] : [];
@@ -31,11 +64,12 @@ function shapeWorld(tool: Tool, pts: Pt[]): Pt[][] {
 type Draft = { tool: Tool; points: Pt[] };
 type Marquee = { start: Pt; current: Pt; additive: boolean };
 type Drag =
-  | { mode: "move"; ids: string[]; primaryId: string; startMouse: Pt; startTs: Map<string, Transform> }
-  | { mode: "scale"; id: string; center: Pt; startDist: number; startScale: number }
+  | { mode: "move"; ids: string[]; primaryId: string; startMouse: Pt; startTs: Map<string, Transform>; startBoundsAll: [number, number, number, number] }
+  | { mode: "resize"; id: string; edge: ResizeEdge; startBounds: [number, number, number, number]; startLocalBounds: [number, number, number, number] }
   | { mode: "groupScale"; ids: string[]; center: Pt; startDist: number; startTs: Map<string, Transform> }
   | { mode: "rotate"; id: string; center: Pt; startAngle: number; startRotation: number };
 
+const cl = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const zValue = (obj: SceneObject, index: number) => obj.zOrder ?? index;
 
 export default function PaintCanvas({
@@ -80,6 +114,22 @@ export default function PaintCanvas({
   const [marquee, setMarquee] = useState<Marquee | null>(null);
   const drag = useRef<Drag | null>(null);
 
+  // Wrappers that enforce the hard plot-area boundary before every transform write.
+  const updateSafe = (id: string, t: Transform) => {
+    const obj = page.objects.find((o) => o.id === id);
+    const local = (obj?.cachedPolylines ?? []) as Pt[][];
+    onUpdate(id, clampedTransform(t, local, W, H));
+  };
+  const updateManySafe = (updates: Map<string, Transform>) => {
+    const out = new Map<string, Transform>();
+    for (const [id, t] of updates) {
+      const obj = page.objects.find((o) => o.id === id);
+      const local = (obj?.cachedPolylines ?? []) as Pt[][];
+      out.set(id, clampedTransform(t, local, W, H));
+    }
+    onUpdateMany(out);
+  };
+
   const objectSelectionIds = (obj: SceneObject) =>
     obj.groupId
       ? page.objects.filter((o) => !o.plotted && o.groupId === obj.groupId).map((o) => o.id)
@@ -120,7 +170,6 @@ export default function PaintCanvas({
     onImageDrop(file, snapPt(clientToMM(e.clientX, e.clientY), step, snapOn));
   };
 
-  // --- drawing on the background ---
   const onSvgDown = (e: React.PointerEvent) => {
     if (tool === "select") {
       if (e.button !== 0) return;
@@ -165,6 +214,7 @@ export default function PaintCanvas({
     const d = drag.current;
     if (!d) return;
     const m = toMM(e);
+
     if (d.mode === "move") {
       const primary = d.startTs.get(d.primaryId);
       if (!primary) return;
@@ -175,17 +225,83 @@ export default function PaintCanvas({
         dx = sx - primary.x;
         dy = sy - primary.y;
       }
+      // Clamp so no part of any selected object leaves the plot area.
+      dx = cl(dx, -d.startBoundsAll[0], W - d.startBoundsAll[2]);
+      dy = cl(dy, -d.startBoundsAll[1], H - d.startBoundsAll[3]);
       const updates = new Map<string, Transform>();
       for (const id of d.ids) {
         const t = d.startTs.get(id);
         if (t) updates.set(id, { ...t, x: t.x + dx, y: t.y + dy });
       }
-      onUpdateMany(updates);
-    } else if (d.mode === "scale") {
-      const dist = Math.hypot(m[0] - d.center[0], m[1] - d.center[1]);
-      const scale = Math.max(0.05, (d.startScale * dist) / (d.startDist || 1));
+      updateManySafe(updates);
+
+    } else if (d.mode === "resize") {
       const obj = page.objects.find((o) => o.id === d.id);
-      if (obj) onUpdate(d.id, { ...(obj.transform ?? IDENTITY), scale });
+      if (!obj) return;
+      const [sbx0, sby0, sbx1, sby1] = d.startBounds;
+      const [slx0, sly0, slx1, sly1] = d.startLocalBounds;
+      const localW = Math.max(slx1 - slx0, 0.001);
+      const localH = Math.max(sly1 - sly0, 0.001);
+      const minPx = 2; // mm
+
+      const movesLeft  = d.edge === "tl" || d.edge === "ml" || d.edge === "bl";
+      const movesRight = d.edge === "tr" || d.edge === "mr" || d.edge === "br";
+      const movesTop   = d.edge === "tl" || d.edge === "tc" || d.edge === "tr";
+      const movesBot   = d.edge === "bl" || d.edge === "bc" || d.edge === "br";
+      const isCorner   = (movesLeft || movesRight) && (movesTop || movesBot);
+
+      let wx0 = sbx0, wy0 = sby0, wx1 = sbx1, wy1 = sby1;
+      if (movesLeft)  wx0 = cl(m[0], 0,            sbx1 - minPx);
+      if (movesRight) wx1 = cl(m[0], sbx0 + minPx, W);
+      if (movesTop)   wy0 = cl(m[1], 0,            sby1 - minPx);
+      if (movesBot)   wy1 = cl(m[1], sby0 + minPx, H);
+
+      // Ctrl: lock aspect ratio (corners only)
+      if ((e.ctrlKey || e.metaKey) && isCorner) {
+        const origW = Math.max(sbx1 - sbx0, 0.001);
+        const origH = Math.max(sby1 - sby0, 0.001);
+        const ar = origW / origH;
+        let nw = wx1 - wx0;
+        let nh = wy1 - wy0;
+        // Drive by whichever axis changed proportionally more
+        if (nw / origW >= nh / origH) {
+          nh = nw / ar;
+        } else {
+          nw = nh * ar;
+        }
+        // Anchor to the fixed corner of this handle
+        if      (d.edge === "br") { wx1 = sbx0 + nw; wy1 = sby0 + nh; }
+        else if (d.edge === "tl") { wx0 = sbx1 - nw; wy0 = sby1 - nh; }
+        else if (d.edge === "tr") { wx1 = sbx0 + nw; wy0 = sby1 - nh; }
+        else                      { wx0 = sbx1 - nw; wy1 = sby0 + nh; } // bl
+        // Re-clamp to hard border
+        wx0 = cl(wx0, 0, W - minPx);
+        wy0 = cl(wy0, 0, H - minPx);
+        wx1 = cl(wx1, minPx, W);
+        wy1 = cl(wy1, minPx, H);
+      }
+
+      // Hard-clamp all four edges to the plot area — catches floating-point drift
+      // and any case where fixed edges were already outside the boundary.
+      wx0 = Math.max(0, wx0);
+      wy0 = Math.max(0, wy0);
+      wx1 = Math.min(W, wx1);
+      wy1 = Math.min(H, wy1);
+      if (wx1 - wx0 < minPx) { if (movesLeft) wx0 = wx1 - minPx; else wx1 = Math.min(wx0 + minPx, W); }
+      if (wy1 - wy0 < minPx) { if (movesTop)  wy0 = wy1 - minPx; else wy1 = Math.min(wy0 + minPx, H); }
+
+      const newScaleX = (wx1 - wx0) / localW;
+      const newScaleY = (wy1 - wy0) / localH;
+      const t = obj.transform ?? IDENTITY;
+      updateSafe(d.id, {
+        ...t,
+        x: (wx0 + wx1) / 2,
+        y: (wy0 + wy1) / 2,
+        scaleX: newScaleX,
+        scaleY: newScaleY,
+        scale: Math.max(newScaleX, newScaleY),
+      });
+
     } else if (d.mode === "groupScale") {
       const dist = Math.hypot(m[0] - d.center[0], m[1] - d.center[1]);
       const factor = Math.max(0.05, dist / (d.startDist || 1));
@@ -193,18 +309,21 @@ export default function PaintCanvas({
       for (const id of d.ids) {
         const t = d.startTs.get(id);
         if (!t) continue;
+        const nx = d.center[0] + (t.x - d.center[0]) * factor;
+        const ny = d.center[1] + (t.y - d.center[1]) * factor;
         updates.set(id, {
           ...t,
-          x: d.center[0] + (t.x - d.center[0]) * factor,
-          y: d.center[1] + (t.y - d.center[1]) * factor,
+          x: cl(nx, 0, W),
+          y: cl(ny, 0, H),
           scale: Math.max(0.05, t.scale * factor),
         });
       }
-      onUpdateMany(updates);
+      updateManySafe(updates);
+
     } else {
       const angle = Math.atan2(m[1] - d.center[1], m[0] - d.center[0]);
       const obj = page.objects.find((o) => o.id === d.id);
-      if (obj) onUpdate(d.id, { ...(obj.transform ?? IDENTITY), rotation: d.startRotation + angle - d.startAngle });
+      if (obj) updateSafe(d.id, { ...(obj.transform ?? IDENTITY), rotation: d.startRotation + angle - d.startAngle });
     }
   };
 
@@ -218,8 +337,8 @@ export default function PaintCanvas({
       } else {
         const picked = objectsByZ.flatMap((obj) => {
           if (obj.plotted) return [];
-          const bounds = objectWorldBounds((obj.cachedPolylines ?? []) as Pt[][], obj.transform ?? IDENTITY);
-          return intersects(mb, bounds) ? objectSelectionIds(obj) : [];
+          const ob = objectWorldBounds((obj.cachedPolylines ?? []) as Pt[][], obj.transform ?? IDENTITY);
+          return intersects(mb, ob) ? objectSelectionIds(obj) : [];
         });
         const next = marquee.additive ? Array.from(new Set([...selectedIds, ...picked])) : Array.from(new Set(picked));
         onSelect(next);
@@ -273,11 +392,20 @@ export default function PaintCanvas({
     }
     onEditStart();
     svgRef.current!.setPointerCapture(e.pointerId);
+    const movingObjs = page.objects.filter((o) => ids.includes(o.id));
+    const startBoundsAll = movingObjs.reduce<[number, number, number, number]>(
+      (acc, o) => {
+        const b = objectWorldBounds((o.cachedPolylines ?? []) as Pt[][], o.transform ?? IDENTITY);
+        return [Math.min(acc[0], b[0]), Math.min(acc[1], b[1]), Math.max(acc[2], b[2]), Math.max(acc[3], b[3])];
+      },
+      [Infinity, Infinity, -Infinity, -Infinity]
+    );
     drag.current = {
       mode: "move",
       ids,
       primaryId: obj.id,
       startMouse: toMM(e),
+      startBoundsAll,
       startTs: new Map(
         page.objects
           .filter((o) => ids.includes(o.id))
@@ -295,17 +423,18 @@ export default function PaintCanvas({
     onContextMenuSelection(ids, e.clientX, e.clientY);
   };
 
-  const startScale = (e: React.PointerEvent, obj: SceneObject, center: Pt) => {
+  const startResize = (e: React.PointerEvent, obj: SceneObject, edge: ResizeEdge) => {
     e.stopPropagation();
     onEditStart();
     svgRef.current!.setPointerCapture(e.pointerId);
-    const m = toMM(e);
+    const t = obj.transform ?? IDENTITY;
+    const localLines = (obj.cachedPolylines ?? []) as Pt[][];
     drag.current = {
-      mode: "scale",
+      mode: "resize",
       id: obj.id,
-      center,
-      startDist: Math.hypot(m[0] - center[0], m[1] - center[1]),
-      startScale: (obj.transform ?? IDENTITY).scale,
+      edge,
+      startBounds: objectWorldBounds(localLines, t),
+      startLocalBounds: bounds(localLines.flat()),
     };
   };
 
@@ -342,8 +471,11 @@ export default function PaintCanvas({
     };
   };
 
-  const objTransform = (t: Transform) =>
-    `translate(${t.x} ${t.y}) rotate(${(t.rotation * 180) / Math.PI}) scale(${t.scale})`;
+  const objTransform = (t: Transform) => {
+    const sx = t.scaleX ?? t.scale;
+    const sy = t.scaleY ?? t.scale;
+    return `translate(${t.x} ${t.y}) rotate(${(t.rotation * 180) / Math.PI}) scale(${sx},${sy})`;
+  };
 
   const draftWorld = draft
     ? draft.tool === "pen"
@@ -364,6 +496,18 @@ export default function PaintCanvas({
         return [Math.min(acc[0], b[0]), Math.min(acc[1], b[1]), Math.max(acc[2], b[2]), Math.max(acc[3], b[3])];
       }, null)
     : null;
+
+  // Resize handle descriptors for single-selection
+  const resizeHandles: { edge: ResizeEdge; cursor: string; dx: number; dy: number }[] = [
+    { edge: "tl", cursor: "nwse-resize", dx: 0, dy: 0 },
+    { edge: "tc", cursor: "ns-resize",   dx: 0.5, dy: 0 },
+    { edge: "tr", cursor: "nesw-resize", dx: 1, dy: 0 },
+    { edge: "ml", cursor: "ew-resize",   dx: 0, dy: 0.5 },
+    { edge: "mr", cursor: "ew-resize",   dx: 1, dy: 0.5 },
+    { edge: "bl", cursor: "nesw-resize", dx: 0, dy: 1 },
+    { edge: "bc", cursor: "ns-resize",   dx: 0.5, dy: 1 },
+    { edge: "br", cursor: "nwse-resize", dx: 1, dy: 1 },
+  ];
 
   return (
     <div className="paint-canvas">
@@ -397,6 +541,7 @@ export default function PaintCanvas({
         {/* objects */}
         {objectsByZ.map((obj) => {
           const t = obj.transform ?? IDENTITY;
+          const strokeScale = Math.max(t.scaleX ?? t.scale, t.scaleY ?? t.scale);
           return (
             <g
               key={obj.id}
@@ -407,7 +552,7 @@ export default function PaintCanvas({
               {(obj.cachedPolylines ?? []).map((line, i) => (
                 <path key={i} d={toPath(line as Pt[])} fill="none"
                   stroke={obj.plotted ? "var(--muted)" : "var(--busy)"}
-                  strokeWidth={STROKE / t.scale} strokeLinejoin="round" strokeLinecap="round" />
+                  strokeWidth={STROKE / strokeScale} strokeLinejoin="round" strokeLinecap="round" />
               ))}
             </g>
           );
@@ -429,7 +574,7 @@ export default function PaintCanvas({
           );
         })()}
 
-        {/* selection: hit areas (select tool) + handles for the selected one */}
+        {/* selection hit areas + handles */}
         {tool === "select" &&
           objectsByZ.map((obj) => {
             if (obj.plotted) return null;
@@ -442,12 +587,15 @@ export default function PaintCanvas({
             const singleSel = selectedIds.length === 1 && sel;
             const cx = t.x;
             const cy = t.y;
+            const bw = bx1 - bx0;
+            const bh = by1 - by0;
             const rcx = (bx0 + bx1) / 2;
             const rcy = by0 - HANDLE * 1.2;
             return (
               <g key={`s${obj.id}`}>
+                {/* hit + selection outline */}
                 <rect
-                  x={bx0 - m} y={by0 - m} width={bx1 - bx0 + 2 * m} height={by1 - by0 + 2 * m}
+                  x={bx0 - m} y={by0 - m} width={bw + 2 * m} height={bh + 2 * m}
                   fill="transparent"
                   stroke={sel ? "var(--accent)" : "transparent"}
                   strokeWidth={STROKE} strokeDasharray={`${STROKE * 2} ${STROKE}`}
@@ -457,26 +605,40 @@ export default function PaintCanvas({
                 />
                 {singleSel && (
                   <>
+                    {/* rotate tether + handle */}
                     <line x1={rcx} y1={by0} x2={rcx} y2={rcy}
-                      stroke="var(--accent)" strokeWidth={STROKE} strokeDasharray={`${STROKE} ${STROKE}`} />
+                      stroke="var(--accent)" strokeWidth={STROKE} strokeDasharray={`${STROKE} ${STROKE}`}
+                      pointerEvents="none" />
                     <circle
                       cx={rcx} cy={rcy} r={HANDLE / 2}
                       fill="var(--panel)" stroke="var(--accent)" strokeWidth={STROKE}
                       style={{ cursor: "grab" }}
                       onPointerDown={(e) => startRotate(e, obj, [cx, cy])}
                     />
-                    <circle
-                      cx={bx1 + m} cy={by1 + m} r={HANDLE / 2}
-                      fill="var(--accent)" stroke="#fff" strokeWidth={STROKE / 2}
-                      style={{ cursor: "nwse-resize" }}
-                      onPointerDown={(e) => startScale(e, obj, [cx, cy])}
-                    />
+                    {/* 8 resize handles */}
+                    {resizeHandles.map(({ edge, cursor, dx, dy }) => {
+                      const hx = bx0 + bw * dx;
+                      const hy = by0 + bh * dy;
+                      const hs = HANDLE * 0.85;
+                      return (
+                        <rect
+                          key={edge}
+                          x={hx - hs / 2} y={hy - hs / 2}
+                          width={hs} height={hs}
+                          rx={hs * 0.18}
+                          fill="var(--accent)" stroke="#fff" strokeWidth={STROKE / 2}
+                          style={{ cursor }}
+                          onPointerDown={(e) => startResize(e, obj, edge)}
+                        />
+                      );
+                    })}
                   </>
                 )}
               </g>
             );
           })}
 
+        {/* group selection outline + single scale handle */}
         {tool === "select" && selectedBounds && (() => {
           const [bx0, by0, bx1, by1] = selectedBounds;
           const m = STROKE * 3;
@@ -490,8 +652,10 @@ export default function PaintCanvas({
                 strokeDasharray={`${STROKE * 3} ${STROKE * 1.5}`}
                 pointerEvents="none"
               />
-              <circle
-                cx={bx1 + m} cy={by1 + m} r={HANDLE / 2}
+              <rect
+                x={bx1 + m - HANDLE * 0.425} y={by1 + m - HANDLE * 0.425}
+                width={HANDLE * 0.85} height={HANDLE * 0.85}
+                rx={HANDLE * 0.15}
                 fill="var(--accent)" stroke="#fff" strokeWidth={STROKE / 2}
                 style={{ cursor: "nwse-resize" }}
                 onPointerDown={(e) => startGroupScale(e, selectedObjects.map((obj) => obj.id), [cx, cy])}

@@ -86,7 +86,7 @@ export interface PageGrid {
 export interface SceneObject {
   id: string;
   type: "image" | "text" | "freehand" | "pen" | "line" | "rect" | "circle" | "semicircle" | string;
-  transform?: { x: number; y: number; rotation: number; scale: number };
+  transform?: { x: number; y: number; rotation: number; scale: number; scaleX?: number; scaleY?: number };
   zOrder?: number;
   groupId?: string;
   data?: any;
