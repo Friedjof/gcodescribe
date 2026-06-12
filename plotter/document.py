@@ -19,6 +19,17 @@ def _new_id() -> str:
     return "p-" + uuid.uuid4().hex[:6]
 
 
+def _active_profile_meta() -> dict | None:
+    """Active profile for new pages; tolerant so the paint store keeps
+    working even if the profile layer is unavailable."""
+    try:
+        from .services.profiles import ProfileService
+
+        return ProfileService().active_profile_meta()
+    except Exception:
+        return None
+
+
 class DocumentStore:
     """Multi-page paint document, persisted in the state store (Redis/file).
 
@@ -55,6 +66,12 @@ class DocumentStore:
             "modified": page.get("modified", 0.0),
             "objectCount": len(objects),
             "plottedCount": sum(1 for o in objects if o.get("plotted")),
+            # Profile the page was created for. Old pages have no profile
+            # fields; they are reported as "missing" and must be adopted
+            # explicitly (never silently bound to the active profile).
+            "profileId": page.get("profileId"),
+            "profileName": page.get("profileName"),
+            "profileFingerprint": page.get("profileFingerprint"),
         }
 
     def _page_key(self, page_id: str) -> str:
@@ -68,7 +85,7 @@ class DocumentStore:
             index = self._index()
             # Ensure there is always at least one page to work on.
             if not index["order"]:
-                self._create_locked()
+                self._create_locked(profile=_active_profile_meta())
                 index = self._index()
             return index
 
@@ -78,7 +95,7 @@ class DocumentStore:
 
     # -- mutations ---------------------------------------------------------
 
-    def _create_locked(self, name: str | None = None) -> dict:
+    def _create_locked(self, name: str | None = None, profile: dict | None = None) -> dict:
         page_id = _new_id()
         now = _now()
         page = {
@@ -89,6 +106,10 @@ class DocumentStore:
             "created": now,
             "modified": now,
         }
+        if profile:
+            page["profileId"] = profile.get("id")
+            page["profileName"] = profile.get("name")
+            page["profileFingerprint"] = profile.get("fingerprint")
         self._store.set(self._page_key(page_id), page)
         index = self._index()
         index["order"].append(self._meta(page))
@@ -96,9 +117,23 @@ class DocumentStore:
         self._save_index(index)
         return page
 
-    def create_page(self, name: str | None = None) -> dict:
+    def create_page(self, name: str | None = None, profile: dict | None = None) -> dict:
         with self._lock:
-            return self._create_locked(name)
+            return self._create_locked(name, profile)
+
+    def set_page_profile(self, page_id: str, profile: dict) -> dict:
+        """Explicitly bind a page to a profile (adopt / re-adopt)."""
+        with self._lock:
+            page = self._store.get(self._page_key(page_id))
+            if page is None:
+                raise KeyError(page_id)
+            page["profileId"] = profile.get("id")
+            page["profileName"] = profile.get("name")
+            page["profileFingerprint"] = profile.get("fingerprint")
+            page["modified"] = _now()
+            self._store.set(self._page_key(page_id), page)
+            self._refresh_meta(page)
+            return page
 
     def save_page(self, page_id: str, updates: dict) -> dict:
         """Update a page's objects / grid / name (whatever is provided)."""
@@ -126,7 +161,7 @@ class DocumentStore:
                 index["activeId"] = index["order"][-1]["id"] if index["order"] else None
             self._save_index(index)
             if not index["order"]:
-                self._create_locked()
+                self._create_locked(profile=_active_profile_meta())
                 index = self._index()
             return index
 
@@ -135,7 +170,18 @@ class DocumentStore:
             src = self._store.get(self._page_key(page_id))
             if src is None:
                 raise KeyError(page_id)
-            copy = self._create_locked(name=f"{src['name']} (Kopie)")
+            # The copy keeps the source page's profile: its coordinates were
+            # laid out for that plot area, not for the active profile.
+            copy = self._create_locked(
+                name=f"{src['name']} (Kopie)",
+                profile={
+                    "id": src.get("profileId"),
+                    "name": src.get("profileName"),
+                    "fingerprint": src.get("profileFingerprint"),
+                }
+                if src.get("profileId")
+                else None,
+            )
             copy["objects"] = src.get("objects", [])
             copy["grid"] = src.get("grid", dict(DEFAULT_GRID))
             copy["modified"] = _now()
