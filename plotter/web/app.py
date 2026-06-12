@@ -3,19 +3,19 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from ..octoprint import OctoPrintError
 from ..pipeline import PlotterError
 from ..services import ServiceError
-from .routes import calibration, jobs, maze, pages, paper, printer, sources
+from .routes import calibration, gallery, jobs, maze, pages, paper, printer, sources
 
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Plotter", version="0.2.0")
 
-    for module in (calibration, jobs, maze, pages, paper, printer, sources):
+    for module in (calibration, gallery, jobs, maze, pages, paper, printer, sources):
         app.include_router(module.router, prefix="/api")
 
     # Domain errors are raised by the service layer and translated here, so
@@ -39,6 +39,11 @@ def create_app() -> FastAPI:
     # Static frontend (built SPA) — mounted last so /api routes take precedence.
     static = Path(__file__).resolve().parent / "static"
     if static.exists():
+        # /upload is the public SPA route handed out for event submissions.
+        @app.get("/upload", include_in_schema=False)
+        def upload_page() -> FileResponse:
+            return FileResponse(static / "index.html")
+
         app.mount("/", StaticFiles(directory=str(static), html=True), name="static")
 
     return app
