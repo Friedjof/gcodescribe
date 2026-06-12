@@ -43,6 +43,7 @@ export default function Paper({
   const [preview, setPreview] = useState<GcodePreview | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [profileName, setProfileName] = useState<string | null>(null);
 
   const online = status?.online;
   const homed = !!pos?.homed;
@@ -68,6 +69,9 @@ export default function Paper({
       })
       .catch((e) => setErr(String(e.message)));
     api.listJobs().then(setJobs).catch(() => {});
+    // Corner captures and "apply paper" write into the active profile, so
+    // show which one that is.
+    api.activeProfile().then((p) => setProfileName(p.name)).catch(() => {});
     refreshPosition();
     const id = setInterval(refreshPosition, 2000);
     return () => clearInterval(id);
@@ -254,6 +258,9 @@ export default function Paper({
 
       <section className="card">
         <h2>{t("paper.title")}</h2>
+        {profileName && (
+          <p className="muted">{t("paper.activeProfile", { name: profileName })}</p>
+        )}
         {!online && (
           <div className="banner err" style={{ marginBottom: 14 }}>
             {t("paper.offline")}

@@ -17,12 +17,56 @@ export interface Calibration {
   paper_margin: number;
 }
 
+// --- calibration profiles ---
+export interface CalibrationProfileSummary {
+  id: string;
+  name: string;
+  active: boolean;
+  archived: boolean;
+  created: number;
+  modified: number;
+  fingerprint: string;
+  plot_width: number;
+  plot_height: number;
+  origin_x: number;
+  origin_y: number;
+  paper_margin: number;
+  pen_calibrated: boolean;
+}
+
+export interface CalibrationProfile extends CalibrationProfileSummary {
+  calibration: Calibration;
+}
+
+/** Compact reference to the profile a job/page was generated with. */
+export interface ProfileRef {
+  id: string | null;
+  name: string | null;
+  fingerprint: string | null;
+}
+
+export interface JobProfileStatus extends ProfileRef {
+  matchesActive: boolean;
+  stale: boolean; // same profile, but its calibration changed since
+  legacy: boolean; // job has no profile metadata at all
+  missing: boolean; // sidecar references a profile that no longer exists
+  archived: boolean; // sidecar references an archived profile
+}
+
+export interface ProfileImportResult {
+  imported: string[];
+  replaced: string[];
+  skipped: string[];
+  profiles: CalibrationProfileSummary[];
+}
+
 export interface Job {
   filename: string;
   size: number;
   created: number;
   fits?: boolean | null; // does the job still fit the current plot area?
   issue?: string | null; // why it does not fit
+  profile?: JobProfileStatus | null; // evaluated against the active profile
 }
 
 export interface Position {
@@ -171,6 +215,8 @@ export interface SceneObject {
   plotted?: boolean;
 }
 
+export type PageProfileStatus = "active" | "other" | "stale" | "missing" | "archived";
+
 export interface Page {
   id: string;
   name: string;
@@ -178,6 +224,10 @@ export interface Page {
   grid: PageGrid;
   created: number;
   modified: number;
+  profileId?: string | null;
+  profileName?: string | null;
+  profileFingerprint?: string | null;
+  profileStatus?: PageProfileStatus;
 }
 
 export interface PageMeta {
@@ -187,11 +237,21 @@ export interface PageMeta {
   modified: number;
   objectCount: number;
   plottedCount: number;
+  profileId?: string | null;
+  profileName?: string | null;
+  profileFingerprint?: string | null;
+  profileStatus?: PageProfileStatus;
 }
 
 export interface PageIndex {
   order: PageMeta[];
   activeId: string | null;
+  activeProfile?: ProfileRef & {
+    plot_width: number;
+    plot_height: number;
+    origin_x: number;
+    origin_y: number;
+  };
 }
 
 async function req<T>(url: string, opts?: RequestInit): Promise<T> {
@@ -219,6 +279,47 @@ function mazeSizeValue(size: string) {
 
 export const api = {
   getCalibration: () => req<Calibration>("/api/calibration"),
+
+  // --- calibration profiles ---
+  listProfiles: (includeArchived = true) =>
+    req<CalibrationProfileSummary[]>(`/api/profiles?include_archived=${includeArchived}`),
+  getProfile: (id: string) => req<CalibrationProfile>(`/api/profiles/${id}`),
+  activeProfile: () => req<CalibrationProfile>("/api/profiles/active"),
+  createProfile: (name?: string) =>
+    req<CalibrationProfile>("/api/profiles", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    }),
+  saveProfile: (id: string, updates: { name?: string; calibration?: Partial<Calibration> }) =>
+    req<CalibrationProfile>(`/api/profiles/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates),
+    }),
+  activateProfile: (id: string) =>
+    req<CalibrationProfile>(`/api/profiles/${id}/activate`, { method: "POST" }),
+  duplicateProfile: (id: string, name?: string) =>
+    req<CalibrationProfile>(`/api/profiles/${id}/duplicate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    }),
+  archiveProfile: (id: string, archived: boolean) =>
+    req<CalibrationProfile>(`/api/profiles/${id}/${archived ? "archive" : "unarchive"}`, {
+      method: "POST",
+    }),
+  importProfile: (file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return req<CalibrationProfile>("/api/profiles/import", { method: "POST", body: fd });
+  },
+  importAllProfiles: (file: File, replace = false) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("replace", String(replace));
+    return req<ProfileImportResult>("/api/profiles/import-all", { method: "POST", body: fd });
+  },
   getMaze: (type: MazeResponse["type"], seed: number, size: string, width: number, height: number) => {
     const params = new URLSearchParams({ type, seed: String(seed), size: String(mazeSizeValue(size)), width: String(Math.round(width)), height: String(Math.round(height)) });
     return req<MazeResponse>(`/api/maze?${params.toString()}`);
@@ -259,8 +360,25 @@ export const api = {
     req<Page>(`/api/pages/${id}/duplicate`, { method: "POST" }),
   activatePage: (id: string) =>
     req<PageIndex>(`/api/pages/${id}/activate`, { method: "POST" }),
-  pageGcode: (id: string) =>
-    req<Job>(`/api/pages/${id}/gcode`, { method: "POST" }),
+  pageGcode: (id: string, expected?: ProfileRef | null) =>
+    req<Job>(`/api/pages/${id}/gcode`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        expected_profile_id: expected?.id,
+        expected_profile_fingerprint: expected?.fingerprint,
+      }),
+    }),
+  adoptPageProfile: (id: string, force = false, expected?: ProfileRef | null) =>
+    req<Page>(`/api/pages/${id}/adopt-profile`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        force,
+        expected_profile_id: expected?.id,
+        expected_profile_fingerprint: expected?.fingerprint,
+      }),
+    }),
   pageScore: (id: string, objects?: SceneObject[]) =>
     req<PageScore>(`/api/pages/${id}/score`, {
       method: "POST",

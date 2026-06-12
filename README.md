@@ -41,6 +41,15 @@ G-code, preview the toolpaths, and send it to the printer — all from the same 
   from vector PDFs. Auto mode chooses the best conversion path automatically.
 - Calibrate pen-up and pen-down Z heights, plot area, origin offsets, margins,
   and feedrates from the browser.
+- Manage multiple calibration profiles (e.g. "A4 portrait", "postcard front
+  left", "thick paper"): create, duplicate, activate, archive, and im-/export
+  them as JSON — single profiles or a full bundle. Existing installations are
+  migrated into a default profile automatically.
+- Every generated job and paint page is bound to the profile it was created
+  with (id + fingerprint over all safety-relevant values). The backend refuses
+  to send a job whose profile does not exactly match the active one — foreign,
+  changed (stale), archived, deleted, or pre-profile legacy jobs stay visible
+  but are not printable until regenerated or explicitly adopted.
 - Use the live paper calibration wizard to home the machine, jog to sheet
   corners, capture paper bounds, and map every conversion onto the real sheet.
 - Preview generated G-code against the bed and calibrated paper before sending
@@ -107,10 +116,19 @@ backend serves automatically.
 | `REDIS_URL`         | Position cache (falls back to a file store under `<data>/state/` if unreachable) | `redis://localhost:6379/0` |
 
 Calibration values (bed/plot size, origin, pen Z, feedrates) are edited in the
-UI and stored in `<data>/calibration.json`. They are applied on every
-conversion: the vpype G-code profile is generated on the fly, the drawing is
-laid out into the plot area, Y is flipped into printer space and shifted by the
-origin offset.
+UI and stored as profiles under `<data>/profiles/` — one JSON file per profile
+plus `active.json` for the selected one. `<data>/calibration.json` is kept as a
+mirror of the active profile for backwards compatibility; on first start an
+existing `calibration.json` is migrated into a default profile (with a one-time
+`calibration.json.pre-profiles.bak` backup). The active calibration is applied
+on every conversion: the vpype G-code profile is generated on the fly, the
+drawing is laid out into the plot area, Y is flipped into printer space and
+shifted by the origin offset.
+
+Every generated job gets a JSON sidecar next to its `.gcode` file recording the
+source and the profile (id, name, fingerprint) it was created with. Sending a
+job to OctoPrint requires the sidecar profile to match the active profile
+exactly; blocked attempts are logged with the reason.
 
 ## CLI
 

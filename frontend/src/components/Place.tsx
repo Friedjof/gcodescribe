@@ -36,6 +36,7 @@ export default function Place({
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [profileName, setProfileName] = useState<string | null>(null);
 
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{
@@ -54,6 +55,8 @@ export default function Place({
 
   useEffect(() => {
     api.getCalibration().then(setCal).catch((e) => setErr(String(e.message)));
+    // Jobs generated here are bound to the active profile — show which one.
+    api.activeProfile().then((p) => setProfileName(p.name)).catch(() => {});
     loadSources();
   }, [loadSources]);
 
@@ -231,6 +234,9 @@ export default function Place({
     <div className="grid place-grid">
       <section className="card">
         <h2>{t("place.previewTitle")}</h2>
+        {profileName && (
+          <p className="muted paint-profile">{t("paint.activeProfile", { name: profileName })}</p>
+        )}
         <div className="liveview">
           <svg
             ref={svgRef}

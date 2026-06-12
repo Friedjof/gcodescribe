@@ -76,6 +76,42 @@ export default function Paint() {
 
   const reloadIndex = () => api.listPages().then(setIndex).catch(fail);
 
+  // Reload calibration + index + page, e.g. after a profile switch (the
+  // canvas size and the page's profile status both depend on it).
+  const reloadAll = (pageId?: string) =>
+    Promise.all([
+      api.getCalibration().then(setCal),
+      api.listPages().then(setIndex),
+      pageId ? api.getPage(pageId).then(setPage) : Promise.resolve(null),
+    ]);
+
+  // G-code is only allowed when the page belongs to the active profile —
+  // the backend enforces this too; the UI explains it and offers a way out.
+  const pageBlocked = !!page?.profileStatus && page.profileStatus !== "active";
+
+  const activatePageProfile = () => {
+    if (!page?.profileId) return;
+    api
+      .activateProfile(page.profileId)
+      .then(() => reloadAll(page.id))
+      .catch(fail);
+  };
+
+  const adoptPageProfile = () => {
+    if (!page) return;
+    api
+      .adoptPageProfile(page.id, false, index?.activeProfile)
+      .then(() => reloadAll(page.id))
+      .catch((e: any) => {
+        const message = String(e.message ?? e);
+        if (!window.confirm(`${message}\n\n${t("paint.adoptForceConfirm")}`)) return;
+        api
+          .adoptPageProfile(page.id, true, index?.activeProfile)
+          .then(() => reloadAll(page.id))
+          .catch(fail);
+      });
+  };
+
   // persist objects (debounced) for a specific page id
   const persist = (pageId: string, objects: SceneObject[]) => {
     window.clearTimeout(saveTimer.current);
@@ -152,7 +188,7 @@ export default function Paint() {
     setBusy(true);
     setErr(null);
     setStartedJob(null);
-    return api.pageGcode(page.id)
+    return api.pageGcode(page.id, index?.activeProfile)
       .then((job) => {
         setLastJob(job.filename);
         return job.filename;
@@ -578,11 +614,34 @@ export default function Paint() {
           <h3>{t("paint.pages")}</h3>
           <button className="ghost" title={t("paint.newPage")} onClick={newPage}>＋</button>
         </div>
+        {index.activeProfile?.name && (
+          <p className="muted paint-profile">{t("paint.activeProfile", { name: index.activeProfile.name })}</p>
+        )}
         <ul className="page-list">
           {index.order.map((m) => (
-            <li key={m.id} className={m.id === page.id ? "active" : ""} onClick={() => openPage(m.id)}>
+            <li
+              key={m.id}
+              className={(m.id === page.id ? "active" : "") + (m.profileStatus && m.profileStatus !== "active" ? " foreign-profile" : "")}
+              onClick={() => openPage(m.id)}
+            >
               <div className="page-info">
-                <span className="page-name">{m.name}</span>
+                <span className="page-name">
+                  {m.name}
+                  {m.profileStatus === "other" && (
+                    <span className="pbadge pbadge-other" title={t("paint.pageOtherProfile", { name: m.profileName ?? "?" })}>{m.profileName}</span>
+                  )}
+                  {m.profileStatus === "stale" && (
+                    <span className="pbadge pbadge-warn" title={t("paint.pageStale")}>{t("paint.badgeStale")}</span>
+                  )}
+                  {m.profileStatus === "archived" && (
+                    <span className="pbadge pbadge-muted" title={t("paint.pageArchivedProfile", { name: m.profileName ?? "?" })}>{t("paint.badgeArchived")}</span>
+                  )}
+                  {m.profileStatus === "missing" && (
+                    <span className="pbadge pbadge-muted">
+                      {m.profileId ? t("paint.badgeMissingProfile") : t("paint.badgeNoProfile")}
+                    </span>
+                  )}
+                </span>
                 <span className="muted">
                   {m.objectCount} {t("paint.objects")}{m.plottedCount > 0 && ` · ${m.plottedCount} ${t("paint.plotted")}`}
                 </span>
@@ -616,10 +675,20 @@ export default function Paint() {
               </button>
             </label>
             <div className="paint-job-actions">
-              <button className="primary" disabled={busy || sending} onClick={createGcode}>
+              <button
+                className="primary"
+                disabled={busy || sending || pageBlocked}
+                title={pageBlocked ? t("paint.gcodeBlocked") : ""}
+                onClick={createGcode}
+              >
                 {busy ? t("paint.generating") : t("paint.generateGcode")}
               </button>
-              <button className="primary" disabled={busy || sending} onClick={directPlot}>
+              <button
+                className="primary"
+                disabled={busy || sending || pageBlocked}
+                title={pageBlocked ? t("paint.gcodeBlocked") : ""}
+                onClick={directPlot}
+              >
                 {busy ? t("paint.generating") : sending ? t("paint.starting") : t("paint.directPlot")}
               </button>
               <button disabled={loadingPreview} onClick={openFullscreen}>
@@ -628,6 +697,28 @@ export default function Paint() {
             </div>
           </div>
         </div>
+
+        {pageBlocked && (
+          <div className="banner warn profile-banner">
+            <span>
+              {page.profileStatus === "other"
+                ? t("paint.pageOtherProfile", { name: page.profileName ?? "?" })
+                : page.profileStatus === "stale"
+                  ? t("paint.pageStale")
+                  : page.profileStatus === "archived"
+                    ? t("paint.pageArchivedProfile", { name: page.profileName ?? "?" })
+                    : page.profileId
+                      ? t("paint.pageMissingProfile", { name: page.profileName ?? "?" })
+                      : t("paint.pageNoProfileHint")}
+            </span>
+            {page.profileStatus === "other" && page.profileId && (
+              <button onClick={activatePageProfile}>
+                {t("paint.activateProfile", { name: page.profileName ?? "?" })}
+              </button>
+            )}
+            <button onClick={adoptPageProfile}>{t("paint.adoptProfile")}</button>
+          </div>
+        )}
 
         <div className="paint-workspace">
           <div className="paint-canvas-wrap">
