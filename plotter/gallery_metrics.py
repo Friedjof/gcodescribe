@@ -126,3 +126,13 @@ def score_metrics(m: GcodeMetrics, max_gcode_bytes: int) -> dict:
 
 def metrics_dict(m: GcodeMetrics) -> dict:
     return asdict(m)
+
+
+def evaluate_gcode(text: str, max_gcode_bytes: int) -> dict:
+    """Central plottability rating: metrics + score for one G-code job.
+
+    Single entry point shared by the gallery and the live designer score, so
+    every surface rates G-code with exactly the same rules.
+    """
+    m = analyze_gcode(text)
+    return {"metrics": metrics_dict(m), "score": score_metrics(m, max_gcode_bytes)}

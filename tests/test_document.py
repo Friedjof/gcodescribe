@@ -103,3 +103,40 @@ class TestPagesApi:
             assert len(c.get("/api/pages").json()["order"]) == 2
             assert c.get("/api/pages/nonexistent").status_code == 404
         document._doc = None
+
+    def test_score_and_preview3d_are_transient(self, cal, workspace):
+        from unittest.mock import patch
+
+        from fastapi.testclient import TestClient
+
+        line = {
+            "id": "l1",
+            "type": "line",
+            "plotted": False,
+            "transform": {"x": 20, "y": 20, "rotation": 0, "scale": 1},
+            "cachedPolylines": [[[0, 0], [100, 0], [100, 80]]],
+        }
+        document._doc = None
+        with patch.object(document, "create_store",
+                          return_value=FileStateStore(workspace / "state")):
+            from plotter.web.app import app
+            c = TestClient(app)
+            pid = c.get("/api/pages").json()["activeId"]
+
+            # empty page: no score, but a reason instead of an error
+            empty = c.post(f"/api/pages/{pid}/score", json={}).json()
+            assert empty["score"] is None and empty["reason"]
+
+            # live objects override the (empty) persisted page
+            rated = c.post(f"/api/pages/{pid}/score", json={"objects": [line]}).json()
+            assert rated["reason"] is None
+            assert 0 <= rated["score"]["total"] <= 100
+            assert rated["metrics"]["draw_mm"] > 0
+
+            preview = c.post(f"/api/pages/{pid}/preview3d", json={"objects": [line]}).json()
+            assert preview["draws"] and preview["bounds"]
+            assert c.post(f"/api/pages/{pid}/preview3d", json={}).status_code == 400
+
+            # neither endpoint persisted a job file
+            assert c.get("/api/jobs").json() == []
+        document._doc = None

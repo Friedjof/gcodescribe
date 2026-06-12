@@ -72,6 +72,11 @@ def parse_gcode(path: Path, max_points: int = 60000) -> dict:
 
 
 def parse_gcode_3d(path: Path, max_points: int = 150000) -> dict:
+    """3D tool path of a stored G-code job (see ``parse_gcode_3d_text``)."""
+    return parse_gcode_3d_text(path.read_text(errors="replace"), max_points)
+
+
+def parse_gcode_3d_text(text: str, max_points: int = 150000) -> dict:
     """Reconstruct the 3D tool path of a G-code job for the 3D preview.
 
     ``draws`` are pen-down drawing polylines, ``travels`` are pen-up moves
@@ -99,7 +104,7 @@ def parse_gcode_3d(path: Path, max_points: int = 150000) -> dict:
             travels.append(cur_travel)
         cur_travel = None
 
-    for line in path.read_text(errors="replace").splitlines():
+    for line in text.splitlines():
         line = line.split(";", 1)[0].strip()
         if not line:
             continue

@@ -5,7 +5,11 @@ from pydantic import BaseModel
 
 from ...calibration import Calibration
 from ...document import get_document_store
-from ...scene import save_scene_job
+from ...gallery_metrics import evaluate_gcode
+from ...gcode_preview import parse_gcode_3d_text
+from ...pipeline import PlotterError
+from ...scene import save_scene_job, scene_gcode
+from ...services.upload_validation import MAX_GCODE_BYTES
 from ...text import text_polylines
 from .jobs import _job_info
 
@@ -84,6 +88,45 @@ def page_gcode(page_id: str) -> dict:
         raise HTTPException(404, "Seite nicht gefunden")
     path = save_scene_job(page, Calibration.load())
     return _job_info(path).model_dump()
+
+
+class SceneRequest(BaseModel):
+    """Optional live canvas objects, overriding the persisted page state."""
+
+    objects: list | None = None
+
+
+def _page_for_preview(page_id: str, objects: list | None) -> dict:
+    page = store().get_page(page_id)
+    if not page:
+        raise HTTPException(404, "Seite nicht gefunden")
+    return {**page, "objects": objects} if objects is not None else page
+
+
+@router.post("/pages/{page_id}/score")
+def page_score(page_id: str, req: SceneRequest) -> dict:
+    """Transient plottability rating of the canvas — no job file is written.
+
+    Uses the same central G-code evaluation as the gallery, so the designer
+    score matches what a submission of this drawing would get.
+    """
+    page = _page_for_preview(page_id, req.objects)
+    try:
+        gcode = scene_gcode(page, Calibration.load())
+    except PlotterError as exc:
+        return {"score": None, "metrics": None, "reason": str(exc)}
+    return {**evaluate_gcode(gcode, MAX_GCODE_BYTES), "reason": None}
+
+
+@router.post("/pages/{page_id}/preview3d")
+def page_preview_3d(page_id: str, req: SceneRequest) -> dict:
+    """3D tool-path preview of the current canvas without saving a job."""
+    page = _page_for_preview(page_id, req.objects)
+    try:
+        gcode = scene_gcode(page, Calibration.load())
+    except PlotterError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return parse_gcode_3d_text(gcode)
 
 
 @router.post("/paint/text-polylines")
