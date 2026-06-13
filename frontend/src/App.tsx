@@ -21,17 +21,38 @@ export default function App() {
   );
 }
 
+// Heavy, stateful tabs: mount once on first visit and keep them alive (hidden)
+// so switching back is instant instead of refetching + rebuilding the canvas.
+// The lighter list/state tabs stay unmount-on-switch so they reflect fresh data.
+const KEEP_ALIVE: Tab[] = ["place", "paint", "games", "gallery", "convert", "paper", "calibrate"];
+
 function AdminApp() {
   const { lang, setLang, t } = useI18n();
   const [tab, setTab] = useState<Tab>("place");
+  const [visited, setVisited] = useState<Set<Tab>>(() => new Set<Tab>(["place"]));
   const [status, setStatus] = useState<any>(null);
+
+  useEffect(() => {
+    setVisited((prev) => (prev.has(tab) ? prev : new Set(prev).add(tab)));
+  }, [tab]);
 
   const refreshStatus = () => api.octoStatus().then(setStatus).catch(() => setStatus(null));
 
   useEffect(() => {
     refreshStatus();
-    const id = setInterval(refreshStatus, 4000);
-    return () => clearInterval(id);
+    // Don't poll a (possibly slow) printer while the tab is backgrounded;
+    // refresh immediately when the user returns instead.
+    const id = setInterval(() => {
+      if (!document.hidden) refreshStatus();
+    }, 4000);
+    const onVisible = () => {
+      if (!document.hidden) refreshStatus();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
 
   const tabs: { value: Tab; label: string }[] = [
@@ -59,9 +80,6 @@ function AdminApp() {
             <option value="fr">{t("lang.fr")}</option>
             <option value="es">{t("lang.es")}</option>
           </select>
-          <button className="ghost tiny" onClick={() => api.authLogout().then(() => window.location.reload())}>
-            {t("auth.logout")}
-          </button>
           <StatusPill status={status} />
         </div>
       </header>
@@ -71,13 +89,27 @@ function AdminApp() {
       </nav>
 
       <main>
-        {tab === "place" && <Place status={status} onAction={refreshStatus} />}
-        {tab === "paint" && <Paint />}
-        {tab === "games" && <Games onOpenPaint={() => setTab("paint")} />}
-        {tab === "gallery" && <Gallery onOpenPaint={() => setTab("paint")} />}
-        {tab === "convert" && <Convert status={status} onAction={refreshStatus} />}
-        {tab === "paper" && <Paper status={status} onAction={refreshStatus} />}
-        {tab === "calibrate" && <Calibrate />}
+        {/* Kept alive: rendered once visited, hidden (not unmounted) when inactive.
+            `display: contents` keeps the layout/height chain identical to before. */}
+        {KEEP_ALIVE.map((value) =>
+          visited.has(value) ? (
+            <div key={value} style={{ display: tab === value ? "contents" : "none" }}>
+              {value === "place" && (
+                <Place status={status} onAction={refreshStatus} onOpenPaint={() => setTab("paint")} />
+              )}
+              {value === "paint" && <Paint visible={tab === "paint"} />}
+              {value === "games" && <Games onOpenPaint={() => setTab("paint")} />}
+              {value === "gallery" && <Gallery onOpenPaint={() => setTab("paint")} />}
+              {value === "paper" && (
+                <Paper status={status} onAction={refreshStatus} visible={tab === "paper"} />
+              )}
+              {value === "convert" && (
+                <Convert status={status} onAction={refreshStatus} visible={tab === "convert"} />
+              )}
+              {value === "calibrate" && <Calibrate />}
+            </div>
+          ) : null
+        )}
         {tab === "control" && <Control status={status} onAction={refreshStatus} />}
       </main>
     </div>

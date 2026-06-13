@@ -124,7 +124,7 @@ export interface SourcePage {
 export interface Source {
   id: string;
   name: string;
-  mode: "vector" | "trace" | "edges" | "hatch" | "lines" | "dots";
+  mode: "vector" | "trace" | "edges" | "hatch" | "lines" | "dots" | "handwriting";
   detail: number;
   created: number;
   pages: SourcePage[];
@@ -152,6 +152,14 @@ export interface MazeResponse {
   marker_lines: number[][][];
   solution_lines: number[][][];
   metadata: Record<string, string | number | boolean>;
+}
+
+export interface SudokuResponse {
+  seed: string;
+  difficulty: "easy" | "medium" | "hard";
+  puzzle: number[][];
+  solution: number[][];
+  metadata: Record<string, string | number | boolean | string[]>;
 }
 
 export interface ColoringPageResponse {
@@ -362,6 +370,10 @@ export const api = {
     const params = new URLSearchParams({ type, seed: String(seed), size: String(mazeSizeValue(size)), width: String(Math.round(width)), height: String(Math.round(height)) });
     return req<MazeResponse>(`/api/maze?${params.toString()}`);
   },
+  getSudoku: (difficulty: SudokuResponse["difficulty"], seed: number) => {
+    const params = new URLSearchParams({ difficulty, seed: String(seed) });
+    return req<SudokuResponse>(`/api/sudoku?${params.toString()}`);
+  },
   getColoringPage: (fn: ColoringPageResponse["function"], mode: string, seed: number, width: number, height: number, complexity: number, showSeed: boolean) => {
     const params = new URLSearchParams({ function: fn, mode, seed: String(seed), width: String(Math.round(width)), height: String(Math.round(height)), complexity: String(complexity), show_seed: String(showSeed) });
     return req<ColoringPageResponse>(`/api/coloring-pages?${params.toString()}`);
@@ -527,7 +539,7 @@ export const api = {
   jobPreview3D: (filename: string) =>
     req<GcodePreview3D>(`/api/jobs/${encodeURIComponent(filename)}/preview3d`),
 
-  createSource: (file: File, mode: "auto" | "vector" | "trace" | "edges" | "hatch" | "lines" | "dots", detail: number) => {
+  createSource: (file: File, mode: "auto" | "vector" | "trace" | "edges" | "hatch" | "lines" | "dots" | "handwriting", detail: number) => {
     const fd = new FormData();
     fd.append("file", file);
     fd.append("mode", mode);
@@ -537,10 +549,20 @@ export const api = {
   listSources: () => req<Source[]>("/api/sources"),
   deleteSource: (id: string) =>
     req(`/api/sources/${id}`, { method: "DELETE" }),
-  sourcePreview: (id: string, page: number) =>
-    req<SourcePreview>(`/api/sources/${id}/preview/${page}`),
+  sourcePreview: (id: string, page: number, maxPoints?: number) =>
+    req<SourcePreview>(`/api/sources/${id}/preview/${page}${maxPoints ? `?max_points=${maxPoints}` : ""}`),
+  sourceThumbnail: (id: string) =>
+    req<SourcePreview>(`/api/sources/${id}/thumbnail`),
+  sourceThumbnails: () =>
+    req<Record<string, SourcePreview>>(`/api/sources/thumbnails`),
   sourceGcode: (id: string, page: number, x: number, y: number, width: number) =>
     req<Job>(`/api/sources/${id}/gcode`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ page, x, y, width }),
+    }),
+  sourceScore: (id: string, page: number, x: number, y: number, width: number) =>
+    req<PageScore>(`/api/sources/${id}/score`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ page, x, y, width }),
@@ -553,6 +575,8 @@ export const api = {
   },
   galleryList: (includeArchived = true) =>
     req<GalleryItem[]>(`/api/gallery?include_archived=${includeArchived}`),
+  galleryThumbnail: (id: string) => req<GallerySvg>(`/api/gallery/${id}/thumbnail`),
+  galleryThumbnails: () => req<Record<string, GallerySvg>>(`/api/gallery/thumbnails`),
   gallerySvg: (id: string) => req<GallerySvg>(`/api/gallery/${id}/svg`),
   galleryGcode3D: (id: string) =>
     req<GcodePreview3D>(`/api/gallery/${id}/gcode/preview3d`),

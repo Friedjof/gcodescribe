@@ -3,6 +3,7 @@ import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 export interface SegOption<T> {
   value: T;
   label: ReactNode;
+  title?: string;
 }
 
 /**
@@ -81,6 +82,8 @@ export default function Segmented<T extends string | number>({
           type="button"
           data-active={value === o.value}
           className={value === o.value ? "active" : ""}
+          title={o.title}
+          aria-label={o.title}
           onClick={() => onChange(o.value)}
         >
           {o.label}
