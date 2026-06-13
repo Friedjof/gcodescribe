@@ -30,24 +30,12 @@ redis:
 redis-stop:
 	docker rm -f gcodescribe-redis
 
-# Run redis, backend (uvicorn --reload) and frontend (Vite HMR) in parallel.
-# Ctrl-C kills both via the trap.
+# Run redis, then backend + frontend via scripts/dev.sh, which first clears any
+# leftovers from a previous run (the "[Errno 98] Address already in use" cause)
+# and starts each service in its own process group so Ctrl-C reaps the whole
+# subtree — uvicorn's reload worker and npm → vite → esbuild.
 dev: redis
-	@printf '\033[1;36m▶ Backend  → http://localhost:$(PLOTTER_PORT)\n'
-	@printf '▶ Frontend → http://localhost:5173  (proxy /api → :$(PLOTTER_PORT))\033[0m\n'
-	@trap 'kill 0' INT; \
-	  PLOTTER_DATA_DIR=$(PLOTTER_DATA_DIR) \
-	  PLOTTER_PORT=$(PLOTTER_PORT) \
-	  OCTOPRINT_URL=$(OCTOPRINT_URL) \
-	  OCTOPRINT_API_KEY=$(OCTOPRINT_API_KEY) \
-	  REDIS_URL=$(REDIS_URL) \
-	  uv run uvicorn plotter.web.app:app \
-	    --host 0.0.0.0 \
-	    --port $(PLOTTER_PORT) \
-	    --reload \
-	    --reload-dir plotter & \
-	  cd frontend && npm run dev & \
-	  wait
+	@bash scripts/dev.sh
 
 clean:
 	rm -rf frontend/node_modules plotter/web/static data
