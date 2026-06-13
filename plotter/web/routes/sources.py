@@ -15,14 +15,17 @@ def service() -> SourceService:
 
 
 @router.post("/sources")
-async def create_source(
+def create_source(
     file: UploadFile = File(...),
     mode: str = Form("auto"),
     detail: int = Form(1),
 ) -> dict:
+    # Sync endpoint: the conversion (tracing, SVG render) is CPU-heavy, so
+    # FastAPI runs it in a threadpool and the event loop stays responsive for
+    # other requests instead of freezing for the whole upload.
     if not file.filename:
         raise HTTPException(400, "Dateiname fehlt")
-    data = await file.read()
+    data = file.file.read()
     return service().create(file.filename, data, mode=mode, detail=max(1, min(detail, 3)))
 
 
@@ -37,9 +40,19 @@ def delete_source(source_id: str) -> dict:
     return {"ok": True}
 
 
+@router.get("/sources/thumbnails")
+def source_thumbnails() -> dict:
+    return service().thumbnails()
+
+
 @router.get("/sources/{source_id}/preview/{page}")
-def source_preview(source_id: str, page: int) -> dict:
-    return service().preview(source_id, page)
+def source_preview(source_id: str, page: int, max_points: int = 20000) -> dict:
+    return service().preview(source_id, page, max_points=max(100, min(max_points, 40000)))
+
+
+@router.get("/sources/{source_id}/thumbnail")
+def source_thumbnail(source_id: str) -> dict:
+    return service().thumbnail(source_id)
 
 
 class PlacementRequest(BaseModel):
@@ -55,3 +68,15 @@ def source_gcode(source_id: str, req: PlacementRequest) -> dict:
         source_id, req.page, x=req.x, y=req.y, width=req.width
     )
     return _job_info(path, active_profile=ProfileService().active_profile_meta()).model_dump()
+
+
+@router.post("/sources/{source_id}/score")
+def source_score(source_id: str, req: PlacementRequest) -> dict:
+    """Live plottability rating of a placement (no job file written)."""
+    try:
+        result = service().score_placement(
+            source_id, req.page, x=req.x, y=req.y, width=req.width
+        )
+    except Exception as exc:  # noqa: BLE001 — surface the reason to the UI
+        return {"score": None, "metrics": None, "reason": str(exc)}
+    return {**result, "reason": None}
