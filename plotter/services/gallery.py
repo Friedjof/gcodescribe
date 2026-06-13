@@ -26,6 +26,10 @@ from .upload_validation import (
 MAX_TITLE_LEN = 80
 _SVG_FILE = "image.svg"
 _GCODE_FILE = "job.gcode"
+_SVG_PREVIEW_FILE = "preview-svg.json"
+_SVG_THUMB_FILE = "preview-thumb.json"
+_FULL_PREVIEW_POINTS = 20000
+_THUMB_PREVIEW_POINTS = 1200
 
 
 class GalleryService:
@@ -76,6 +80,7 @@ class GalleryService:
         drawing = load_svg_drawing(svg, quantization_mm=0.25)
         if drawing.is_empty():
             raise PlotterError("Das Bild enthält keine plottbaren Linien.")
+        self._write_preview_cache(item_dir, drawing)
 
         profile = ProfileService().active()
         active_meta = profile_meta(profile)
@@ -139,12 +144,50 @@ class GalleryService:
             raise ServiceError(f"Einreichung nicht gefunden: {item_id}")
         return path
 
-    def svg_preview(self, item_id: str, *, max_points: int = 20000) -> dict:
+    def svg_preview(self, item_id: str, *, max_points: int = _FULL_PREVIEW_POINTS) -> dict:
         """Polylines of the derived SVG (mm, y down) for safe 2D rendering."""
+        item_dir = self.root / item_id
+        cache = item_dir / (
+            _SVG_THUMB_FILE if max_points <= _THUMB_PREVIEW_POINTS else _SVG_PREVIEW_FILE
+        )
+        if cache.exists():
+            try:
+                return json.loads(cache.read_text())
+            except (OSError, json.JSONDecodeError):
+                cache.unlink(missing_ok=True)
+
         svg = self.root / item_id / _SVG_FILE
         if not svg.exists():
             raise ServiceError(f"Einreichung nicht gefunden: {item_id}")
         drawing = load_svg_drawing(svg, quantization_mm=0.5)
+        preview = self._preview_from_drawing(drawing, max_points=max_points)
+        cache.write_text(json.dumps(preview))
+        return preview
+
+    def svg_thumbnail(self, item_id: str) -> dict:
+        return self.svg_preview(item_id, max_points=_THUMB_PREVIEW_POINTS)
+
+    def svg_thumbnails(self) -> dict:
+        """All grid thumbnails in one shot (disk-cached), so the gallery loads
+        with a single request instead of one round-trip per card."""
+        out: dict[str, dict] = {}
+        for meta in self.list(include_archived=True):
+            try:
+                out[meta["id"]] = self.svg_thumbnail(meta["id"])
+            except (ServiceError, OSError):
+                pass
+        return out
+
+    def _write_preview_cache(self, item_dir: Path, drawing) -> None:
+        (item_dir / _SVG_PREVIEW_FILE).write_text(
+            json.dumps(self._preview_from_drawing(drawing, max_points=_FULL_PREVIEW_POINTS))
+        )
+        (item_dir / _SVG_THUMB_FILE).write_text(
+            json.dumps(self._preview_from_drawing(drawing, max_points=_THUMB_PREVIEW_POINTS))
+        )
+
+    @staticmethod
+    def _preview_from_drawing(drawing, *, max_points: int) -> dict:
         total = sum(len(line) for line in drawing.polylines)
         step = max(total // max_points, 1)
         polylines = []

@@ -40,6 +40,12 @@ def list_submissions(
     return service().list(include_archived=include_archived)
 
 
+# Declared before the "/gallery/{item_id}" routes so it is not captured as an id.
+@router.get("/gallery/thumbnails")
+def submission_thumbnails(_: dict = Depends(require_admin)) -> dict:
+    return service().svg_thumbnails()
+
+
 @router.get("/gallery/{item_id}")
 def get_submission(item_id: str, _: dict = Depends(require_admin)) -> dict:
     return service().get(item_id)
@@ -48,6 +54,11 @@ def get_submission(item_id: str, _: dict = Depends(require_admin)) -> dict:
 @router.get("/gallery/{item_id}/svg")
 def submission_svg(item_id: str, _: dict = Depends(require_admin)) -> dict:
     return service().svg_preview(item_id)
+
+
+@router.get("/gallery/{item_id}/thumbnail")
+def submission_thumbnail(item_id: str, _: dict = Depends(require_admin)) -> dict:
+    return service().svg_thumbnail(item_id)
 
 
 @router.get("/gallery/{item_id}/gcode/preview")

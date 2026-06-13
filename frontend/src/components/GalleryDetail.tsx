@@ -9,6 +9,7 @@ import Modal from "./Modal";
 import PolylinePreview from "./PolylinePreview";
 import ScoreBadge from "./ScoreBadge";
 import Segmented from "./Segmented";
+import { useConfirm, usePrompt } from "./dialogs";
 
 type View = "2d" | "3d";
 
@@ -34,6 +35,8 @@ export default function GalleryDetail({
   const [resetToken, setResetToken] = useState(0);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const { confirm, ConfirmNode } = useConfirm();
+  const { prompt, PromptNode } = usePrompt();
 
   const fail = (e: any) => setErr(String(e.message ?? e));
 
@@ -81,8 +84,8 @@ export default function GalleryDetail({
       .finally(() => setBusy(false));
   };
 
-  const editTitle = () => {
-    const next = window.prompt(t("gallery.titlePrompt"), item.title);
+  const editTitle = async () => {
+    const next = await prompt(t("gallery.titlePrompt"), item.title);
     if (next == null || next.trim() === item.title) return;
     setBusy(true);
     api
@@ -101,8 +104,8 @@ export default function GalleryDetail({
       .finally(() => setBusy(false));
   };
 
-  const remove = () => {
-    if (!window.confirm(t("gallery.confirmDelete"))) return;
+  const remove = async () => {
+    if (!await confirm(t("gallery.confirmDelete"))) return;
     setBusy(true);
     api
       .galleryDelete(item.id)
@@ -208,6 +211,8 @@ export default function GalleryDetail({
       {fullscreen && gcode && (
         <Gcode3DOverlay data={gcode} showTravels={showTravels} onClose={() => setFullscreen(false)} />
       )}
+      {ConfirmNode}
+      {PromptNode}
     </>
   );
 }

@@ -123,7 +123,25 @@ class TestGalleryService:
         assert svc.list() == [meta]
         preview = svc.svg_preview(meta["id"])
         assert preview["polylines"]
+        thumb = svc.svg_thumbnail(meta["id"])
+        assert thumb["polylines"]
+        assert sum(len(line) for line in thumb["polylines"]) <= sum(
+            len(line) for line in preview["polylines"]
+        )
         assert svc.gcode_path(meta["id"]).exists()
+
+    def test_thumbnail_route_returns_cached_preview(self, cal, workspace):
+        from fastapi.testclient import TestClient
+
+        from plotter.web.app import create_app
+
+        meta = GalleryService().create("art.svg", SVG)
+        client = TestClient(create_app())
+        payload = client.get(f"/api/gallery/{meta['id']}/thumbnail").json()
+
+        assert payload["polylines"]
+        assert payload["width"] == meta["width"]
+        assert payload["height"] == meta["height"]
 
     def test_submission_gcode_has_profile_metadata(self, cal):
         svc = GalleryService()

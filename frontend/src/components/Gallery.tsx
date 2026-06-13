@@ -7,20 +7,36 @@ import ScoreBadge from "./ScoreBadge";
 
 // Thumbnails are tiny polyline sets; cache them across tab switches.
 const thumbCache = new Map<string, GallerySvg>();
+// Keep the last list so re-opening the tab renders instantly while we refetch.
+let listCache: GalleryItem[] = [];
 
 export default function Gallery({ onOpenPaint }: { onOpenPaint: () => void }) {
   const { t, lang } = useI18n();
-  const [items, setItems] = useState<GalleryItem[]>([]);
+  const [items, setItems] = useState<GalleryItem[]>(listCache);
   const [showArchived, setShowArchived] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  // Bump to re-render once batched thumbnails have landed in the cache.
+  const [, setThumbTick] = useState(0);
 
   const refresh = () =>
     api
       .galleryList(true)
       .then((list) => {
+        listCache = list;
         setItems(list);
         setErr(null);
+        // One request for every thumbnail instead of one per card.
+        const missing = list.some((i) => !thumbCache.has(i.id));
+        if (missing) {
+          api
+            .galleryThumbnails()
+            .then((thumbs) => {
+              for (const [id, svg] of Object.entries(thumbs)) thumbCache.set(id, svg);
+              setThumbTick((n) => n + 1);
+            })
+            .catch(() => {});
+        }
       })
       .catch((e) => setErr(String(e.message ?? e)));
 
@@ -88,22 +104,7 @@ function GalleryCard({
   onOpen: () => void;
 }) {
   const { t } = useI18n();
-  const [svg, setSvg] = useState<GallerySvg | null>(thumbCache.get(item.id) ?? null);
-
-  useEffect(() => {
-    if (svg) return;
-    let alive = true;
-    api
-      .gallerySvg(item.id)
-      .then((data) => {
-        thumbCache.set(item.id, data);
-        if (alive) setSvg(data);
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, [item.id, svg]);
+  const svg = thumbCache.get(item.id) ?? null;
 
   return (
     <button
