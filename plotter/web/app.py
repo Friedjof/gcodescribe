@@ -22,6 +22,7 @@ from .routes import (
     printer,
     profiles,
     sources,
+    sudoku,
 )
 
 
@@ -40,6 +41,7 @@ def create_app() -> FastAPI:
         printer,
         profiles,
         sources,
+        sudoku,
     )
     for module in protected_modules:
         app.include_router(module.router, prefix="/api", dependencies=[Depends(require_admin)])

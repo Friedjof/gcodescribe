@@ -21,9 +21,10 @@ import {
 } from "../games/types";
 import { SUPPORTED_GAMES, SEEDED_GAMES, GAME_GROUPS, ALL_GAMES } from "../games/constants";
 import { buildTemplate } from "../games/builder";
-import { templateObject, randomSeed, randomMazeSeed } from "../games/utils";
+import { templateObject, randomSeed, randomMazeSeed, usableArea } from "../games/utils";
 import { MAZE_TYPES } from "../games/mazeTypes";
 import { buildMazeTemplate, mazeRequestArea } from "../games/maze";
+import { buildSudokuTemplate } from "../games/sudoku";
 
 export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
   const { t } = useI18n();
@@ -78,6 +79,8 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
     try {
       autoTemplate = selectedGame.id === "maze"
         ? mazePlaceholderTemplate(cal, t, mazeSize, mazeType)
+        : selectedGame.id === "sudoku"
+          ? sudokuPlaceholderTemplate(cal, t, sudokuDifficulty, sudokuSeed)
         : selectedGame.id === "coloringMandala"
           ? coloringPlaceholderTemplate(cal, t, "mandala", coloringMandalaMode, coloringMandalaComplexity, coloringMandalaShowSeed)
           : selectedGame.id === "coloringPattern"
@@ -197,6 +200,16 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
         setErr(null);
         return;
       }
+      if (gameId === "sudoku") {
+        const sudoku = await api.getSudoku(sudokuDifficulty, seed);
+        const template = buildSudokuTemplate(cal, t, sudoku);
+        setSudokuSeed(seed);
+        setSudokuSeedInput(String(seed).padStart(5, "0"));
+        setShowSudokuSolution(false);
+        setPreview({ gameId, template, seed });
+        setErr(null);
+        return;
+      }
       if (gameId === "coloringMandala" || gameId === "coloringPattern") {
         const { width, height } = coloringRequestArea(cal);
         const isMandala = gameId === "coloringMandala";
@@ -226,11 +239,10 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
         battleships: battleshipsSize,
         maze: mazeSeed,
         mazeSettings: { size: mazeSize, type: mazeType },
-        sudoku: { difficulty: sudokuDifficulty, seed: gameId === "sudoku" ? seed : sudokuSeed },
+        sudoku: { difficulty: sudokuDifficulty, seed: sudokuSeed },
         bingo: gameId === "bingo" ? seed : bingoSeed,
       });
       if (gameId === "dotsBoxes") { setDotsSeed(seed); setDotsSeedInput(String(seed).padStart(5, "0")); }
-      if (gameId === "sudoku") { setSudokuSeed(seed); setSudokuSeedInput(String(seed).padStart(5, "0")); setShowSudokuSolution(false); }
       if (gameId === "bingo") setBingoSeed(seed);
       setPreview({ gameId, template, seed });
       setErr(null);
@@ -692,13 +704,11 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
                 </div>
                 <p className="muted games-detail-copy">{t("games.autoFitHint")}</p>
                 <div className="games-chip-grid">
-                  {autoTemplate.details.map((detail) => (
+                  {autoFitIndicators(autoTemplate, cal, t).map((detail) => (
                     <span key={`${detail.label}-${detail.value}`} className="games-chip">
                       <strong>{detail.label}:</strong> {detail.value}
                     </span>
                   ))}
-                  <span className="games-chip">{autoTemplate.width.toFixed(0)} × {autoTemplate.height.toFixed(0)} mm</span>
-                  <span className="games-chip">{autoTemplate.lines.length} {t("place.linesShort")}</span>
                 </div>
               </div>
 
@@ -797,6 +807,33 @@ function mazePlaceholderTemplate(cal: Calibration, t: (key: string, vars?: Recor
       { label: t("games.param.mazeType"), value: t(`games.option.mazeType.${type}`) },
     ],
   };
+}
+
+function autoFitIndicators(
+  template: TemplateSpec,
+  cal: Calibration,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+) {
+  const area = usableArea(cal);
+  const coverage = Math.round(
+    Math.min(100, (template.width * template.height) / Math.max(area.width * area.height, 1) * 100),
+  );
+  return [
+    { label: t("games.autoFit.templateSize"), value: `${template.width.toFixed(0)} × ${template.height.toFixed(0)} mm` },
+    { label: t("paper.legPlot"), value: `${area.width.toFixed(0)} × ${area.height.toFixed(0)} mm` },
+    { label: t("games.autoFit.coverage"), value: `${coverage}%` },
+  ];
+}
+
+function sudokuPlaceholderTemplate(cal: Calibration, t: (key: string, vars?: Record<string, string | number>) => string, difficulty: SudokuDifficulty, seed: number): TemplateSpec {
+  const empty = Array.from({ length: 9 }, () => Array(9).fill(0));
+  return buildSudokuTemplate(cal, t, {
+    seed: String(seed),
+    difficulty,
+    puzzle: empty,
+    solution: empty,
+    metadata: {},
+  });
 }
 
 function coloringRequestArea(cal: Calibration) {
