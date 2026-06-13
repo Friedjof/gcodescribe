@@ -8,11 +8,17 @@ import pytest
 from plotter.coloring_pages import ColoringPageGenerator, generate_coloring_page
 from plotter.coloring_pages.seed import normalize_seed
 
-
 MANDALA_MODES = ["flower", "star", "butterfly", "sun", "nature", "magic"]
 PATTERN_MODES = [
-    "truchet", "voronoi", "hex_mosaic", "wave_field", "penrose",
-    "scales", "stained_glass", "bubbles", "spiral",
+    "truchet",
+    "voronoi",
+    "hex_mosaic",
+    "wave_field",
+    "penrose",
+    "scales",
+    "stained_glass",
+    "bubbles",
+    "spiral",
 ]
 
 
@@ -95,21 +101,30 @@ def test_complexity_changes_mandala_structure_deterministically():
 @pytest.mark.parametrize("mode", MANDALA_MODES)
 def test_different_seeds_produce_different_mandalas(mode):
     gen = ColoringPageGenerator()
-    pages = [gen.generate_mandala_page(f"seed-{i}", mode, 180, 220, complexity=0.5).svg for i in range(8)]
+    pages = [
+        gen.generate_mandala_page(f"seed-{i}", mode, 180, 220, complexity=0.5).svg for i in range(8)
+    ]
     assert len(set(pages)) == len(pages)
 
 
 @pytest.mark.parametrize("mode", PATTERN_MODES)
 def test_different_seeds_produce_different_patterns(mode):
     gen = ColoringPageGenerator()
-    pages = [gen.generate_math_pattern_page(f"seed-{i}", mode, 180, 220, complexity=0.5).svg for i in range(8)]
+    pages = [
+        gen.generate_math_pattern_page(f"seed-{i}", mode, 180, 220, complexity=0.5).svg
+        for i in range(8)
+    ]
     assert len(set(pages)) == len(pages)
 
 
 def test_mandala_ring_styles_vary_with_seed():
     gen = ColoringPageGenerator()
     combos = {
-        tuple(gen.generate_mandala_page(f"s{i}", "magic", 180, 220, complexity=0.6).metadata["ring_styles"])
+        tuple(
+            gen.generate_mandala_page(f"s{i}", "magic", 180, 220, complexity=0.6).metadata[
+                "ring_styles"
+            ]
+        )
         for i in range(12)
     }
     assert len(combos) >= 8
@@ -130,7 +145,13 @@ def test_coloring_page_route_clamps_to_plot_area(workspace):
     client = TestClient(create_app())
     payload = client.get(
         "/api/coloring-pages",
-        params={"function": "mandala", "mode": "flower", "seed": "demo", "width": 1900, "height": 1900},
+        params={
+            "function": "mandala",
+            "mode": "flower",
+            "seed": "demo",
+            "width": 1900,
+            "height": 1900,
+        },
     ).json()
     assert payload["width"] == 150.0
     assert payload["height"] == 120.0

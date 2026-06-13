@@ -12,24 +12,39 @@ def closed_polygon(points: list[Point]) -> Polyline:
 
 
 def circle(cx: float, cy: float, r: float, segments: int = 96) -> Polyline:
-    return closed_polygon([
-        (cx + math.cos(math.tau * i / segments) * r, cy + math.sin(math.tau * i / segments) * r)
-        for i in range(segments)
-    ])
+    return closed_polygon(
+        [
+            (cx + math.cos(math.tau * i / segments) * r, cy + math.sin(math.tau * i / segments) * r)
+            for i in range(segments)
+        ]
+    )
 
 
 def regular_polygon(cx: float, cy: float, r: float, sides: int, rotation: float = 0.0) -> Polyline:
-    return closed_polygon([
-        (cx + math.cos(rotation + math.tau * i / sides) * r, cy + math.sin(rotation + math.tau * i / sides) * r)
-        for i in range(sides)
-    ])
+    return closed_polygon(
+        [
+            (
+                cx + math.cos(rotation + math.tau * i / sides) * r,
+                cy + math.sin(rotation + math.tau * i / sides) * r,
+            )
+            for i in range(sides)
+        ]
+    )
 
 
 def polar(cx: float, cy: float, radius: float, angle: float) -> Point:
     return (cx + math.cos(angle) * radius, cy + math.sin(angle) * radius)
 
 
-def petal(cx: float, cy: float, angle: float, inner: float, outer: float, width_angle: float, samples: int = 9) -> Polyline:
+def petal(
+    cx: float,
+    cy: float,
+    angle: float,
+    inner: float,
+    outer: float,
+    width_angle: float,
+    samples: int = 9,
+) -> Polyline:
     pts: list[Point] = [polar(cx, cy, inner, angle - width_angle * 0.45)]
     for i in range(samples):
         t = i / (samples - 1)
@@ -41,7 +56,9 @@ def petal(cx: float, cy: float, angle: float, inner: float, outer: float, width_
     return closed_polygon(pts)
 
 
-def leaf(cx: float, cy: float, angle: float, inner: float, outer: float, width_angle: float) -> Polyline:
+def leaf(
+    cx: float, cy: float, angle: float, inner: float, outer: float, width_angle: float
+) -> Polyline:
     left = polar(cx, cy, (inner + outer) / 2, angle - width_angle)
     tip = polar(cx, cy, outer, angle)
     right = polar(cx, cy, (inner + outer) / 2, angle + width_angle)
@@ -49,14 +66,18 @@ def leaf(cx: float, cy: float, angle: float, inner: float, outer: float, width_a
     return closed_polygon([base, left, tip, right])
 
 
-def diamond(cx: float, cy: float, angle: float, inner: float, outer: float, width: float) -> Polyline:
+def diamond(
+    cx: float, cy: float, angle: float, inner: float, outer: float, width: float
+) -> Polyline:
     mid = (inner + outer) / 2
-    return closed_polygon([
-        polar(cx, cy, inner, angle),
-        polar(cx, cy, mid, angle - width),
-        polar(cx, cy, outer, angle),
-        polar(cx, cy, mid, angle + width),
-    ])
+    return closed_polygon(
+        [
+            polar(cx, cy, inner, angle),
+            polar(cx, cy, mid, angle - width),
+            polar(cx, cy, outer, angle),
+            polar(cx, cy, mid, angle + width),
+        ]
+    )
 
 
 def rect(x: float, y: float, w: float, h: float) -> Polyline:
@@ -67,7 +88,9 @@ def arc(cx: float, cy: float, r: float, a0: float, a1: float, segments: int = 16
     return [polar(cx, cy, r, a0 + (a1 - a0) * i / segments) for i in range(segments + 1)]
 
 
-def heart(cx: float, cy: float, angle: float, center_r: float, size: float, samples: int = 28) -> Polyline:
+def heart(
+    cx: float, cy: float, angle: float, center_r: float, size: float, samples: int = 28
+) -> Polyline:
     """Heart placed on the ring at center_r, lobes pointing away from the center."""
     ux, uy = math.cos(angle), math.sin(angle)
     px, py = -uy, ux
@@ -82,7 +105,15 @@ def heart(cx: float, cy: float, angle: float, center_r: float, size: float, samp
     return closed_polygon(pts)
 
 
-def bud(cx: float, cy: float, angle: float, inner: float, outer: float, half_width: float, samples: int = 14) -> Polyline:
+def bud(
+    cx: float,
+    cy: float,
+    angle: float,
+    inner: float,
+    outer: float,
+    half_width: float,
+    samples: int = 14,
+) -> Polyline:
     """Drop/bud shape: round base near inner radius, pointed tip at outer radius."""
     left: list[Point] = []
     right: list[Point] = []

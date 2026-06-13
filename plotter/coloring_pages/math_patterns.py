@@ -4,6 +4,7 @@ Every mode draws a different family of patterns; the seed picks a concrete
 variant (tile sets, directions, densities) so two pages of the same mode
 still look clearly different. Complexity scales cell size and nested detail.
 """
+
 from __future__ import annotations
 
 import math
@@ -66,7 +67,18 @@ def pattern_lines(
     return lines, {"cell_size_mm": round(cell, 3)}
 
 
-def _truchet(lines: list[Polyline], rng: random.Random, x0: float, y0: float, w: float, h: float, cell: float, complexity: float, jitter: float, density: float) -> None:
+def _truchet(
+    lines: list[Polyline],
+    rng: random.Random,
+    x0: float,
+    y0: float,
+    w: float,
+    h: float,
+    cell: float,
+    complexity: float,
+    jitter: float,
+    density: float,
+) -> None:
     cols, rows = max(1, int(w // cell)), max(1, int(h // cell))
     sx, sy = w / cols, h / rows
     tile_sets = [
@@ -94,19 +106,56 @@ def _truchet(lines: list[Polyline], rng: random.Random, x0: float, y0: float, w:
                 else:
                     lines.append([(x + sx, y), (x, y + sy)])
             elif tile == "diamond":
-                lines.append(closed_polygon([(x, y + sy / 2), (x + sx / 2, y), (x + sx, y + sy / 2), (x + sx / 2, y + sy)]))
+                lines.append(
+                    closed_polygon(
+                        [
+                            (x, y + sy / 2),
+                            (x + sx / 2, y),
+                            (x + sx, y + sy / 2),
+                            (x + sx / 2, y + sy),
+                        ]
+                    )
+                )
                 if complexity > 0.55 and rng.random() < complexity * 0.6:
-                    lines.append(closed_polygon([(x + sx * 0.25, y + sy / 2), (x + sx / 2, y + sy * 0.25), (x + sx * 0.75, y + sy / 2), (x + sx / 2, y + sy * 0.75)]))
+                    lines.append(
+                        closed_polygon(
+                            [
+                                (x + sx * 0.25, y + sy / 2),
+                                (x + sx / 2, y + sy * 0.25),
+                                (x + sx * 0.75, y + sy / 2),
+                                (x + sx / 2, y + sy * 0.75),
+                            ]
+                        )
+                    )
             else:
-                lines.append(circle(x + sx / 2, y + sy / 2, min(sx, sy) * rng.uniform(0.2, 0.32), 20))
+                lines.append(
+                    circle(x + sx / 2, y + sy / 2, min(sx, sy) * rng.uniform(0.2, 0.32), 20)
+                )
 
 
 def _quarter(cx: float, cy: float, w: float, h: float, quadrant: int) -> Polyline:
     start = quadrant * math.pi / 2
-    return [(cx + math.cos(start + i * math.pi / 18) * w / 2, cy + math.sin(start + i * math.pi / 18) * h / 2) for i in range(10)]
+    return [
+        (
+            cx + math.cos(start + i * math.pi / 18) * w / 2,
+            cy + math.sin(start + i * math.pi / 18) * h / 2,
+        )
+        for i in range(10)
+    ]
 
 
-def _hex(lines: list[Polyline], rng: random.Random, x0: float, y0: float, w: float, h: float, cell: float, complexity: float, jitter: float, density: float) -> None:
+def _hex(
+    lines: list[Polyline],
+    rng: random.Random,
+    x0: float,
+    y0: float,
+    w: float,
+    h: float,
+    cell: float,
+    complexity: float,
+    jitter: float,
+    density: float,
+) -> None:
     r = cell / 2
     dy = r * math.sqrt(3)
     fillings = ["plain", "nested", "flower", "triangle"]
@@ -121,19 +170,36 @@ def _hex(lines: list[Polyline], rng: random.Random, x0: float, y0: float, w: flo
             lines.append(regular_polygon(x + jx, y + jy, r * 0.9, 6, math.pi / 6))
             filling = rng.choices(fillings, weights=weights)[0]
             if filling == "nested":
-                lines.append(regular_polygon(x + jx, y + jy, r * rng.uniform(0.45, 0.62), 6, math.pi / 6))
+                lines.append(
+                    regular_polygon(x + jx, y + jy, r * rng.uniform(0.45, 0.62), 6, math.pi / 6)
+                )
             elif filling == "flower":
                 for k in range(6):
                     sx, sy = polar(x + jx, y + jy, r * 0.45, k / 6 * math.tau)
                     lines.append(circle(sx, sy, r * 0.2, 12))
             elif filling == "triangle":
-                lines.append(regular_polygon(x + jx, y + jy, r * rng.uniform(0.35, 0.5), 3, rng.uniform(0, math.tau)))
+                lines.append(
+                    regular_polygon(
+                        x + jx, y + jy, r * rng.uniform(0.35, 0.5), 3, rng.uniform(0, math.tau)
+                    )
+                )
             x += r * 3
         y += dy
         row += 1
 
 
-def _voronoi_like(lines: list[Polyline], rng: random.Random, x0: float, y0: float, w: float, h: float, cell: float, complexity: float, jitter: float, density: float) -> None:
+def _voronoi_like(
+    lines: list[Polyline],
+    rng: random.Random,
+    x0: float,
+    y0: float,
+    w: float,
+    h: float,
+    cell: float,
+    complexity: float,
+    jitter: float,
+    density: float,
+) -> None:
     cols, rows = max(2, int(w // cell)), max(2, int(h // cell))
     sx, sy = w / cols, h / rows
     wobble = max(jitter, 0.25) + complexity * 0.3
@@ -151,18 +217,62 @@ def _voronoi_like(lines: list[Polyline], rng: random.Random, x0: float, y0: floa
             pts = [(min(x0 + w, max(x0, px)), min(y0 + h, max(y0, py))) for px, py in pts]
             lines.append(closed_polygon(pts))
             if complexity > 0.45 and rng.random() < complexity * 0.55:
-                lines.append(circle(min(x0 + w - 2, max(x0 + 2, cx)), min(y0 + h - 2, max(y0 + 2, cy)), rr * rng.uniform(0.18, 0.34), 16))
+                lines.append(
+                    circle(
+                        min(x0 + w - 2, max(x0 + 2, cx)),
+                        min(y0 + h - 2, max(y0 + 2, cy)),
+                        rr * rng.uniform(0.18, 0.34),
+                        16,
+                    )
+                )
 
 
-def _waves(lines: list[Polyline], rng: random.Random, x0: float, y0: float, w: float, h: float, cell: float, complexity: float, jitter: float, density: float) -> None:
-    layout = rng.choice(["horizontal", "horizontal", "vertical", "cross"] if complexity > 0.35 else ["horizontal", "vertical"])
+def _waves(
+    lines: list[Polyline],
+    rng: random.Random,
+    x0: float,
+    y0: float,
+    w: float,
+    h: float,
+    cell: float,
+    complexity: float,
+    jitter: float,
+    density: float,
+) -> None:
+    layout = rng.choice(
+        ["horizontal", "horizontal", "vertical", "cross"]
+        if complexity > 0.35
+        else ["horizontal", "vertical"]
+    )
     if layout in {"horizontal", "cross"}:
         _wave_set(lines, rng, x0, y0, w, h, cell, complexity, density, horizontal=True)
     if layout in {"vertical", "cross"}:
-        _wave_set(lines, rng, x0, y0, w, h, cell, complexity, density * (0.55 if layout == "cross" else 1.0), horizontal=False)
+        _wave_set(
+            lines,
+            rng,
+            x0,
+            y0,
+            w,
+            h,
+            cell,
+            complexity,
+            density * (0.55 if layout == "cross" else 1.0),
+            horizontal=False,
+        )
 
 
-def _wave_set(lines: list[Polyline], rng: random.Random, x0: float, y0: float, w: float, h: float, cell: float, complexity: float, density: float, horizontal: bool) -> None:
+def _wave_set(
+    lines: list[Polyline],
+    rng: random.Random,
+    x0: float,
+    y0: float,
+    w: float,
+    h: float,
+    cell: float,
+    complexity: float,
+    density: float,
+    horizontal: bool,
+) -> None:
     span, breadth = (h, w) if horizontal else (w, h)
     count = max(4, int(span / cell * (0.65 + density)))
     step = span / count
@@ -178,11 +288,24 @@ def _wave_set(lines: list[Polyline], rng: random.Random, x0: float, y0: float, w
             t = s / samples
             offset = base + math.sin(t * math.tau * f + phase) * amp
             offset = min(span, max(0.0, offset))
-            pts.append((x0 + breadth * t, y0 + offset) if horizontal else (x0 + offset, y0 + breadth * t))
+            pts.append(
+                (x0 + breadth * t, y0 + offset) if horizontal else (x0 + offset, y0 + breadth * t)
+            )
         lines.append(pts)
 
 
-def _penrose_like(lines: list[Polyline], rng: random.Random, x0: float, y0: float, w: float, h: float, cell: float, complexity: float, jitter: float, density: float) -> None:
+def _penrose_like(
+    lines: list[Polyline],
+    rng: random.Random,
+    x0: float,
+    y0: float,
+    w: float,
+    h: float,
+    cell: float,
+    complexity: float,
+    jitter: float,
+    density: float,
+) -> None:
     r = cell * 0.55
     dy = math.sin(math.pi / 5) * r * 2
     rows = int((h - 2 * r) / dy) + 1
@@ -201,7 +324,18 @@ def _penrose_like(lines: list[Polyline], rng: random.Random, x0: float, y0: floa
                 lines.append(regular_polygon(x, y, r * 0.26, rng.choice([3, 4, 5]), rot * 0.5))
 
 
-def _scales(lines: list[Polyline], rng: random.Random, x0: float, y0: float, w: float, h: float, cell: float, complexity: float, jitter: float, density: float) -> None:
+def _scales(
+    lines: list[Polyline],
+    rng: random.Random,
+    x0: float,
+    y0: float,
+    w: float,
+    h: float,
+    cell: float,
+    complexity: float,
+    jitter: float,
+    density: float,
+) -> None:
     cols = max(2, int(round(w / cell)))
     r = w / cols / 2
     row_h = r * rng.uniform(0.55, 0.72)
@@ -227,7 +361,18 @@ def _scales(lines: list[Polyline], rng: random.Random, x0: float, y0: float, w: 
         row += 1
 
 
-def _stained_glass(lines: list[Polyline], rng: random.Random, x0: float, y0: float, w: float, h: float, cell: float, complexity: float, jitter: float, density: float) -> None:
+def _stained_glass(
+    lines: list[Polyline],
+    rng: random.Random,
+    x0: float,
+    y0: float,
+    w: float,
+    h: float,
+    cell: float,
+    complexity: float,
+    jitter: float,
+    density: float,
+) -> None:
     chords = 4 + round(complexity * 9) + rng.randrange(3)
     for _ in range(chords):
         lines.append(_random_chord(rng, x0, y0, w, h))
@@ -241,7 +386,9 @@ def _stained_glass(lines: list[Polyline], rng: random.Random, x0: float, y0: flo
             if complexity > 0.5 and rng.random() < complexity:
                 lines.append(circle(cx, cy, rr * 0.55, 24))
         else:
-            lines.append(regular_polygon(cx, cy, rr, rng.choice([3, 4, 5, 6]), rng.uniform(0, math.tau)))
+            lines.append(
+                regular_polygon(cx, cy, rr, rng.choice([3, 4, 5, 6]), rng.uniform(0, math.tau))
+            )
 
 
 def _random_chord(rng: random.Random, x0: float, y0: float, w: float, h: float) -> Polyline:
@@ -259,7 +406,18 @@ def _random_chord(rng: random.Random, x0: float, y0: float, w: float, h: float) 
     return pts
 
 
-def _bubbles(lines: list[Polyline], rng: random.Random, x0: float, y0: float, w: float, h: float, cell: float, complexity: float, jitter: float, density: float) -> None:
+def _bubbles(
+    lines: list[Polyline],
+    rng: random.Random,
+    x0: float,
+    y0: float,
+    w: float,
+    h: float,
+    cell: float,
+    complexity: float,
+    jitter: float,
+    density: float,
+) -> None:
     r_max = cell * rng.uniform(0.75, 0.95)
     r_min = max(2.5, cell * 0.16)
     target = int(w * h / (cell * cell) * (2.2 + density * 2))
@@ -278,7 +436,18 @@ def _bubbles(lines: list[Polyline], rng: random.Random, x0: float, y0: float, w:
             lines.append(circle(bx, by, rr * rng.uniform(0.45, 0.62), 16))
 
 
-def _spiral(lines: list[Polyline], rng: random.Random, x0: float, y0: float, w: float, h: float, cell: float, complexity: float, jitter: float, density: float) -> None:
+def _spiral(
+    lines: list[Polyline],
+    rng: random.Random,
+    x0: float,
+    y0: float,
+    w: float,
+    h: float,
+    cell: float,
+    complexity: float,
+    jitter: float,
+    density: float,
+) -> None:
     cx, cy = x0 + w / 2, y0 + h / 2
     r_max = math.hypot(w, h) / 2
     turns = 3 + complexity * 5 + rng.uniform(0, 1.5)
@@ -308,7 +477,9 @@ def _spiral(lines: list[Polyline], rng: random.Random, x0: float, y0: float, w: 
         lines.append([polar(cx, cy, start_r, a), end])
 
 
-def _ray_to_rect(cx: float, cy: float, angle: float, x0: float, y0: float, w: float, h: float) -> Point:
+def _ray_to_rect(
+    cx: float, cy: float, angle: float, x0: float, y0: float, w: float, h: float
+) -> Point:
     dx, dy = math.cos(angle), math.sin(angle)
     best = float("inf")
     for bound, d, c in ((x0, dx, cx), (x0 + w, dx, cx)):

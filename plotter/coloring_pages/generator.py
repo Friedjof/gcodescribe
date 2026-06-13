@@ -111,26 +111,28 @@ class ColoringPageGenerator:
             lines.extend(seed_label_lines(seed, complexity, width_mm, height_mm, margin_mm))
         lines = rounded_lines(lines)
         self.validate_plotter_safety(lines, width_mm, height_mm)
-        metadata = self.add_metadata({
-            "generator": "plotter-coloring-pages",
-            "category": "coloring_pages",
-            "function": "generate_mandala_coloring_page",
-            "mode": mode,
-            "seed": str(seed),
-            "normalized_seed": normalized,
-            "width_mm": width_mm,
-            "height_mm": height_mm,
-            "margin_mm": margin_mm,
-            "stroke_width_mm": stroke_width_mm,
-            "complexity": complexity,
-            "age_group": age_group,
-            "min_gap_mm": min_gap_mm,
-            "symmetry_strength": symmetry_strength,
-            "closed_shapes_only": closed_shapes_only,
-            "outer_frame": outer_frame,
-            "show_seed": show_seed,
-            **derived,
-        })
+        metadata = self.add_metadata(
+            {
+                "generator": "plotter-coloring-pages",
+                "category": "coloring_pages",
+                "function": "generate_mandala_coloring_page",
+                "mode": mode,
+                "seed": str(seed),
+                "normalized_seed": normalized,
+                "width_mm": width_mm,
+                "height_mm": height_mm,
+                "margin_mm": margin_mm,
+                "stroke_width_mm": stroke_width_mm,
+                "complexity": complexity,
+                "age_group": age_group,
+                "min_gap_mm": min_gap_mm,
+                "symmetry_strength": symmetry_strength,
+                "closed_shapes_only": closed_shapes_only,
+                "outer_frame": outer_frame,
+                "show_seed": show_seed,
+                **derived,
+            }
+        )
         svg = self.create_svg_canvas(width_mm, height_mm, lines, metadata, stroke_width_mm)
         return ColoringPage(svg, lines, width_mm, height_mm, metadata)
 
@@ -212,27 +214,29 @@ class ColoringPageGenerator:
             lines.extend(seed_label_lines(seed, complexity, width_mm, height_mm, margin_mm))
         lines = rounded_lines(lines)
         self.validate_plotter_safety(lines, width_mm, height_mm)
-        metadata = self.add_metadata({
-            "generator": "plotter-coloring-pages",
-            "category": "coloring_pages",
-            "function": "generate_math_pattern_coloring_page",
-            "mode": mode,
-            "seed": str(seed),
-            "normalized_seed": normalized,
-            "width_mm": width_mm,
-            "height_mm": height_mm,
-            "margin_mm": margin_mm,
-            "stroke_width_mm": stroke_width_mm,
-            "complexity": complexity,
-            "age_group": age_group,
-            "min_gap_mm": min_gap_mm,
-            "jitter": jitter,
-            "density": density,
-            "closed_shapes_only": closed_shapes_only,
-            "outer_frame": outer_frame,
-            "show_seed": show_seed,
-            **derived,
-        })
+        metadata = self.add_metadata(
+            {
+                "generator": "plotter-coloring-pages",
+                "category": "coloring_pages",
+                "function": "generate_math_pattern_coloring_page",
+                "mode": mode,
+                "seed": str(seed),
+                "normalized_seed": normalized,
+                "width_mm": width_mm,
+                "height_mm": height_mm,
+                "margin_mm": margin_mm,
+                "stroke_width_mm": stroke_width_mm,
+                "complexity": complexity,
+                "age_group": age_group,
+                "min_gap_mm": min_gap_mm,
+                "jitter": jitter,
+                "density": density,
+                "closed_shapes_only": closed_shapes_only,
+                "outer_frame": outer_frame,
+                "show_seed": show_seed,
+                **derived,
+            }
+        )
         svg = self.create_svg_canvas(width_mm, height_mm, lines, metadata, stroke_width_mm)
         return ColoringPage(svg, lines, width_mm, height_mm, metadata)
 
@@ -245,12 +249,22 @@ def generate_math_pattern_coloring_page(*args, **kwargs) -> str:
     return ColoringPageGenerator().generate_math_pattern_coloring_page(*args, **kwargs)
 
 
-def generate_coloring_page(category: str, function: str, mode: str, seed: int | str, width_mm: float, height_mm: float, **params) -> str:
+def generate_coloring_page(
+    category: str,
+    function: str,
+    mode: str,
+    seed: int | str,
+    width_mm: float,
+    height_mm: float,
+    **params,
+) -> str:
     if category != "coloring_pages":
         raise ValueError(f"Unsupported coloring page category: {category}")
     generator = ColoringPageGenerator()
     if function == "mandala":
         return generator.generate_mandala_coloring_page(seed, mode, width_mm, height_mm, **params)
     if function == "math_pattern":
-        return generator.generate_math_pattern_coloring_page(seed, mode, width_mm, height_mm, **params)
+        return generator.generate_math_pattern_coloring_page(
+            seed, mode, width_mm, height_mm, **params
+        )
     raise ValueError(f"Unsupported coloring page function: {function}")

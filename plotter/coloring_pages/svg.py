@@ -36,11 +36,19 @@ def create_svg_canvas(
     metadata: dict[str, Any],
     stroke_width_mm: float,
 ) -> str:
+    escaped_metadata = html.escape(
+        json.dumps(metadata, ensure_ascii=False, sort_keys=True, indent=2), quote=False
+    )
     body = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{fmt(width_mm)}mm" height="{fmt(height_mm)}mm" viewBox="0 0 {fmt(width_mm)} {fmt(height_mm)}">',
-        f"<metadata>{html.escape(json.dumps(metadata, ensure_ascii=False, sort_keys=True, indent=2), quote=False)}</metadata>",
-        f'<rect x="0" y="0" width="{fmt(width_mm)}" height="{fmt(height_mm)}" fill="white"/>',
-        f'<g fill="none" stroke="black" stroke-width="{fmt(stroke_width_mm)}" stroke-linecap="round" stroke-linejoin="round">',
+        '<svg xmlns="http://www.w3.org/2000/svg" '
+        f'width="{fmt(width_mm)}mm" height="{fmt(height_mm)}mm" '
+        f'viewBox="0 0 {fmt(width_mm)} {fmt(height_mm)}">',
+        f"<metadata>{escaped_metadata}</metadata>",
+        f'<rect x="0" y="0" width="{fmt(width_mm)}" '
+        f'height="{fmt(height_mm)}" fill="white"/>',
+        '<g fill="none" stroke="black" '
+        f'stroke-width="{fmt(stroke_width_mm)}" '
+        'stroke-linecap="round" stroke-linejoin="round">',
     ]
     for line in lines:
         body.append(f'<path d="{path_data(line)}"/>')

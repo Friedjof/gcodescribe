@@ -6,34 +6,58 @@ from a theme-weighted pool. Complexity controls ring count, radial order
 and the amount of nested detail, so the scale runs from chunky toddler
 pages to fine adult patterns.
 """
+
 from __future__ import annotations
 
 import math
 import random
 
-from .geometry import circle, polar
+from .geometry import circle
 from .rings import RING_STYLES, THIN_OK, WIDE_PREFERRED, center_medallion
 from .types import Polyline
 
 # Weighted style pools per theme; "magic" mixes everything.
 MANDALA_THEMES = {
     "flower": {
-        "petals": 3.0, "pointed": 2.0, "scallops": 2.0, "buds": 2.0,
-        "hearts": 1.0, "dots": 1.0, "loops": 1.0, "fans": 0.5, "waves": 0.5,
+        "petals": 3.0,
+        "pointed": 2.0,
+        "scallops": 2.0,
+        "buds": 2.0,
+        "hearts": 1.0,
+        "dots": 1.0,
+        "loops": 1.0,
+        "fans": 0.5,
+        "waves": 0.5,
     },
     "star": {
-        "spikes": 3.0, "diamonds": 3.0, "zigzag": 2.0, "cells": 1.0,
-        "dots": 1.0, "waves": 0.5, "fans": 0.5,
+        "spikes": 3.0,
+        "diamonds": 3.0,
+        "zigzag": 2.0,
+        "cells": 1.0,
+        "dots": 1.0,
+        "waves": 0.5,
+        "fans": 0.5,
     },
     "sun": {
-        "spikes": 3.0, "scallops": 2.0, "waves": 2.0, "fans": 1.5,
-        "dots": 1.0, "cells": 1.0, "diamonds": 1.0,
+        "spikes": 3.0,
+        "scallops": 2.0,
+        "waves": 2.0,
+        "fans": 1.5,
+        "dots": 1.0,
+        "cells": 1.0,
+        "diamonds": 1.0,
     },
     "nature": {
-        "pointed": 3.0, "buds": 2.0, "loops": 2.0, "waves": 1.5,
-        "scallops": 1.5, "petals": 1.0, "fans": 1.0, "dots": 0.5,
+        "pointed": 3.0,
+        "buds": 2.0,
+        "loops": 2.0,
+        "waves": 1.5,
+        "scallops": 1.5,
+        "petals": 1.0,
+        "fans": 1.0,
+        "dots": 0.5,
     },
-    "magic": {name: 1.0 for name in RING_STYLES},
+    "magic": dict.fromkeys(RING_STYLES, 1.0),
 }
 
 MANDALA_ORDER_POOLS = {
@@ -149,7 +173,9 @@ def _pick_styles(rng: random.Random, mode: str, count: int) -> list[str]:
     return styles
 
 
-def _ring_order(rng: random.Random, order: int, style: str, mid_r: float, feature_min: float) -> int:
+def _ring_order(
+    rng: random.Random, order: int, style: str, mid_r: float, feature_min: float
+) -> int:
     n = order
     if style in THIN_OK and rng.random() < 0.4:
         n = order * 2
@@ -161,16 +187,30 @@ def _ring_order(rng: random.Random, order: int, style: str, mid_r: float, featur
     return n
 
 
-def _butterfly(lines: list[Polyline], cx: float, cy: float, radius: float, rng: random.Random, complexity: float) -> None:
+def _butterfly(
+    lines: list[Polyline],
+    cx: float,
+    cy: float,
+    radius: float,
+    rng: random.Random,
+    complexity: float,
+) -> None:
     # Body with segments and head.
     head_r = radius * 0.06
     lines.append(circle(cx, cy - radius * 0.5, head_r, 20))
     body_w = radius * rng.uniform(0.05, 0.08)
     body_top, body_bottom = cy - radius * 0.44, cy + radius * 0.5
-    lines.append([
-        (cx, body_top), (cx + body_w, cy - radius * 0.1), (cx + body_w * 0.7, body_bottom),
-        (cx, body_bottom + radius * 0.02), (cx - body_w * 0.7, body_bottom), (cx - body_w, cy - radius * 0.1), (cx, body_top),
-    ])
+    lines.append(
+        [
+            (cx, body_top),
+            (cx + body_w, cy - radius * 0.1),
+            (cx + body_w * 0.7, body_bottom),
+            (cx, body_bottom + radius * 0.02),
+            (cx - body_w * 0.7, body_bottom),
+            (cx - body_w, cy - radius * 0.1),
+            (cx, body_top),
+        ]
+    )
     segments = 3 + int(complexity * 3)
     for s in range(1, segments):
         t = s / segments
@@ -181,7 +221,13 @@ def _butterfly(lines: list[Polyline], cx: float, cy: float, radius: float, rng: 
     for side in (-1, 1):
         ax = cx + side * radius * 0.16
         ay = cy - radius * (0.72 + rng.uniform(0.0, 0.06))
-        lines.append([(cx + side * head_r * 0.5, cy - radius * 0.54), (cx + side * radius * 0.08, cy - radius * 0.65), (ax, ay)])
+        lines.append(
+            [
+                (cx + side * head_r * 0.5, cy - radius * 0.54),
+                (cx + side * radius * 0.08, cy - radius * 0.65),
+                (ax, ay),
+            ]
+        )
         lines.append(circle(ax, ay, radius * 0.018, 10))
 
     # Wings: random control points, mirrored; nested outlines + spots inside.
@@ -193,7 +239,10 @@ def _butterfly(lines: list[Polyline], cx: float, cy: float, radius: float, rng: 
             for nest in range(nests + 1):
                 f = 1 - nest * (0.55 / max(1, nests + 0.4))
                 pts = [
-                    (cx + side * (radius * (px * f + 0.05)), cy + radius * (anchor_y + (py - anchor_y) * f))
+                    (
+                        cx + side * (radius * (px * f + 0.05)),
+                        cy + radius * (anchor_y + (py - anchor_y) * f),
+                    )
                     for px, py in shape
                 ]
                 if pts[0] != pts[-1]:
@@ -248,7 +297,9 @@ def _smooth_closed(pts: list[tuple[float, float]], rounds: int = 2) -> list[tupl
     return pts
 
 
-def _wing_inner_point(rng: random.Random, shape: list[tuple[float, float]], anchor_y: float) -> tuple[float, float]:
+def _wing_inner_point(
+    rng: random.Random, shape: list[tuple[float, float]], anchor_y: float
+) -> tuple[float, float]:
     xs = [p[0] for p in shape]
     ys = [p[1] for p in shape]
     return (
