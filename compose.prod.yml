@@ -1,0 +1,16 @@
+# Production override: run the pre-built image from GHCR instead of building
+# locally. The release workflow publishes ghcr.io/friedjof/gcodescribe on every
+# vX.Y.Z tag.
+#
+#   docker compose -f compose.yml -f compose.prod.yml pull
+#   docker compose -f compose.yml -f compose.prod.yml up -d
+#
+# Pin a specific version by setting GCODESCRIBE_TAG (defaults to latest).
+services:
+  gcodescribe:
+    build: !reset null
+    image: "ghcr.io/friedjof/gcodescribe:${GCODESCRIBE_TAG:-latest}"
+    environment:
+      # Sessions should only travel over HTTPS in production. Terminate TLS at a
+      # reverse proxy in front of this service.
+      PLOTTER_AUTH_COOKIE_SECURE: "${PLOTTER_AUTH_COOKIE_SECURE:-true}"

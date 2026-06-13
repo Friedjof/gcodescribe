@@ -85,6 +85,23 @@ the network; use HTTPS if the controller is exposed beyond a trusted setup.
 > `pdftoppm` and `pdfinfo`; OpenCV does the tracing). For Office documents,
 > add `libreoffice-core` to the runtime stage in the `Dockerfile`.
 
+### Production
+
+`compose.yml` ships the pre-built image released to GHCR rather than building
+locally, with `PLOTTER_AUTH_COOKIE_SECURE` defaulting to `true` (terminate TLS
+at a reverse proxy in front of the service):
+
+```bash
+cp .env.example .env   # set OCTOPRINT_URL / OCTOPRINT_API_KEY
+docker compose -f compose.yml -f compose.prod.yml pull
+docker compose -f compose.yml -f compose.prod.yml up -d
+```
+
+Pin a version with `GCODESCRIBE_TAG` (defaults to `latest`); images are tagged
+`vX.Y.Z`, `X.Y` and `latest` by the release workflow. Both services run an
+unprivileged user, declare health checks, cap their logs (10 MB × 3) and set
+memory limits.
+
 ## Local development
 
 `make dev` starts Redis (Docker container `gcodescribe-redis`), the backend with
@@ -122,6 +139,7 @@ backend serves automatically.
 | `REDIS_URL`         | Position cache (falls back to a file store under `<data>/state/` if unreachable) | `redis://localhost:6379/0` |
 | `PLOTTER_AUTH_SESSION_TTL` | Admin session lifetime in seconds | `1209600` |
 | `PLOTTER_AUTH_COOKIE_SECURE` | Mark session cookie HTTPS-only | `false` |
+| `GCODESCRIBE_TAG`   | GHCR image tag (prod compose only)  | `latest`  |
 
 Calibration values (bed/plot size, origin, pen Z, feedrates) are edited in the
 UI and stored as profiles under `<data>/profiles/` — one JSON file per profile
