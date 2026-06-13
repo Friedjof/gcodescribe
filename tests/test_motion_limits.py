@@ -108,13 +108,121 @@ class TestPenHeights:
 class TestSendRevalidation:
     """Old or stale jobs are re-checked against the current calibration."""
 
-    def test_send_rejects_job_with_g28(self, workspace, cal, monkeypatch):
+    def test_send_start_homes_before_uploading(self, workspace, cal):
+        from unittest.mock import patch
+
+        from fastapi.testclient import TestClient
+
+        import plotter.octoprint as op
+        from plotter.jobmeta import write_job_meta
+
+        jobs = workspace / "jobs"
+        jobs.mkdir()
+        path = jobs / "safe.gcode"
+        path.write_text(
+            f"G21\nG90\nG0 Z{cal.pen_up_z:.3f} F1000\n"
+            f"G0 X{cal.origin_x:.3f} Y{cal.origin_y:.3f} F6000\n"
+        )
+        write_job_meta(path)
+        events = []
+        with (
+            patch.object(
+                op.OctoPrintClient,
+                "upload",
+                side_effect=lambda *_args, **_kwargs: events.append("upload") or {},
+            ) as upload,
+            patch.object(
+                op.OctoPrintClient,
+                "gcode",
+                side_effect=lambda *_args, **_kwargs: events.append("lift"),
+            ) as gcode,
+            patch.object(
+                op.OctoPrintClient,
+                "home",
+                side_effect=lambda *_args, **_kwargs: events.append("home"),
+            ) as home,
+        ):
+            from plotter.web.app import app
+
+            c = TestClient(app)
+            r = c.post("/api/octoprint/send", json={"filename": "safe.gcode", "start": True})
+            assert r.status_code == 200
+            assert events == ["lift", "home", "upload"]
+            gcode.assert_called_once_with(["G91", f"G0 Z5 F{cal.z_feed:.0f}", "G90"])
+            home.assert_called_once()
+            upload.assert_called_once_with(path, start=True)
+
+    def test_send_upload_only_does_not_home(self, workspace, cal):
+        from unittest.mock import patch
+
+        from fastapi.testclient import TestClient
+
+        import plotter.octoprint as op
+        from plotter.jobmeta import write_job_meta
+
+        jobs = workspace / "jobs"
+        jobs.mkdir()
+        path = jobs / "upload-only.gcode"
+        path.write_text(
+            f"G21\nG90\nG0 Z{cal.pen_up_z:.3f} F1000\n"
+            f"G0 X{cal.origin_x:.3f} Y{cal.origin_y:.3f} F6000\n"
+        )
+        write_job_meta(path)
+        with (
+            patch.object(op.OctoPrintClient, "upload", return_value={}) as upload,
+            patch.object(op.OctoPrintClient, "gcode", return_value=None) as gcode,
+            patch.object(op.OctoPrintClient, "home", return_value=None) as home,
+        ):
+            from plotter.web.app import app
+
+            c = TestClient(app)
+            r = c.post("/api/octoprint/send", json={"filename": "upload-only.gcode"})
+            assert r.status_code == 200
+            gcode.assert_not_called()
+            home.assert_not_called()
+            upload.assert_called_once_with(path, start=False)
+
+    def test_job_start_homes_before_starting(self, workspace, cal):
         from unittest.mock import patch
 
         from fastapi.testclient import TestClient
 
         import plotter.octoprint as op
 
+        events = []
+        with (
+            patch.object(
+                op.OctoPrintClient,
+                "job_command",
+                side_effect=lambda *_args, **_kwargs: events.append("start"),
+            ) as job_command,
+            patch.object(
+                op.OctoPrintClient,
+                "gcode",
+                side_effect=lambda *_args, **_kwargs: events.append("lift"),
+            ) as gcode,
+            patch.object(
+                op.OctoPrintClient,
+                "home",
+                side_effect=lambda *_args, **_kwargs: events.append("home"),
+            ) as home,
+        ):
+            from plotter.web.app import app
+
+            c = TestClient(app)
+            r = c.post("/api/octoprint/job", json={"command": "start"})
+            assert r.status_code == 200
+            assert events == ["lift", "home", "start"]
+            gcode.assert_called_once_with(["G91", f"G0 Z5 F{cal.z_feed:.0f}", "G90"])
+            home.assert_called_once()
+            job_command.assert_called_once_with("start")
+
+    def test_send_rejects_job_with_g28(self, workspace, cal, monkeypatch):
+        from unittest.mock import patch
+
+        from fastapi.testclient import TestClient
+
+        import plotter.octoprint as op
         from plotter.jobmeta import write_job_meta
 
         jobs = workspace / "jobs"
@@ -123,10 +231,13 @@ class TestSendRevalidation:
         # With a matching profile sidecar the job passes the profile guard,
         # so this exercises the geometric safety re-validation.
         write_job_meta(jobs / "old.gcode")
-        with patch.object(op.OctoPrintClient, "upload", return_value={}), \
-             patch.object(op.OctoPrintClient, "gcode", return_value=None), \
-             patch.object(op.OctoPrintClient, "home", return_value=None):
+        with (
+            patch.object(op.OctoPrintClient, "upload", return_value={}),
+            patch.object(op.OctoPrintClient, "gcode", return_value=None),
+            patch.object(op.OctoPrintClient, "home", return_value=None),
+        ):
             from plotter.web.app import app
+
             c = TestClient(app)
             c.post("/api/octoprint/home", json={})
             r = c.post("/api/octoprint/send", json={"filename": "old.gcode", "start": True})
@@ -139,7 +250,6 @@ class TestSendRevalidation:
         from fastapi.testclient import TestClient
 
         import plotter.octoprint as op
-
         from plotter.jobmeta import write_job_meta
 
         jobs = workspace / "jobs"
@@ -152,6 +262,7 @@ class TestSendRevalidation:
         write_job_meta(jobs / "stale.gcode")
         with patch.object(op.OctoPrintClient, "upload", return_value={}):
             from plotter.web.app import app
+
             c = TestClient(app)
             r = c.post("/api/octoprint/send", json={"filename": "stale.gcode", "start": False})
             assert r.status_code == 422

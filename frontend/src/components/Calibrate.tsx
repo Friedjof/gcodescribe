@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type Calibration, type CalibrationProfileSummary } from "../api";
 import { useI18n } from "../i18n";
+import { useConfirm } from "./dialogs";
 
 const FIELDS: { key: keyof Calibration; labelKey: string; unit: string; groupKey: string }[] = [
   { key: "bed_width", labelKey: "calibrate.bedWidth", unit: "mm", groupKey: "calibrate.groupArea" },
@@ -26,6 +27,7 @@ export default function Calibrate() {
   const [showArchived, setShowArchived] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const { confirm, ConfirmNode } = useConfirm();
 
   const flash = (m: string) => {
     setMsg(m);
@@ -61,10 +63,10 @@ export default function Calibrate() {
 
   const selected = profiles.find((p) => p.id === selectedId) ?? null;
 
-  const confirmDiscard = () => !dirty || window.confirm(t("profiles.unsaved"));
+  const confirmDiscard = async () => !dirty || await confirm(t("profiles.unsaved"));
 
-  const select = (id: string) => {
-    if (id === selectedId || !confirmDiscard()) return;
+  const select = async (id: string) => {
+    if (id === selectedId || !await confirmDiscard()) return;
     openProfile(id).catch(fail);
   };
 
@@ -123,9 +125,10 @@ export default function Calibrate() {
   const importProfileFile = (file: File) =>
     api
       .importProfile(file)
-      .then((p) => {
+      .then(async (p) => {
         flash(t("profiles.imported", { name: p.name }));
-        return loadProfiles().then(() => (confirmDiscard() ? openProfile(p.id) : undefined));
+        await loadProfiles();
+        if (await confirmDiscard()) openProfile(p.id);
       })
       .catch(fail);
 
@@ -172,6 +175,7 @@ export default function Calibrate() {
   const archivedCount = profiles.filter((p) => p.archived).length;
 
   return (
+    <>
     <div className="calibrate-profiles">
       <div className="profile-layout">
         <aside className="card profile-panel">
@@ -330,5 +334,7 @@ export default function Calibrate() {
         </section>
       </div>
     </div>
+    {ConfirmNode}
+    </>
   );
 }

@@ -1,9 +1,27 @@
 from __future__ import annotations
 
 import os
+import threading
+import time
 from pathlib import Path
 
 import httpx
+
+# A short connect timeout keeps an unreachable/slow printer from tying up a
+# request worker for 30s (the old default) — the status loop polls every few
+# seconds, so a dead relay must fail fast or it starves the whole threadpool.
+_TIMEOUT = httpx.Timeout(connect=3.0, read=8.0, write=8.0, pool=3.0)
+_STATUS_TTL = 2.0  # seconds; collapse rapid status polls into one upstream call
+
+# Persistent, connection-pooled client keyed by config. Reusing it keeps the
+# TCP+TLS connection alive across requests instead of re-handshaking every call
+# (the status snapshot alone made three sequential requests).
+_pool_lock = threading.Lock()
+_pool: dict[tuple, httpx.Client] = {}
+
+# Cached status snapshot shared across PrinterController instances.
+_status_lock = threading.Lock()
+_status_cache: dict[tuple, tuple[float, dict]] = {}
 
 
 class OctoPrintError(RuntimeError):
@@ -24,22 +42,30 @@ class OctoPrintClient:
     def configured(self) -> bool:
         return bool(self.base_url and self.api_key)
 
+    def _key(self) -> tuple:
+        return (self.base_url, self.api_key, self.verify_ssl)
+
     def _client(self) -> httpx.Client:
         if not self.configured:
             raise OctoPrintError(
                 "OctoPrint is not configured (set OCTOPRINT_URL and OCTOPRINT_API_KEY)."
             )
-        return httpx.Client(
-            base_url=self.base_url,
-            headers={"X-Api-Key": self.api_key},
-            timeout=30.0,
-            verify=self.verify_ssl,
-        )
+        key = self._key()
+        with _pool_lock:
+            client = _pool.get(key)
+            if client is None:
+                client = httpx.Client(
+                    base_url=self.base_url,
+                    headers={"X-Api-Key": self.api_key},
+                    timeout=_TIMEOUT,
+                    verify=self.verify_ssl,
+                )
+                _pool[key] = client
+            return client
 
     def _request(self, method: str, path: str, **kwargs) -> httpx.Response:
         try:
-            with self._client() as client:
-                resp = client.request(method, path, **kwargs)
+            resp = self._client().request(method, path, **kwargs)
         except httpx.HTTPError as exc:
             raise OctoPrintError(f"OctoPrint unreachable: {exc}") from exc
         if resp.status_code >= 400:
@@ -51,9 +77,26 @@ class OctoPrintClient:
     # --- status ----------------------------------------------------------
 
     def status(self) -> dict:
-        """Combined connection / printer / job snapshot for the UI."""
+        """Combined connection / printer / job snapshot for the UI.
+
+        Cached for a couple of seconds: the UI polls this every few seconds and
+        several views read it at once, so without the cache a slow printer would
+        be hit by a storm of redundant (and threadpool-blocking) requests.
+        """
         if not self.configured:
             return {"configured": False}
+        key = self._key()
+        now = time.monotonic()
+        with _status_lock:
+            cached = _status_cache.get(key)
+            if cached and now - cached[0] < _STATUS_TTL:
+                return cached[1]
+        snapshot = self._fetch_status()
+        with _status_lock:
+            _status_cache[key] = (time.monotonic(), snapshot)
+        return snapshot
+
+    def _fetch_status(self) -> dict:
         out: dict = {"configured": True, "url": self.base_url}
         try:
             conn = self._request("GET", "/api/connection").json()

@@ -35,16 +35,7 @@ def get_position() -> dict:
 class PrintRequest(BaseModel):
     filename: str
     start: bool = False
-    force: bool = False  # start even though the position is unknown
-
-
-def _require_homed(ctrl: PrinterController) -> None:
-    if not ctrl.tracker.homed:
-        raise HTTPException(
-            409,
-            "Drucken verweigert: Position unbekannt. Bitte zuerst homen "
-            "(Papier-Tab, Schritt 1) — sonst stimmt die Stift-Höhe nicht.",
-        )
+    force: bool = False  # accepted for old clients; starts now always home automatically
 
 
 def _refuse_print(filename: str, reason: str, message: str) -> None:
@@ -108,8 +99,6 @@ def _require_profile_match(
 @router.post("/octoprint/send")
 def octo_send(req: PrintRequest) -> dict:
     ctrl = controller()
-    if req.start and not req.force:
-        _require_homed(ctrl)
     path = jobs_dir() / Path(req.filename).name
     if not path.exists():
         raise HTTPException(404, "Job nicht gefunden")
@@ -128,19 +117,21 @@ def octo_send(req: PrintRequest) -> dict:
     except SafetyViolation as exc:
         log.warning("Print blocked (safety): %s — %s", path.name, exc)
         raise
+    if req.start:
+        ctrl.home()
     return ctrl.client.upload(path, start=req.start)
 
 
 class JobCommand(BaseModel):
     command: str  # start | pause | cancel | restart
-    force: bool = False
+    force: bool = False  # accepted for old clients; starts now always home automatically
 
 
 @router.post("/octoprint/job")
 def octo_job(req: JobCommand) -> dict:
     ctrl = controller()
-    if req.command in ("start", "restart") and not req.force:
-        _require_homed(ctrl)
+    if req.command in ("start", "restart"):
+        ctrl.home()
     ctrl.client.job_command(req.command)
     return {"ok": True}
 

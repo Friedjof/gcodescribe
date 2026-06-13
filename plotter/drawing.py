@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
@@ -31,13 +32,24 @@ class Drawing:
         return not self.polylines
 
 
-def load_svg_drawing(path: Path, *, quantization_mm: float = 0.25) -> Drawing:
-    lc, width_px, height_px = vpype.read_svg(
-        str(path), quantization=quantization_mm / PX_TO_MM
-    )
+@lru_cache(maxsize=6)
+def _read_svg_drawing(path: str, mtime_ns: int, quantization_mm: float) -> Drawing:
+    lc, width_px, height_px = vpype.read_svg(path, quantization=quantization_mm / PX_TO_MM)
     lc.merge(tolerance=0.05 / PX_TO_MM)
     polylines = [np.asarray(line) * PX_TO_MM for line in lc.lines if len(line) > 1]
     return Drawing(polylines, width_px * PX_TO_MM, height_px * PX_TO_MM)
+
+
+def load_svg_drawing(path: Path, *, quantization_mm: float = 0.25) -> Drawing:
+    """Parse an SVG into a Drawing (mm). Cached by path+mtime+quantization, so
+    repeated parses of the same page (e.g. live placement scoring, then G-code)
+    don't re-run the costly vpype parse — which can take tens of seconds for a
+    detailed trace. Callers treat the result as read-only."""
+    try:
+        mtime_ns = path.stat().st_mtime_ns
+    except OSError:
+        mtime_ns = 0
+    return _read_svg_drawing(str(path), mtime_ns, quantization_mm)
 
 
 def _sorted_for_travel(polylines: list[np.ndarray]) -> list[np.ndarray]:

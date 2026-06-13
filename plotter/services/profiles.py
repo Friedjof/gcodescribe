@@ -255,7 +255,10 @@ class ProfileService:
 
     def _full(self, profile: dict) -> dict:
         with _lock:
-            return {**self._summary(profile, self.active_id()), "calibration": profile["calibration"]}
+            return {
+                **self._summary(profile, self.active_id()),
+                "calibration": profile["calibration"],
+            }
 
     def list(self, include_archived: bool = True) -> list[dict]:
         with _lock:
@@ -303,7 +306,9 @@ class ProfileService:
         with _lock:
             self.ensure_migrated()
             cal_data = calibration if calibration is not None else self.active()["calibration"]
-            profile = self._build(self._unique_name((name or "").strip() or "Neues Profil"), cal_data)
+            profile = self._build(
+                self._unique_name((name or "").strip() or "Neues Profil"), cal_data
+            )
             self._write(profile)
             return self._full(profile)
 
@@ -321,8 +326,10 @@ class ProfileService:
                 profile["name"] = name.strip()
             if calibration is not None:
                 known = {f.name for f in fields(Calibration)}
-                merged = Calibration().merged(profile["calibration"]).merged(
-                    {k: v for k, v in calibration.items() if k in known}
+                merged = (
+                    Calibration()
+                    .merged(profile["calibration"])
+                    .merged({k: v for k, v in calibration.items() if k in known})
                 )
                 profile["calibration"] = merged.as_dict()
                 profile["fingerprint"] = calibration_fingerprint(profile["calibration"])
@@ -347,7 +354,8 @@ class ProfileService:
             profile = self._require(profile_id)
             if profile["id"] == self.active_id():
                 raise ProfileConflict(
-                    "Das aktive Profil kann nicht archiviert werden — zuerst ein anderes aktivieren."
+                    "Das aktive Profil kann nicht archiviert werden — zuerst ein "
+                    "anderes aktivieren."
                 )
             profile["archived"] = True
             profile["modified"] = _now()
@@ -393,13 +401,9 @@ class ProfileService:
     @staticmethod
     def _check_format(payload: dict, expected: str) -> None:
         if not isinstance(payload, dict) or payload.get("format") != expected:
-            raise ProfileImportError(
-                f"Kein gültiges Dokument (format != {expected!r})."
-            )
+            raise ProfileImportError(f"Kein gültiges Dokument (format != {expected!r}).")
         if payload.get("version") != FORMAT_VERSION:
-            raise ProfileImportError(
-                f"Nicht unterstützte Version: {payload.get('version')!r}."
-            )
+            raise ProfileImportError(f"Nicht unterstützte Version: {payload.get('version')!r}.")
 
     def import_profile(self, payload: dict) -> dict:
         """Import a single profile. Always creates a new id, never activates."""
@@ -429,7 +433,9 @@ class ProfileService:
             imported, replaced, skipped = [], [], []
             for raw in entries:
                 if not isinstance(raw, dict) or not isinstance(raw.get("calibration"), dict):
-                    skipped.append(str((raw or {}).get("name", "?")) if isinstance(raw, dict) else "?")
+                    skipped.append(
+                        str((raw or {}).get("name", "?")) if isinstance(raw, dict) else "?"
+                    )
                     continue
                 existing = self._read(str(raw.get("id", ""))) if raw.get("id") else None
                 if replace and existing is not None:

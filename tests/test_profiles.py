@@ -178,4 +178,6 @@ class TestImportExport:
         with pytest.raises(ProfileImportError):
             service.import_profile({"format": "nonsense"})
         with pytest.raises(ProfileImportError):
-            service.import_bundle({"format": "gcodescribe-profile-bundle", "version": 99, "profiles": []})
+            service.import_bundle(
+                {"format": "gcodescribe-profile-bundle", "version": 99, "profiles": []}
+            )
