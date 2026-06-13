@@ -16,12 +16,18 @@ import {
 } from "../paint/sceneObjects";
 import { DEFAULT_VECTOR_STYLE, buildStyledPolylines, normalizeStyle, type FillMode, type StrokeMode, type VectorStyle } from "../paint/styling";
 import { useI18n } from "../i18n";
+import { useConfirm, usePrompt } from "./dialogs";
 
 const GRID_STEPS = [1, 5, 10, 25, 50];
 
-type ImageMode = "edges" | "hatch" | "lines" | "dots";
+// Designer imports plot the preview polylines directly, so they need more
+// detail than the placement canvas. Must match the backend's DESIGNER_POINTS
+// so the cache pre-rendered at upload is hit instead of re-parsing the SVG.
+const DESIGNER_PREVIEW_POINTS = 20000;
 
-export default function Paint() {
+type ImageMode = "edges" | "hatch" | "lines" | "dots" | "handwriting";
+
+export default function Paint({ visible = true }: { visible?: boolean }) {
   const { t } = useI18n();
   const defaultText = t("paint.text");
   const [cal, setCal] = useState<Calibration | null>(null);
@@ -39,6 +45,8 @@ export default function Paint() {
   const [imageImport, setImageImport] = useState<{ file: File; at: Pt; mode: ImageMode; detail: number } | null>(null);
   const [importingImage, setImportingImage] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const { confirm, ConfirmNode } = useConfirm();
+  const { prompt, PromptNode } = usePrompt();
   const saveTimer = useRef<number | undefined>(undefined);
   const undoStack = useRef<SceneObject[][]>([]);
   const redoStack = useRef<SceneObject[][]>([]);
@@ -54,6 +62,7 @@ export default function Paint() {
     { value: "text", label: t("paint.tool.text") },
   ];
   const imageModes: { value: ImageMode; label: string; description: string }[] = [
+    { value: "handwriting", label: t("paint.image.handwriting"), description: t("paint.image.handwritingDesc") },
     { value: "edges", label: t("paint.image.edges"), description: t("paint.image.edgesDesc") },
     { value: "hatch", label: t("paint.image.hatch"), description: t("paint.image.hatchDesc") },
     { value: "lines", label: t("paint.image.lines"), description: t("paint.image.linesDesc") },
@@ -104,11 +113,13 @@ export default function Paint() {
       .then(() => reloadAll(page.id))
       .catch((e: any) => {
         const message = String(e.message ?? e);
-        if (!window.confirm(`${message}\n\n${t("paint.adoptForceConfirm")}`)) return;
-        api
-          .adoptPageProfile(page.id, true, index?.activeProfile)
-          .then(() => reloadAll(page.id))
-          .catch(fail);
+        confirm(`${message}\n\n${t("paint.adoptForceConfirm")}`).then((ok) => {
+          if (!ok) return;
+          api
+            .adoptPageProfile(page.id, true, index?.activeProfile)
+            .then(() => reloadAll(page.id))
+            .catch(fail);
+        });
       });
   };
 
@@ -152,8 +163,8 @@ export default function Paint() {
       return reloadIndex();
     }).catch(fail);
 
-  const rename = (id: string, current: string) => {
-    const next = window.prompt(t("paint.pageNamePrompt"), current);
+  const rename = async (id: string, current: string) => {
+    const next = await prompt(t("paint.pageNamePrompt"), current);
     if (next == null) return;
     const name = next.trim();
     if (!name || name === current) return;
@@ -163,8 +174,8 @@ export default function Paint() {
     }).catch(fail);
   };
 
-  const remove = (id: string) => {
-    if (!window.confirm(t("paint.deletePageConfirm"))) return;
+  const remove = async (id: string) => {
+    if (!await confirm(t("paint.deletePageConfirm"))) return;
     api.deletePage(id).then((idx) => {
       setIndex(idx);
       const nextId = idx.activeId ?? idx.order[0]?.id;
@@ -263,7 +274,7 @@ export default function Paint() {
     setImportingImage(true);
     setErr(null);
     api.createSource(imageImport.file, imageImport.mode, imageImport.detail)
-      .then((source) => api.sourcePreview(source.id, 1).then((preview) => ({ source, preview })))
+      .then((source) => api.sourcePreview(source.id, 1, DESIGNER_PREVIEW_POINTS).then((preview) => ({ source, preview })))
       .then(({ source, preview }) => {
         if (!preview.polylines.length) throw new Error(t("paint.noLinesImage"));
         const bounds = preview.bounds ?? [0, 0, preview.width, preview.height];
@@ -501,7 +512,10 @@ export default function Paint() {
   };
 
   // Delete/Backspace removes the selected object (unless typing in a field).
+  // Only while the tab is on screen: the component stays mounted when hidden,
+  // so its shortcuts (incl. Ctrl+C/V preventDefault) must not fire on other tabs.
   useEffect(() => {
+    if (!visible) return;
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
@@ -908,6 +922,8 @@ export default function Paint() {
         {err && <div className="banner err">{err}</div>}
       </section>
       {fullscreen && <Gcode3DOverlay data={fullscreen} onClose={() => setFullscreen(null)} />}
+      {ConfirmNode}
+      {PromptNode}
     </div>
   );
 }

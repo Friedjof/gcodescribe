@@ -6,9 +6,12 @@ import {
   type SourcePreview,
 } from "../api";
 import { useI18n } from "../i18n";
+import type { PageScore } from "../api";
+import { localize, type Pt } from "../paint/geometry";
+import { ScoreOverlay } from "./PlotScore";
 import Segmented from "./Segmented";
 
-type Mode = "auto" | "vector" | "trace";
+type Mode = "auto" | "vector" | "trace" | "handwriting";
 
 // Placement: lower-left corner (px, py) in printer mm + target width in mm.
 interface Placement {
@@ -17,12 +20,22 @@ interface Placement {
   width: number;
 }
 
+// Tiny rail thumbnails + the heavier canvas previews, cached across selections
+// (and across tab switches) so re-opening a source is instant.
+const thumbCache = new Map<string, SourcePreview>();
+const previewCache = new Map<string, SourcePreview>();
+// Detail cap for the on-screen placement preview — far below the full 20k the
+// designer import uses, since the bed view only needs a clean vector outline.
+const CANVAS_PREVIEW_POINTS = 6000;
+
 export default function Place({
   status,
   onAction,
+  onOpenPaint,
 }: {
   status: any;
   onAction: () => void;
+  onOpenPaint: () => void;
 }) {
   const { t } = useI18n();
   const [cal, setCal] = useState<Calibration | null>(null);
@@ -31,14 +44,21 @@ export default function Place({
   const [page, setPage] = useState(1);
   const [preview, setPreview] = useState<SourcePreview | null>(null);
   const [place, setPlace] = useState<Placement | null>(null);
+  const [thumbs, setThumbs] = useState<Record<string, SourcePreview>>({});
   const [mode, setMode] = useState<Mode>("auto");
   const [detail, setDetail] = useState(1);
+  const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [loadingPreview, setLoadingPreview] = useState(false);
+  const [score, setScore] = useState<PageScore | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [profileName, setProfileName] = useState<string | null>(null);
 
   const svgRef = useRef<SVGSVGElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const scoreSeq = useRef(0);
   const drag = useRef<{
     kind: "move" | "scale";
     startX: number;
@@ -47,6 +67,20 @@ export default function Place({
   } | null>(null);
 
   const online = status?.online;
+
+  // Whole rail in one request (cached server-side), instead of one round-trip
+  // per source — populate the shared cache so thumbs paint immediately.
+  const loadThumbs = useCallback(
+    () =>
+      api
+        .sourceThumbnails()
+        .then((all) => {
+          for (const [id, pv] of Object.entries(all)) thumbCache.set(id, pv);
+          setThumbs(all);
+        })
+        .catch(() => {}),
+    []
+  );
 
   const loadSources = useCallback(
     () => api.listSources().then(setSources).catch(() => {}),
@@ -58,7 +92,8 @@ export default function Place({
     // Jobs generated here are bound to the active profile — show which one.
     api.activeProfile().then((p) => setProfileName(p.name)).catch(() => {});
     loadSources();
-  }, [loadSources]);
+    loadThumbs();
+  }, [loadSources, loadThumbs]);
 
   const flash = (m: string) => {
     setMsg(m);
@@ -67,8 +102,6 @@ export default function Place({
   };
   const fail = (e: any) => setErr(String(e.message ?? e));
 
-  const pageInfo = sel?.pages.find((p) => p.n === page);
-
   // Load a source's page preview and default its placement to fit the plot area.
   useEffect(() => {
     if (!sel || !cal) {
@@ -76,25 +109,66 @@ export default function Place({
       setPlace(null);
       return;
     }
+    // Use the content bounding box (not the page size): the backend scales the
+    // drawing's bbox to `width`, so the placement must too — otherwise pages
+    // with whitespace overflow the plot area. Centered, with breathing room.
+    const fit = (pv: SourcePreview) => {
+      const cw = pv.bounds ? pv.bounds[2] - pv.bounds[0] : pv.width;
+      const ch = pv.bounds ? pv.bounds[3] - pv.bounds[1] : pv.height;
+      const aspect = ch / cw || 1;
+      let w = cal.plot_width * 0.9;
+      if (w * aspect > cal.plot_height * 0.9) w = (cal.plot_height * 0.9) / aspect;
+      const x = cal.origin_x + (cal.plot_width - w) / 2;
+      const y = cal.origin_y + (cal.plot_height - w * aspect) / 2;
+      setPlace({ x, y, width: w });
+    };
+
+    const key = `${sel.id}:${page}`;
+    // Show something instantly: the cached full preview, else the rail thumbnail,
+    // while the higher-detail preview loads in the background.
+    const placeholder = previewCache.get(key) ?? thumbCache.get(sel.id) ?? null;
+    if (placeholder) {
+      setPreview(placeholder);
+      fit(placeholder);
+    } else {
+      setPreview(null);
+    }
+
+    if (previewCache.has(key)) return; // already at full detail
+
+    let alive = true;
+    setLoadingPreview(true);
     api
-      .sourcePreview(sel.id, page)
+      .sourcePreview(sel.id, page, CANVAS_PREVIEW_POINTS)
       .then((pv) => {
+        if (!alive) return;
+        previewCache.set(key, pv);
         setPreview(pv);
-        // Use the content bounding box (not the page size): the backend scales
-        // the drawing's bbox to `width`, so the placement must too — otherwise
-        // pages with whitespace overflow the plot area.
-        const cw = pv.bounds ? pv.bounds[2] - pv.bounds[0] : pv.width;
-        const ch = pv.bounds ? pv.bounds[3] - pv.bounds[1] : pv.height;
-        const aspect = ch / cw || 1;
-        // Fit within the plot area, centered, with a little breathing room.
-        let w = cal.plot_width * 0.9;
-        if (w * aspect > cal.plot_height * 0.9) w = (cal.plot_height * 0.9) / aspect;
-        const x = cal.origin_x + (cal.plot_width - w) / 2;
-        const y = cal.origin_y + (cal.plot_height - w * aspect) / 2;
-        setPlace({ x, y, width: w });
+        if (!placeholder) fit(pv); // keep the placement we already fitted
       })
-      .catch(fail);
+      .catch((e) => alive && fail(e))
+      .finally(() => alive && setLoadingPreview(false));
+    return () => {
+      alive = false;
+    };
   }, [sel, page, cal]);
+
+  // Live plottability rating of the current placement — debounced, same backend
+  // evaluation the gallery and the designer use, without writing a job file.
+  useEffect(() => {
+    if (!sel || !place) {
+      setScore(null);
+      return;
+    }
+    const mine = ++scoreSeq.current;
+    const timer = window.setTimeout(() => {
+      api
+        .sourceScore(sel.id, page, place.x, place.y, place.width)
+        .then((res) => scoreSeq.current === mine && setScore(res))
+        .catch(() => scoreSeq.current === mine && setScore(null));
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [sel, page, place]);
 
   const upload = async (file: File) => {
     setBusy(true);
@@ -104,6 +178,7 @@ export default function Place({
       await loadSources();
       setSel(src);
       setPage(1);
+      loadThumbs(); // refresh the rail in the background — don't block selection
       flash(
         t("place.loaded", {
           name: src.name,
@@ -116,6 +191,23 @@ export default function Place({
     } finally {
       setBusy(false);
     }
+  };
+
+  const pickFile = (file: File | undefined | null) => {
+    if (file) upload(file);
+  };
+
+  const removeSource = (s: Source) => {
+    api
+      .deleteSource(s.id)
+      .then(() => {
+        thumbCache.delete(s.id);
+        for (const k of previewCache.keys()) if (k.startsWith(`${s.id}:`)) previewCache.delete(k);
+        if (sel?.id === s.id) setSel(null);
+        loadSources();
+        loadThumbs();
+      })
+      .catch(fail);
   };
 
   if (!cal) return <div className="card">{t("common.loading")}</div>;
@@ -182,11 +274,12 @@ export default function Place({
 
   const generate = async (send: boolean) => {
     if (!sel || !place) return;
-    setBusy(true);
+    if (send) setSending(true); else setBusy(true);
     try {
       const job = await api.sourceGcode(sel.id, page, place.x, place.y, place.width);
       if (send) {
-        await api.send(job.filename, false);
+        // Plot directly — upload and start the print right away.
+        await api.send(job.filename, true);
         flash(t("place.gcodeSent", { file: job.filename }));
         onAction();
       } else {
@@ -195,8 +288,40 @@ export default function Place({
     } catch (e) {
       fail(e);
     } finally {
+      setSending(false);
       setBusy(false);
     }
+  };
+
+  // Hand the current drawing off to the full designer as an editable image
+  // object, scaled to the placement, on a fresh page — then switch tabs.
+  const toDesigner = () => {
+    if (!sel || !preview || !place || busy) return;
+    setBusy(true);
+    setErr(null);
+    const name = sel.name.replace(/\.[^.]+$/, "");
+    const { local } = localize(preview.polylines as Pt[][]);
+    const contentW = preview.bounds ? preview.bounds[2] - preview.bounds[0] : preview.width;
+    const scale = place.width / Math.max(contentW, 1);
+    api
+      .createPage(name)
+      .then((newPage) =>
+        api.savePage(newPage.id, {
+          objects: [
+            {
+              id: crypto.randomUUID(),
+              type: "image",
+              data: { sourceId: sel.id, name, basePolylines: local },
+              cachedPolylines: local,
+              transform: { x: cal.plot_width / 2, y: cal.plot_height / 2, rotation: 0, scale },
+              plotted: false,
+            },
+          ],
+        })
+      )
+      .then(() => onOpenPaint())
+      .catch(fail)
+      .finally(() => setBusy(false));
   };
 
   // Grid lines every 10mm.
@@ -230,14 +355,93 @@ export default function Place({
     ));
   };
 
+  const meta = (s: Source) =>
+    `${s.mode === "trace" ? t("place.traced") : t("place.vector")} · ${s.pages.length} ${t("place.pagesShort")} · ${s.pages.reduce((a, p) => a + p.lines, 0)} ${t("place.linesShort")}`;
+
   return (
-    <div className="grid place-grid">
-      <section className="card">
-        <h2>{t("place.previewTitle")}</h2>
-        {profileName && (
-          <p className="muted paint-profile">{t("paint.activeProfile", { name: profileName })}</p>
-        )}
-        <div className="liveview">
+    <div className="place-app">
+      <input
+        ref={fileRef}
+        type="file"
+        hidden
+        accept=".pdf,.svg,.png,.jpg,.jpeg,.bmp,.tif,.tiff,.odt,.ods,.odp,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
+        disabled={busy}
+        onChange={(e) => { pickFile(e.target.files?.[0]); e.target.value = ""; }}
+      />
+
+      {/* ---- file rail ---- */}
+      <aside className="place-rail">
+        <button className="place-upload-btn" disabled={busy} onClick={() => fileRef.current?.click()}>
+          <span className="plus">＋</span> {busy ? t("place.processing") : t("place.loadDocument")}
+        </button>
+
+        {/* import settings — always visible, applied to the next upload */}
+        <div className="place-import-opts">
+          <div className="place-opts-row">
+            <span className="place-opts-label">{t("place.mode")}</span>
+            <Segmented<Mode>
+              className="place-mode-seg"
+              value={mode}
+              onChange={setMode}
+              options={[
+                { value: "auto", label: <span className="place-mode-icon">✦</span>, title: t("place.modeAuto") },
+                { value: "vector", label: <span className="place-mode-icon">▱</span>, title: t("place.modeVector") },
+                { value: "trace", label: <span className="place-mode-icon">〰</span>, title: t("place.modeTrace") },
+                { value: "handwriting", label: <span className="place-mode-icon">✎</span>, title: t("place.modeHandwriting") },
+              ]}
+            />
+          </div>
+          {(mode === "trace" || mode === "auto" || mode === "handwriting") && (
+            <div className="place-opts-row">
+              <span className="place-opts-label">{t("place.detailLevel")}</span>
+              <Segmented
+                value={detail}
+                onChange={setDetail}
+                options={[
+                  { value: 1, label: t("place.coarse") },
+                  { value: 2, label: t("place.medium") },
+                  { value: 3, label: t("place.fine") },
+                ]}
+              />
+            </div>
+          )}
+          <p className="muted hint">
+            {mode === "auto" ? t("place.hintAuto") : mode === "vector" ? t("place.hintVector") : mode === "handwriting" ? t("place.hintHandwriting") : t("place.hintTrace")}
+          </p>
+        </div>
+
+        <h3 className="place-rail-title">{t("place.loadedDocs")}</h3>
+        <ul className="place-rail-list">
+          {sources.map((s) => (
+            <li key={s.id} className={sel?.id === s.id ? "active" : ""}>
+              <button className="place-thumb-btn" onClick={() => { setSel(s); setPage(1); }}>
+                <div className="place-thumb">
+                  <SourceThumb id={s.id} data={thumbs[s.id]} />
+                </div>
+                <div className="place-thumb-meta">
+                  <span className="name">{s.name}</span>
+                  <span className="muted">{meta(s)}</span>
+                </div>
+              </button>
+              <button className="ghost tiny place-thumb-del" title="✕" onClick={() => removeSource(s)}>✕</button>
+            </li>
+          ))}
+          {sources.length === 0 && <li className="place-rail-empty muted">{t("place.nothingLoaded")}</li>}
+        </ul>
+      </aside>
+
+      {/* ---- bed stage ---- */}
+      <section
+        className={`place-stage ${dragOver ? "drag-over" : ""}`}
+        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => { e.preventDefault(); setDragOver(false); pickFile(e.dataTransfer.files?.[0]); }}
+      >
+        <div className="place-canvas">
+          {sel && <ScoreOverlay result={score} />}
+          {profileName && (
+            <span className="place-profile-chip">{t("paint.activeProfile", { name: profileName })}</span>
+          )}
           <svg
             ref={svgRef}
             viewBox={`-8 -8 ${W + 16} ${H + 16}`}
@@ -277,10 +481,37 @@ export default function Place({
             )}
             <text x={1} y={H + 6.5} fontSize={6} fill="var(--muted)">0,0</text>
           </svg>
+
+          {!sel && !busy && (
+            <button
+              className="place-empty"
+              onClick={() => fileRef.current?.click()}
+            >
+              <span className="place-empty-icon">⬑</span>
+              <strong>{t("place.dropzone")}</strong>
+              <span className="muted">{t("place.nothingLoaded")}</span>
+            </button>
+          )}
+
+          {(busy || loadingPreview) && (
+            <div className="place-loading">
+              <span className="spinner" />
+              <span>{busy ? t("place.processing") : t("common.loading")}</span>
+            </div>
+          )}
         </div>
-        {place && (
-          <div className="place-controls">
-            <label className="field">
+
+        {sel && place && (
+          <div className="place-bar">
+            {sel.pages.length > 1 && (
+              <Segmented
+                value={page}
+                onChange={setPage}
+                wrap
+                options={sel.pages.map((p) => ({ value: p.n, label: p.n }))}
+              />
+            )}
+            <label className="field place-width">
               <span>{t("common.width")}</span>
               <div className="input-unit">
                 <input type="number" step="1" value={place.width.toFixed(0)}
@@ -288,110 +519,73 @@ export default function Place({
                 <em>mm</em>
               </div>
             </label>
-            <div className="place-readout muted">
+            <span className="place-readout muted">
               {place.width.toFixed(0)} × {drawH.toFixed(0)} mm · {t("place.corner")} ({place.x.toFixed(0)}, {place.y.toFixed(0)})
+            </span>
+            <div className="place-bar-actions">
+              <button className="ghost" disabled={busy || sending || !preview} onClick={toDesigner}>
+                {t("gallery.toPaint")}
+              </button>
+              <button className="ghost" disabled={busy || sending} onClick={() => generate(false)}>
+                {t("common.generateGcode")}
+              </button>
+              <button className="primary" disabled={busy || sending || !online} onClick={() => generate(true)}>
+                {sending ? t("paint.starting") : t("paint.directPlot")}
+              </button>
             </div>
           </div>
         )}
-        <div className="job-controls" style={{ marginTop: 12 }}>
-          <button className="primary" disabled={!place || busy} onClick={() => generate(false)}>
-            {t("common.generateGcode")}
-          </button>
-          <button disabled={!place || busy || !online} onClick={() => generate(true)}>
-            {t("place.generateSend")}
-          </button>
-        </div>
-        {msg && <div className="banner ok">{msg}</div>}
-        {err && <div className="banner err">{err}</div>}
-      </section>
 
-      <section className="card">
-        <h2>{t("place.loadDocument")}</h2>
-        <div className="field-group">
-          <h3>{t("place.mode")}</h3>
-          <Segmented<Mode>
-            value={mode}
-            onChange={setMode}
-            options={[
-              { value: "auto", label: t("place.modeAuto") },
-              { value: "vector", label: t("place.modeVector") },
-              { value: "trace", label: t("place.modeTrace") },
-            ]}
-          />
-          <p className="muted hint">
-            {mode === "auto"
-              ? t("place.hintAuto")
-              : mode === "vector"
-              ? t("place.hintVector")
-              : t("place.hintTrace")}
-          </p>
-          {(mode === "trace" || mode === "auto") && (
-            <>
-              <h3 style={{ marginTop: 12 }}>{t("place.detailLevel")}</h3>
-              <Segmented
-                value={detail}
-                onChange={setDetail}
-                options={[
-                  { value: 1, label: t("place.coarse") },
-                  { value: 2, label: t("place.medium") },
-                  { value: 3, label: t("place.fine") },
-                ]}
-              />
-            </>
-          )}
-        </div>
-        <label className={`dropzone ${busy ? "busy" : ""}`}>
-          <input type="file" accept=".pdf,.svg,.png,.jpg,.jpeg,.bmp,.tif,.tiff,.odt,.ods,.odp,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
-            disabled={busy}
-            onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
-          {busy ? t("place.processing") : t("place.dropzone")}
-        </label>
-
-        <div className="field-group" style={{ marginTop: 18 }}>
-          <h3>{t("place.loadedDocs")}</h3>
-          {sources.length === 0 && <p className="muted">{t("place.nothingLoaded")}</p>}
-          <ul className="jobs">
-            {sources.map((s) => (
-              <li key={s.id} className={sel?.id === s.id ? "sel" : ""}>
-                <button className="src-pick" onClick={() => { setSel(s); setPage(1); }}>
-                  <span className="name">{s.name}</span>
-                  <span className="muted">
-                    {s.mode === "trace" ? t("place.traced") : t("place.vector")} · {s.pages.length} {t("place.pagesShort")} ·{" "}
-                    {s.pages.reduce((a, p) => a + p.lines, 0)} {t("place.linesShort")}
-                  </span>
-                </button>
-                <button className="ghost" onClick={() =>
-                  api.deleteSource(s.id).then(() => {
-                    if (sel?.id === s.id) setSel(null);
-                    loadSources();
-                  }).catch(fail)
-                }>✕</button>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {sel && sel.pages.length > 1 && (
-          <div className="field-group">
-            <h3>{t("place.page")}</h3>
-            <Segmented
-              value={page}
-              onChange={setPage}
-              wrap
-              options={sel.pages.map((p) => ({ value: p.n, label: p.n }))}
-            />
+        {(msg || err) && (
+          <div className="place-banners">
+            {msg && <div className="banner ok">{msg}</div>}
+            {err && <div className="banner err">{err}</div>}
           </div>
-        )}
-        {pageInfo && (
-          <p className="muted">
-            {t("place.original", {
-              w: pageInfo.width.toFixed(0),
-              h: pageInfo.height.toFixed(0),
-              lines: pageInfo.lines,
-            })}
-          </p>
         )}
       </section>
     </div>
+  );
+}
+
+/** Tight polyline thumbnail of a source's first page, cropped to its content. */
+function SourceThumb({ id, data }: { id: string; data?: SourcePreview }) {
+  const [pv, setPv] = useState<SourcePreview | null>(data ?? thumbCache.get(id) ?? null);
+
+  useEffect(() => {
+    if (data) {
+      setPv(data);
+      return;
+    }
+    if (pv) return;
+    // Fallback for a source not yet in the batch (rare) — fetch its single thumb.
+    let alive = true;
+    api
+      .sourceThumbnail(id)
+      .then((res) => {
+        thumbCache.set(id, res);
+        if (alive) setPv(res);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [id, pv, data]);
+
+  if (!pv) return <span className="muted">…</span>;
+  const [bx0, by0, bx1, by1] = pv.bounds ?? [0, 0, pv.width, pv.height];
+  const w = Math.max(bx1 - bx0, 1);
+  const h = Math.max(by1 - by0, 1);
+  const d = pv.polylines
+    .map((line) => "M" + line.map(([x, y]) => `${x},${y}`).join("L"))
+    .join("");
+  return (
+    <svg
+      className="poly-preview"
+      viewBox={`${bx0 - w * 0.04} ${by0 - h * 0.04} ${w * 1.08} ${h * 1.08}`}
+      preserveAspectRatio="xMidYMid meet"
+    >
+      <path d={d} fill="none" stroke="var(--busy)" strokeWidth={Math.max(w, h) / 300}
+        strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }

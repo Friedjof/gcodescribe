@@ -25,9 +25,11 @@ const Z_STEPS = [0.05, 0.1, 0.5, 1, 5];
 export default function Paper({
   status,
   onAction,
+  visible = true,
 }: {
   status: any;
   onAction: () => void;
+  visible?: boolean; // false while the tab is kept mounted but hidden
 }) {
   const { t } = useI18n();
   const [cal, setCal] = useState<Calibration | null>(null);
@@ -72,10 +74,17 @@ export default function Paper({
     // Corner captures and "apply paper" write into the active profile, so
     // show which one that is.
     api.activeProfile().then((p) => setProfileName(p.name)).catch(() => {});
+  }, []);
+
+  // Poll the head position only while this tab is actually on screen — the tab
+  // is kept mounted across switches, so an always-on interval would keep hitting
+  // the printer in the background. Refresh immediately when it becomes visible.
+  useEffect(() => {
+    if (!visible) return;
     refreshPosition();
     const id = setInterval(refreshPosition, 2000);
     return () => clearInterval(id);
-  }, [refreshPosition]);
+  }, [visible, refreshPosition]);
 
   useEffect(() => {
     if (!previewJob) {
@@ -107,7 +116,9 @@ export default function Paper({
       raise: homed ? () => jogZ(1) : undefined,
       lower: homed ? () => jogZ(-1) : undefined,
     },
-    online && (active === 2 || active === 3)
+    // Only while the tab is on screen — the component stays mounted when hidden,
+    // and a stray arrow key must never jog the printer from another tab.
+    visible && online && (active === 2 || active === 3)
   );
   const kbd = (dir: string) => (pressed === dir ? " kbd-active" : "");
 

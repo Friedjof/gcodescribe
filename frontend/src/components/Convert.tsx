@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
-import { api, type GcodePreview3D, type Job } from "../api";
+import { api, type GcodePreview, type GcodePreview3D, type Job } from "../api";
 import { useI18n } from "../i18n";
 import Modal from "./Modal";
 import Gcode3D from "./Gcode3D";
+import { usePrompt } from "./dialogs";
+
+const jobThumbCache = new Map<string, GcodePreview>();
 
 function fmtSize(n: number) {
   return n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`;
@@ -11,9 +14,11 @@ function fmtSize(n: number) {
 export default function Convert({
   status,
   onAction,
+  visible = true,
 }: {
   status: any;
   onAction: () => void;
+  visible?: boolean; // false while the tab is kept mounted but hidden
 }) {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
@@ -21,7 +26,9 @@ export default function Convert({
   const [preview, setPreview] = useState<{ name: string; data: GcodePreview3D | null }>();
   const [fullscreen, setFullscreen] = useState(false);
   const [onlyActiveProfile, setOnlyActiveProfile] = useState(false);
+  const [query, setQuery] = useState("");
   const { t } = useI18n();
+  const { prompt, PromptNode } = usePrompt();
 
   const openPreview = (name: string) => {
     setPreview({ name, data: null });
@@ -42,9 +49,11 @@ export default function Convert({
   }, [fullscreen]);
 
   const refresh = () => api.listJobs().then(setJobs).catch(() => {});
+  // The tab is kept mounted across switches; refresh whenever it becomes
+  // visible so newly generated jobs show up without a full reload-on-click.
   useEffect(() => {
-    refresh();
-  }, []);
+    if (visible) refresh();
+  }, [visible]);
 
   const flash = (m: string) => {
     setMsg(m);
@@ -63,10 +72,10 @@ export default function Convert({
     }
   };
 
-  const rename = (name: string) => {
+  const rename = async (name: string) => {
     const base = name.replace(/\.gcode$/i, "");
-    const next = window.prompt(t("convert.renamePrompt"), base);
-    if (next == null) return; // cancelled
+    const next = await prompt(t("convert.renamePrompt"), base);
+    if (next == null) return;
     const trimmed = next.trim();
     if (!trimmed || trimmed === base) return;
     api
@@ -112,12 +121,17 @@ export default function Convert({
     return <span className="pbadge pbadge-active">{j.profile.name}</span>;
   };
 
-  const visibleJobs = onlyActiveProfile
+  const profileJobs = onlyActiveProfile
     ? jobs.filter((j) => j.profile?.matchesActive)
     : jobs;
-  const hiddenCount = jobs.length - visibleJobs.length;
+  const hiddenCount = jobs.length - profileJobs.length;
+  const q = query.trim().toLowerCase();
+  const visibleJobs = q
+    ? profileJobs.filter((j) => j.filename.toLowerCase().includes(q))
+    : profileJobs;
 
   return (
+    <>
     <div className="single-col">
       <section className="card">
         <h2>{t("convert.title")}</h2>
@@ -133,7 +147,19 @@ export default function Convert({
             <span className="muted"> · {t("convert.hiddenJobs", { count: String(hiddenCount) })}</span>
           )}
         </label>
+        {jobs.length > 0 && (
+          <input
+            className="job-search"
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t("convert.search")}
+          />
+        )}
         {jobs.length === 0 && <p className="muted">{t("convert.noJobs")}</p>}
+        {jobs.length > 0 && visibleJobs.length === 0 && q && (
+          <p className="muted">{t("convert.noMatches")}</p>
+        )}
         <ul className="jobs">
           {visibleJobs.map((j) => {
             const unfit = j.fits === false;
@@ -142,11 +168,18 @@ export default function Convert({
             return (
               <li key={j.filename} className={(unfit ? "job-unfit" : "") + (blocked ? " job-foreign" : "")}>
                 <button
+                  className="job-thumb-btn"
+                  title={t("convert.openPreview")}
+                  onClick={() => openPreview(j.filename)}
+                >
+                  <JobThumb filename={j.filename} />
+                </button>
+                <button
                   className="job-meta job-open"
                   title={t("convert.openPreview")}
                   onClick={() => openPreview(j.filename)}
                 >
-                  <span className="name">{j.filename}</span>
+                  <span className="name" title={j.filename}>{j.filename}</span>
                   <span className="job-badges">
                     {profileBadge(j)}
                     {unfit ? (
@@ -261,5 +294,68 @@ export default function Convert({
         );
       })()}
     </div>
+    {PromptNode}
+    </>
   );
+}
+
+function JobThumb({ filename }: { filename: string }) {
+  const [preview, setPreview] = useState<GcodePreview | null>(jobThumbCache.get(filename) ?? null);
+
+  useEffect(() => {
+    if (preview) return;
+    let alive = true;
+    api
+      .jobPreview(filename)
+      .then((data) => {
+        jobThumbCache.set(filename, data);
+        if (alive) setPreview(data);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [filename, preview]);
+
+  if (!preview) return <span className="job-thumb-placeholder">…</span>;
+  return <GcodeThumbSvg preview={preview} />;
+}
+
+function GcodeThumbSvg({ preview }: { preview: GcodePreview }) {
+  const bounds = preview.bounds ?? boundsFromPolylines([...preview.polylines, ...preview.travels]);
+  if (!bounds) return <span className="job-thumb-placeholder">–</span>;
+
+  const [x0, y0, x1, y1] = bounds;
+  const width = Math.max(x1 - x0, 1);
+  const height = Math.max(y1 - y0, 1);
+  const pad = Math.max(width, height) * 0.05;
+  const toPath = (lines: number[][][]) => lines.map((line) => "M" + line.map(([x, y]) => `${x},${y}`).join("L")).join("");
+  const strokeWidth = Math.max(width, height) / 180;
+
+  return (
+    <svg
+      className="job-thumb-svg"
+      viewBox={`${x0 - pad} ${y0 - pad} ${width + pad * 2} ${height + pad * 2}`}
+      preserveAspectRatio="xMidYMid meet"
+    >
+      <path d={toPath(preview.travels)} className="job-thumb-travel" fill="none" strokeWidth={strokeWidth} />
+      <path d={toPath(preview.polylines)} className="job-thumb-draw" fill="none" strokeWidth={strokeWidth} />
+    </svg>
+  );
+}
+
+function boundsFromPolylines(lines: number[][][]): [number, number, number, number] | null {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const line of lines) {
+    for (const [x, y] of line) {
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  }
+  return Number.isFinite(minX) ? [minX, minY, maxX, maxY] : null;
 }

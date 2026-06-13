@@ -14,6 +14,7 @@ import {
   bounds,
   snapPt,
   toPath,
+  toMultiPath,
 } from "../paint/geometry";
 
 export type Tool = "select" | "pen" | "line" | "rect" | "circle" | "semicircle" | "text";
@@ -549,11 +550,10 @@ export default function PaintCanvas({
               opacity={obj.plotted ? 0.25 : 1}
               style={{ pointerEvents: "none" }}
             >
-              {(obj.cachedPolylines ?? []).map((line, i) => (
-                <path key={i} d={toPath(line as Pt[])} fill="none"
-                  stroke={obj.plotted ? "var(--muted)" : "var(--busy)"}
-                  strokeWidth={STROKE / strokeScale} strokeLinejoin="round" strokeLinecap="round" />
-              ))}
+              {/* One merged path per object — all lines share the same stroke. */}
+              <path d={toMultiPath((obj.cachedPolylines ?? []) as Pt[][])} fill="none"
+                stroke={obj.plotted ? "var(--muted)" : "var(--busy)"}
+                strokeWidth={STROKE / strokeScale} strokeLinejoin="round" strokeLinecap="round" />
             </g>
           );
         })}

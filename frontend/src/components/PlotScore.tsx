@@ -45,8 +45,14 @@ function insights(
 /** Floating plottability score over the paint canvas: colored chip top-left,
  * with a hover panel breaking down sub-scores, key facts and tuning hints. */
 export default function PlotScore({ pageId, objects }: { pageId: string; objects: SceneObject[] }) {
-  const { t } = useI18n();
   const result = usePageScore(pageId, objects);
+  return <ScoreOverlay result={result} />;
+}
+
+/** Presentational score overlay — same chip + hover breakdown, driven by a
+ * precomputed rating so any view (paint canvas, placement bed, …) can reuse it. */
+export function ScoreOverlay({ result }: { result: PageScore | null }) {
+  const { t } = useI18n();
   if (!result) return null;
 
   const { score, metrics, reason } = result;

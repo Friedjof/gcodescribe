@@ -128,3 +128,10 @@ export function snapPt(p: Pt, step: number, on: boolean): Pt {
 export function toPath(line: Pt[]): string {
   return line.map((p, i) => `${i === 0 ? "M" : "L"} ${p[0].toFixed(2)} ${p[1].toFixed(2)}`).join(" ");
 }
+
+// All polylines of an object joined into one path string. Rendering a single
+// <path> per object (instead of one per line) collapses thousands of DOM nodes
+// for image-heavy pages into one, which dominates canvas render/reconcile cost.
+export function toMultiPath(lines: Pt[][]): string {
+  return lines.map(toPath).join(" ");
+}
