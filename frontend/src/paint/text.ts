@@ -1,38 +1,24 @@
 import type { Pt } from "./geometry";
 
-export type TextFont =
-  | "pdf-serif"
-  | "pdf-sans"
-  | "pdf-script"
-  | "pdf-times"
-  | "print"
-  | "printSerif"
-  | "block"
-  | "serif"
-  | "script"
-  | "narrow"
-  | "rounded"
-  | "techno"
-  | "hand";
+// Plottable fonts. "sans" is a real single-line (single-stroke) font rendered
+// by the backend from a vendored OTF/TTF — one thin centreline per glyph, ideal
+// for plotting. "block" is the legacy client-side 5x7 fallback.
+export type TextFont = "sans" | "hand" | "script" | "block";
 
 export const TEXT_FONTS: { value: TextFont; labelKey: string }[] = [
-  { value: "pdf-serif", labelKey: "font.pdfSerif" },
-  { value: "pdf-times", labelKey: "font.pdfTimes" },
-  { value: "pdf-sans", labelKey: "font.pdfSans" },
-  { value: "pdf-script", labelKey: "font.pdfScript" },
-  { value: "print", labelKey: "font.printed" },
-  { value: "printSerif", labelKey: "font.printedSerif" },
-  { value: "block", labelKey: "font.drawnBlock" },
-  { value: "serif", labelKey: "font.drawnSerif" },
-  { value: "script", labelKey: "font.drawnScript" },
-  { value: "narrow", labelKey: "font.narrow" },
-  { value: "rounded", labelKey: "font.rounded" },
-  { value: "techno", labelKey: "font.techno" },
+  { value: "sans", labelKey: "font.sans" },
   { value: "hand", labelKey: "font.hand" },
+  { value: "script", labelKey: "font.script" },
+  { value: "block", labelKey: "font.drawnBlock" },
 ];
 
-export const isOutlineFont = (font: TextFont) => font.startsWith("pdf-");
+// Fonts rendered on the backend (vendored single-line files) vs. the local
+// 5x7 generator. Server fonts go through api.textPolylines.
+const SERVER_FONTS = new Set<TextFont>(["sans", "hand", "script"]);
+export const isServerFont = (font: TextFont) => SERVER_FONTS.has(font);
 
+// 5x7 stroke bitmap. Each glyph is drawn as merged horizontal/vertical runs so
+// the plotter follows single strokes rather than filling outlines.
 const FONT: Record<string, string[]> = {
   " ": ["00000", "00000", "00000", "00000", "00000", "00000", "00000"],
   A: ["01110", "10001", "10001", "11111", "10001", "10001", "10001"],
@@ -90,70 +76,10 @@ function normalizeText(text: string): string {
     .replace(/ẞ/g, "SS");
 }
 
-function distortPoint([x, y]: Pt, font: TextFont, unit: number): Pt {
-  if (font === "narrow") return [x * 0.72, y];
-  if (font === "serif") return [x + y * 0.035, y];
-  if (font === "script") return [x + y * 0.22, y];
-  if (font === "rounded") return [x + Math.sin(y / unit) * unit * 0.08, y];
-  if (font === "techno") return [x + (y % (unit * 2) > unit ? unit * 0.18 : 0), y];
-  if (font === "hand") return [x + Math.sin(y / unit) * unit * 0.28 + y * 0.08, y];
-  return [x, y];
-}
-
-function styleLine(line: Pt[], font: TextFont, unit: number): Pt[] {
-  const styled = line.map((p) => distortPoint(p, font, unit));
-  if ((font !== "hand" && font !== "script" && font !== "rounded") || styled.length !== 2) return styled;
-  const [a, b] = styled;
-  return [
-    a,
-    [(a[0] + b[0]) / 2 + unit * (font === "script" ? 0.22 : 0.12), (a[1] + b[1]) / 2 - unit * 0.08],
-    b,
-  ];
-}
-
-function rect(x0: number, y0: number, x1: number, y1: number): Pt[] {
-  return [[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]];
-}
-
-function printedCellPolylines(ch: string, x: number, y: number, unit: number, font: TextFont): Pt[][] {
+function charPolylines(ch: string, x: number, y: number, unit: number): Pt[][] {
   const grid = FONT[ch] ?? FONT["?"];
   const lines: Pt[][] = [];
-  const gap = unit * 0.08;
-  const serif = font === "printSerif" ? unit * 0.22 : 0;
-  for (let row = 0; row < grid.length; row++) {
-    for (let col = 0; col < 5; col++) {
-      if (grid[row][col] !== "1") continue;
-      const x0 = x + col * unit + gap;
-      const y0 = y + row * unit + gap;
-      const x1 = x + (col + 1) * unit - gap;
-      const y1 = y + (row + 1) * unit - gap;
-      lines.push(rect(x0, y0, x1, y1));
-      if (serif > 0 && (row === 0 || row === grid.length - 1)) {
-        lines.push(rect(x0 - serif, y0, x1 + serif, y0 + unit * 0.18));
-        lines.push(rect(x0 - serif, y1 - unit * 0.18, x1 + serif, y1));
-      }
-    }
-  }
-  return lines;
-}
-
-function serifCaps(line: Pt[], unit: number): Pt[][] {
-  if (line.length < 2) return [];
-  const a = line[0], b = line[line.length - 1];
-  const dx = b[0] - a[0], dy = b[1] - a[1];
-  const len = Math.hypot(dx, dy) || 1;
-  const nx = (-dy / len) * unit * 0.32;
-  const ny = (dx / len) * unit * 0.32;
-  return [
-    [[a[0] - nx, a[1] - ny], [a[0] + nx, a[1] + ny]],
-    [[b[0] - nx, b[1] - ny], [b[0] + nx, b[1] + ny]],
-  ];
-}
-
-function charPolylines(ch: string, x: number, y: number, unit: number, font: TextFont): Pt[][] {
-  if (font === "print" || font === "printSerif") return printedCellPolylines(ch, x, y, unit, font);
-  const grid = FONT[ch] ?? FONT["?"];
-  const lines: Pt[][] = [];
+  // Horizontal runs.
   for (let row = 0; row < grid.length; row++) {
     let col = 0;
     while (col < 5) {
@@ -163,12 +89,11 @@ function charPolylines(ch: string, x: number, y: number, unit: number, font: Tex
       }
       const start = col;
       while (col + 1 < 5 && grid[row][col + 1] === "1") col++;
-      const line = styleLine([[x + start * unit, y + row * unit], [x + (col + 1) * unit, y + row * unit]], font, unit);
-      lines.push(line);
-      if (font === "serif") lines.push(...serifCaps(line, unit));
+      lines.push([[x + start * unit, y + row * unit], [x + (col + 1) * unit, y + row * unit]]);
       col++;
     }
   }
+  // Vertical runs (length > 1 only, to avoid duplicating single cells).
   for (let col = 0; col < 5; col++) {
     let row = 0;
     while (row < grid.length) {
@@ -179,9 +104,7 @@ function charPolylines(ch: string, x: number, y: number, unit: number, font: Tex
       const start = row;
       while (row + 1 < grid.length && grid[row + 1][col] === "1") row++;
       if (row > start) {
-        const line = styleLine([[x + col * unit, y + start * unit], [x + col * unit, y + (row + 1) * unit]], font, unit);
-        lines.push(line);
-        if (font === "serif") lines.push(...serifCaps(line, unit));
+        lines.push([[x + col * unit, y + start * unit], [x + col * unit, y + (row + 1) * unit]]);
       }
       row++;
     }
@@ -189,7 +112,7 @@ function charPolylines(ch: string, x: number, y: number, unit: number, font: Tex
   return lines;
 }
 
-export function textWorld(text: string, origin: Pt, heightMm = 12, font: TextFont = "block"): Pt[][] {
+export function textWorld(text: string, origin: Pt, heightMm = 12): Pt[][] {
   const unit = heightMm / 7;
   const lines: Pt[][] = [];
   let x = origin[0];
@@ -200,15 +123,8 @@ export function textWorld(text: string, origin: Pt, heightMm = 12, font: TextFon
       y += unit * 9;
       continue;
     }
-    lines.push(...charPolylines(ch, x, y, unit, font));
-    if (font === "script" && ch !== " ") {
-      lines.push([[x + unit * 4.8, y + unit * 6.4], [x + unit * 6.4, y + unit * 5.9]]);
-    }
-    x += unit * (font === "narrow" ? 5.2 : font === "script" ? 6.2 : font === "print" || font === "printSerif" ? 6.4 : 7);
+    lines.push(...charPolylines(ch, x, y, unit));
+    x += unit * 7;
   }
   return lines;
-}
-
-export function textLocalPolylines(text: string, heightMm = 12, font: TextFont = "block"): Pt[][] {
-  return textWorld(text || "Text", [0, 0], heightMm, font);
 }

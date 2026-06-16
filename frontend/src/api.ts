@@ -592,10 +592,10 @@ export const api = {
     }),
   galleryDelete: (id: string) => req(`/api/gallery/${id}`, { method: "DELETE" }),
 
-  textPolylines: (text: string, font: string, size: number) =>
+  textPolylines: (text: string, font: string, size: number, connectSpaces = false) =>
     req<{ polylines: number[][][] }>("/api/paint/text-polylines", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, font, size }),
+      body: JSON.stringify({ text, font, size, connect_spaces: connectSpaces }),
     }),
 };

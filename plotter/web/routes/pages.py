@@ -11,7 +11,7 @@ from ...pipeline import PlotterError
 from ...scene import page_polylines, save_scene_job, scene_gcode
 from ...services.profiles import ProfileService, profile_meta
 from ...services.upload_validation import MAX_GCODE_BYTES
-from ...text import text_polylines
+from ...singleline import text_polylines
 from .jobs import _job_info
 
 router = APIRouter(tags=["pages"])
@@ -105,12 +105,14 @@ class SaveRequest(BaseModel):
     objects: list | None = None
     grid: dict | None = None
     name: str | None = None
+    markdown: str | None = None
 
 
 class TextPreviewRequest(BaseModel):
     text: str = "Text"
-    font: str = "pdf-serif"
+    font: str = "sans"
     size: float = 12.0
+    connect_spaces: bool = False
 
 
 @router.put("/pages/{page_id}")
@@ -272,4 +274,8 @@ def page_preview_3d(page_id: str, req: SceneRequest) -> dict:
 
 @router.post("/paint/text-polylines")
 def paint_text_polylines(req: TextPreviewRequest) -> dict:
-    return {"polylines": text_polylines(req.text, font=req.font, size=req.size)}
+    return {
+        "polylines": text_polylines(
+            req.text, font=req.font, size=req.size, connect_spaces=req.connect_spaces
+        )
+    }

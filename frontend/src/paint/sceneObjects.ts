@@ -1,6 +1,6 @@
 import { api, type SceneObject } from "../api";
 import { localize, type Pt } from "./geometry";
-import { isOutlineFont, textWorld, type TextFont } from "./text";
+import { isServerFont, textWorld, type TextFont } from "./text";
 import { buildStyledPolylines, normalizeStyle, type VectorStyle } from "./styling";
 
 /** Pure scene-object helpers shared by the paint editor. */
@@ -35,17 +35,20 @@ export function withStyledCache(obj: SceneObject): SceneObject {
   };
 }
 
-export function textGeometry(text: string, size: number, font: TextFont, fallbackText = "Text") {
-  return localize(textWorld(text || fallbackText, [0, 0], size, font));
+export function textGeometry(text: string, size: number, _font: TextFont, fallbackText = "Text") {
+  return localize(textWorld(text || fallbackText, [0, 0], size));
 }
 
+// Single-line server fonts are rendered by the backend; the local 5x7 "block"
+// font stays client-side. Either way the caller gets localized polylines.
 export async function textGeometryAsync(
   text: string,
   size: number,
   font: TextFont,
-  fallbackText = "Text"
+  fallbackText = "Text",
+  connectSpaces = false
 ) {
-  if (!isOutlineFont(font)) return textGeometry(text, size, font, fallbackText);
-  const res = await api.textPolylines(text || fallbackText, font, size);
+  if (!isServerFont(font)) return textGeometry(text, size, font, fallbackText);
+  const res = await api.textPolylines(text || fallbackText, font, size, connectSpaces);
   return localize(res.polylines as Pt[][]);
 }
