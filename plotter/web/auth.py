@@ -41,3 +41,12 @@ def require_admin(request: Request) -> dict:
     if session is None:
         raise HTTPException(status_code=401, detail="Login erforderlich.")
     return session
+
+
+def optional_admin(request: Request) -> dict | None:
+    """Like ``require_admin`` but returns ``None`` instead of raising when there
+    is no valid admin session. For endpoints that stay public yet behave
+    differently for a logged-in admin (e.g. tagging gallery uploads)."""
+    if os.environ.get("PLOTTER_AUTH_TEST_BYPASS", "").lower() in ("1", "true", "yes"):
+        return {"username": "test", "expires": 0}
+    return AuthService().validate_session(session_token(request))
