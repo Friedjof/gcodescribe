@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
-import { api, type GalleryItem, type GallerySvg } from "../api";
+import { api, type GalleryItem, type GallerySvg, type GalleryUploader } from "../api";
 import { useI18n } from "../i18n";
 import GalleryDetail from "./GalleryDetail";
 import PolylinePreview from "./PolylinePreview";
 import ScoreBadge from "./ScoreBadge";
+import Segmented from "./Segmented";
+
+type UploaderFilter = "all" | GalleryUploader;
 
 // Thumbnails are tiny polyline sets; cache them across tab switches.
 const thumbCache = new Map<string, GallerySvg>();
@@ -14,6 +17,8 @@ export default function Gallery({ onOpenPaint }: { onOpenPaint: () => void }) {
   const { t, lang } = useI18n();
   const [items, setItems] = useState<GalleryItem[]>(listCache);
   const [showArchived, setShowArchived] = useState(false);
+  const [uploaderFilter, setUploaderFilter] = useState<UploaderFilter>("all");
+  const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   // Bump to re-render once batched thumbnails have landed in the cache.
@@ -46,7 +51,13 @@ export default function Gallery({ onOpenPaint }: { onOpenPaint: () => void }) {
     return () => clearInterval(id);
   }, []);
 
-  const visible = items.filter((i) => showArchived || i.status === "active");
+  const q = query.trim().toLowerCase();
+  const visible = items.filter(
+    (i) =>
+      (showArchived || i.status === "active") &&
+      (uploaderFilter === "all" || i.uploader === uploaderFilter) &&
+      (!q || i.title.toLowerCase().includes(q) || i.filename.toLowerCase().includes(q))
+  );
   const archivedCount = items.length - items.filter((i) => i.status === "active").length;
   // Resolve from the list so the open detail reflects refreshes (e.g. a new
   // title) and closes by itself once the item is deleted.
@@ -68,6 +79,26 @@ export default function Gallery({ onOpenPaint }: { onOpenPaint: () => void }) {
             />
             {t("gallery.showArchived")} ({archivedCount})
           </label>
+        </div>
+
+        <div className="gallery-controls">
+          <Segmented<UploaderFilter>
+            className="gallery-filter-seg"
+            value={uploaderFilter}
+            onChange={setUploaderFilter}
+            options={[
+              { value: "all", label: t("gallery.filterAll") },
+              { value: "admin", label: t("gallery.filterAdmin") },
+              { value: "public", label: t("gallery.filterUser") },
+            ]}
+          />
+          <input
+            className="gallery-search"
+            type="search"
+            placeholder={t("gallery.search")}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
         </div>
 
         {err && <div className="banner err">{err}</div>}
@@ -114,6 +145,9 @@ function GalleryCard({
       <div className="gallery-thumb">
         {svg ? <PolylinePreview data={svg} /> : <span className="muted">…</span>}
         <ScoreBadge score={item.score} />
+        <span className={`gallery-uploader uploader-${item.uploader}`}>
+          {item.uploader === "admin" ? t("gallery.byAdmin") : t("gallery.byUser")}
+        </span>
         {item.status === "archived" && (
           <span className="gallery-flag">{t("gallery.archived")}</span>
         )}

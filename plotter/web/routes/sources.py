@@ -7,6 +7,10 @@ from ...services.profiles import ProfileService
 from ...services.sources import SourceService
 from .jobs import _job_info
 
+# LEGACY: the Sources store is superseded by the unified gallery (merge plan
+# stage 5d). The designer image import and gallery popup now go through
+# /api/gallery; only the Place tab still calls these endpoints and they are
+# removed together with Place in stage 7/8. No new callers should be added.
 router = APIRouter(tags=["sources"])
 
 

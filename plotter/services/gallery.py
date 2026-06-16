@@ -14,12 +14,20 @@ from ..gallery_metrics import evaluate_gcode
 from ..jobmeta import profile_comment
 from ..pipeline import PlotterError
 from ..trace import IMAGE_DPI, trace_image_to_svg
+from .asset_pages import (
+    DESIGNER_POINTS,
+    VALID_MODES,
+    build_pages,
+    preview_for,
+    thumbnail_for,
+)
 from .errors import ServiceError
 from .profiles import ProfileService, profile_meta
 from .upload_validation import (
     MAX_GCODE_BYTES,
     MAX_UPLOAD_BYTES,
     UploadTooLarge,
+    sniff_asset_kind,
     sniff_kind,
 )
 
@@ -33,11 +41,20 @@ _THUMB_PREVIEW_POINTS = 1200
 
 
 class GalleryService:
-    """Event submissions: uploaded artwork scored for plottability.
+    """The unified asset library.
 
-    Every submission lives in ``data/gallery/<id>/`` with the original file,
-    the derived SVG, the generated G-code and a ``meta.json``. Uploads that
-    bust the size limits are deleted immediately and never listed.
+    Two kinds of upload share ``data/gallery/<id>/``:
+
+    - **Public submissions** (``/upload`` competition, ``uploader="public"``):
+      a single image/SVG, traced, fitted and **scored** for plottability —
+      stored as ``image.svg`` + ``job.gcode`` (the original behaviour).
+    - **Admin assets** (``uploader="admin"``): general documents (PDF/Office)
+      and images rendered to one or more page SVGs via the shared
+      :mod:`asset_pages` core, with **on-demand** previews and **no** upfront
+      score (placement is scored later via ``pageScore``).
+
+    Every item carries a unified ``pages`` list; uploads that bust the size
+    limits are deleted immediately and never listed.
     """
 
     def __init__(self, root: Path | None = None):
@@ -46,27 +63,75 @@ class GalleryService:
 
     # -- creation --------------------------------------------------------------
 
-    def create(self, filename: str, data: bytes, title: str = "") -> dict:
+    def create(
+        self,
+        filename: str,
+        data: bytes,
+        title: str = "",
+        uploader: str = "public",
+        *,
+        mode: str = "auto",
+        detail: int = 2,
+    ) -> dict:
         if len(data) > MAX_UPLOAD_BYTES:
             raise UploadTooLarge(
                 f"Datei zu groß — maximal {MAX_UPLOAD_BYTES // (1024 * 1024)} MB."
             )
-        kind = sniff_kind(Path(filename).name, data)
+        uploader = uploader if uploader in ("admin", "public") else "public"
+        name = Path(filename).name
         title = title.strip()[:MAX_TITLE_LEN]
+        # Public uploads are scored single-image competition entries; only the
+        # admin library accepts documents and uses the multi-page asset path.
+        if uploader == "admin":
+            if mode not in VALID_MODES:
+                raise ServiceError(f"Unbekannter Modus: {mode}")
+            kind = sniff_asset_kind(name, data)
+        else:
+            kind = sniff_kind(name, data)
 
         item_id = uuid.uuid4().hex[:12]
         item_dir = self.root / item_id
         item_dir.mkdir(parents=True)
         try:
-            meta = self._build(item_dir, Path(filename).name, data, kind, title, item_id)
+            if uploader == "admin":
+                meta = self._build_asset(item_dir, name, data, kind, title, item_id, mode, detail)
+            else:
+                meta = self._build_submission(item_dir, name, data, kind, title, item_id)
         except Exception:
             shutil.rmtree(item_dir, ignore_errors=True)
             raise
         (item_dir / "meta.json").write_text(json.dumps(meta, indent=2))
         return meta
 
-    def _build(
-        self, item_dir: Path, filename: str, data: bytes, kind: str, title: str, item_id: str
+    def _build_asset(
+        self, item_dir: Path, filename: str, data: bytes, kind: str, title: str,
+        item_id: str, mode: str, detail: int,
+    ) -> dict:
+        """Admin document/image → page SVGs (no upfront score)."""
+        suffix = Path(filename).suffix.lower()
+        original = item_dir / f"original{suffix}"
+        original.write_bytes(data)
+        pages, mode_used = build_pages(original, item_dir, suffix, mode, detail)
+        first = pages[0]
+        return {
+            "id": item_id,
+            "title": title,
+            "filename": filename,
+            "kind": kind,
+            "uploader": "admin",
+            "created": time.time(),
+            "status": "active",
+            "mode": mode_used,
+            "detail": detail,
+            "pages": pages,
+            "width": first["width"],
+            "height": first["height"],
+            "lines": first["lines"],
+        }
+
+    def _build_submission(
+        self, item_dir: Path, filename: str, data: bytes, kind: str, title: str,
+        item_id: str,
     ) -> dict:
         original = item_dir / f"original.{kind if kind != 'jpeg' else 'jpg'}"
         original.write_bytes(data)
@@ -93,16 +158,25 @@ class GalleryService:
             )
         (item_dir / _GCODE_FILE).write_text(gcode)
 
+        width = round(drawing.width, 3)
+        height = round(drawing.height, 3)
+        lines = len(drawing.polylines)
         return {
             "id": item_id,
             "title": title,
             "filename": filename,
             "kind": kind,
+            "uploader": "public",
             "created": time.time(),
             "status": "active",
-            "width": round(drawing.width, 3),
-            "height": round(drawing.height, 3),
-            "lines": len(drawing.polylines),
+            "mode": "vector" if kind == "svg" else "trace",
+            "detail": 2,
+            "pages": [
+                {"n": 1, "file": _SVG_FILE, "width": width, "height": height, "lines": lines}
+            ],
+            "width": width,
+            "height": height,
+            "lines": lines,
             "profile": active_meta,
             **evaluate_gcode(gcode, MAX_GCODE_BYTES),
         }
@@ -121,22 +195,50 @@ class GalleryService:
 
     # -- queries ---------------------------------------------------------------
 
-    def list(self, *, include_archived: bool = True) -> list[dict]:
+    def list(self, *, include_archived: bool = True, uploader: str | None = None) -> list[dict]:
         metas = []
         for meta_file in self.root.glob("*/meta.json"):
             try:
                 meta = json.loads(meta_file.read_text())
             except (OSError, json.JSONDecodeError):
                 continue
-            if include_archived or meta.get("status") != "archived":
-                metas.append(meta)
+            self._normalize(meta)
+            if not include_archived and meta.get("status") == "archived":
+                continue
+            if uploader and meta.get("uploader") != uploader:
+                continue
+            metas.append(meta)
         return sorted(metas, key=lambda m: m.get("created", 0), reverse=True)
 
     def get(self, item_id: str) -> dict:
         meta_file = self.root / item_id / "meta.json"
         if not meta_file.exists():
             raise ServiceError(f"Einreichung nicht gefunden: {item_id}")
-        return json.loads(meta_file.read_text())
+        meta = json.loads(meta_file.read_text())
+        self._normalize(meta)
+        return meta
+
+    @staticmethod
+    def _normalize(meta: dict) -> None:
+        """Backfill fields added after an item was written (items uploaded before
+        the uploader tag existed came from the public /upload page; items from
+        before the unified asset model lack ``pages``/``mode``/``detail``)."""
+        meta.setdefault("uploader", "public")
+        if "pages" not in meta:
+            meta["pages"] = [{
+                "n": 1, "file": _SVG_FILE,
+                "width": meta.get("width"), "height": meta.get("height"),
+                "lines": meta.get("lines"),
+            }]
+        meta.setdefault("mode", "vector" if meta.get("kind") == "svg" else "trace")
+        meta.setdefault("detail", 2)
+
+    @staticmethod
+    def _page_entry(meta: dict, page: int) -> dict:
+        for p in meta.get("pages", []):
+            if p["n"] == page:
+                return p
+        raise ServiceError(f"Seite {page} in Galerie-Eintrag {meta['id']} nicht gefunden")
 
     def gcode_path(self, item_id: str) -> Path:
         path = self.root / item_id / _GCODE_FILE
@@ -167,13 +269,33 @@ class GalleryService:
     def svg_thumbnail(self, item_id: str) -> dict:
         return self.svg_preview(item_id, max_points=_THUMB_PREVIEW_POINTS)
 
+    def preview(self, item_id: str, page: int = 1, *, max_points: int = DESIGNER_POINTS) -> dict:
+        """On-demand downsampled preview of one page, for any item type.
+
+        Single-image submissions keep their ``image.svg`` cache; multi-page
+        admin assets go through the shared :mod:`asset_pages` page cache.
+        """
+        meta = self.get(item_id)
+        entry = self._page_entry(meta, page)
+        if entry["file"] == _SVG_FILE:
+            return self.svg_preview(item_id, max_points=max_points)
+        return preview_for(self.root / item_id, entry["file"], page, max_points)
+
+    def thumbnail(self, item_id: str) -> dict:
+        """Page-1 grid thumbnail for any item type."""
+        meta = self.get(item_id)
+        entry = self._page_entry(meta, 1)
+        if entry["file"] == _SVG_FILE:
+            return self.svg_thumbnail(item_id)
+        return thumbnail_for(self.root / item_id, entry["file"])
+
     def svg_thumbnails(self) -> dict:
         """All grid thumbnails in one shot (disk-cached), so the gallery loads
         with a single request instead of one round-trip per card."""
         out: dict[str, dict] = {}
         for meta in self.list(include_archived=True):
             try:
-                out[meta["id"]] = self.svg_thumbnail(meta["id"])
+                out[meta["id"]] = self.thumbnail(meta["id"])
             except (ServiceError, OSError):
                 pass
         return out

@@ -66,12 +66,14 @@ export default function Upload() {
               <p className="muted">{t("upload.successBody")}</p>
             </div>
           </div>
-          <ul className="upload-scores muted">
-            <li>{t("score.time")}: {result.score.time}</li>
-            <li>{t("score.lifts")}: {result.score.lifts}</li>
-            <li>{t("score.size")}: {result.score.size}</li>
-            <li>{t("score.detail")}: {result.score.detail}</li>
-          </ul>
+          {result.score && (
+            <ul className="upload-scores muted">
+              <li>{t("score.time")}: {result.score.time}</li>
+              <li>{t("score.lifts")}: {result.score.lifts}</li>
+              <li>{t("score.size")}: {result.score.size}</li>
+              <li>{t("score.detail")}: {result.score.detail}</li>
+            </ul>
+          )}
           <button className="primary" onClick={() => setResult(null)}>
             {t("upload.again")}
           </button>

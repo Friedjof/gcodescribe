@@ -12,6 +12,7 @@ from plotter.services.upload_validation import (
     MAX_UPLOAD_BYTES,
     UnsupportedUpload,
     UploadTooLarge,
+    sniff_asset_kind,
     sniff_kind,
 )
 
@@ -107,6 +108,17 @@ class TestValidation:
         with pytest.raises(UnsupportedUpload):
             sniff_kind("a.svg", b'<!DOCTYPE svg [<!ENTITY x "y">]><svg/>')
 
+    def test_sniff_asset_accepts_documents(self):
+        assert sniff_asset_kind("a.svg", SVG) == "svg"
+        assert sniff_asset_kind("a.pdf", b"%PDF-1.7\n...") == "pdf"
+        assert sniff_asset_kind("a.docx", b"PK\x03\x04rest") == "docx"
+
+    def test_sniff_asset_rejects_bad_document_magic(self):
+        with pytest.raises(UnsupportedUpload):
+            sniff_asset_kind("a.pdf", b"not a pdf")
+        with pytest.raises(UnsupportedUpload):
+            sniff_asset_kind("a.docx", b"not a zip")
+
 
 class TestGalleryService:
     def test_create_svg_submission(self, cal):
@@ -180,6 +192,43 @@ class TestGalleryService:
         assert svc.get(meta["id"])["title"] == "Neuer Titel"
         # over-long titles are clipped just like on upload
         assert len(svc.set_title(meta["id"], "x" * 200)["title"]) == 80
+
+    def test_admin_asset_has_pages_and_no_score(self, cal):
+        # Admin uploads go through the multi-page asset path: pages, no upfront
+        # score, and on-demand previews — placement is scored later.
+        svc = GalleryService()
+        meta = svc.create("doc.svg", SVG, uploader="admin")
+        assert meta["uploader"] == "admin"
+        assert meta["kind"] == "svg"
+        assert meta["mode"] == "vector"
+        assert meta["pages"][0]["n"] == 1
+        assert meta["pages"][0]["lines"] >= 1
+        assert "score" not in meta and "metrics" not in meta
+        preview = svc.preview(meta["id"], 1)
+        assert preview["polylines"]
+        assert svc.thumbnail(meta["id"])["polylines"]
+
+    def test_admin_rejects_document_only_for_public(self, cal):
+        # PDFs/Office are admin-only; the public competition path refuses them.
+        svc = GalleryService()
+        with pytest.raises(UnsupportedUpload):
+            svc.create("paper.pdf", b"%PDF-1.4 ...", uploader="public")
+
+    def test_submission_keeps_pages_field(self, cal):
+        # Scored submissions also carry the unified pages list (page 1 = image.svg).
+        meta = GalleryService().create("art.svg", SVG)
+        assert meta["pages"][0]["file"] == "image.svg"
+        assert "score" in meta
+
+    def test_normalize_backfills_pages_for_legacy_meta(self):
+        meta = {"id": "x", "kind": "svg", "width": 10, "height": 5, "lines": 3}
+        GalleryService._normalize(meta)
+        assert meta["uploader"] == "public"
+        assert meta["pages"] == [
+            {"n": 1, "file": "image.svg", "width": 10, "height": 5, "lines": 3}
+        ]
+        assert meta["mode"] == "vector"
+        assert meta["detail"] == 2
 
     def test_archive_and_delete(self, cal):
         svc = GalleryService()

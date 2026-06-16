@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import struct
 
+from ..pipeline import OFFICE_EXTENSIONS
 from .errors import ServiceError
 
 MAX_UPLOAD_BYTES = 15 * 1024 * 1024
@@ -11,6 +12,12 @@ MAX_IMAGE_PIXELS = 40_000_000  # decompression-bomb guard for PNG/JPEG
 
 _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 _JPEG_MAGIC = b"\xff\xd8\xff"
+_PDF_MAGIC = b"%PDF"
+_ZIP_MAGIC = b"PK\x03\x04"  # docx/xlsx/pptx/odt… (OOXML / ODF are zip containers)
+_OLE_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"  # legacy doc/xls/ppt
+
+# Document extensions the admin asset library accepts on top of images/SVG.
+DOCUMENT_EXTENSIONS = {"pdf"} | {ext.lstrip(".") for ext in OFFICE_EXTENSIONS}
 # Constructs we never accept in an SVG, even though previews are rendered
 # from extracted polylines only (defence in depth against XXE / script).
 _SVG_FORBIDDEN = re.compile(rb"<!DOCTYPE|<!ENTITY|<script|javascript:", re.IGNORECASE)
@@ -45,6 +52,29 @@ def sniff_kind(filename: str, data: bytes) -> str:
         _check_pixels(_jpeg_dimensions(data))
         return "jpeg"
     raise UnsupportedUpload("Nur SVG, PNG oder JPG werden akzeptiert.")
+
+
+def sniff_asset_kind(filename: str, data: bytes) -> str:
+    """Like :func:`sniff_kind` but also accepts PDF/Office documents.
+
+    Used by the admin asset library (gallery), which holds general documents on
+    top of the competition images. Returns ``svg`` | ``png`` | ``jpeg`` |
+    ``pdf`` | an office extension (``docx``, ``ods``, …).
+    """
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if ext in ("svg", "png", "jpg", "jpeg"):
+        return sniff_kind(filename, data)
+    if ext == "pdf":
+        if not data.startswith(_PDF_MAGIC):
+            raise UnsupportedUpload("Die Datei ist kein gültiges PDF.")
+        return "pdf"
+    if ext in DOCUMENT_EXTENSIONS:
+        if not (data.startswith(_ZIP_MAGIC) or data.startswith(_OLE_MAGIC)):
+            raise UnsupportedUpload(f"Die Datei ist kein gültiges {ext.upper()}-Dokument.")
+        return ext
+    raise UnsupportedUpload(
+        "Nur Bilder (SVG/PNG/JPG), PDF oder Office-Dokumente werden akzeptiert."
+    )
 
 
 def _check_svg(data: bytes) -> None:

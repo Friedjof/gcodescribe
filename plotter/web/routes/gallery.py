@@ -6,13 +6,13 @@ from pydantic import BaseModel
 from ...gcode_preview import parse_gcode, parse_gcode_3d
 from ...services.gallery import GalleryService
 from ...services.upload_validation import MAX_UPLOAD_BYTES
-from ..auth import require_admin
+from ..auth import optional_admin, require_admin
 
 router = APIRouter(tags=["gallery"])
 
-# NOTE: The gallery has no auth yet. Admin-only actions (delete, archive,
-# status) are grouped below so a permission dependency can be added in one
-# place once the admin login lands.
+# All gallery routes require an admin session except POST /gallery (create),
+# which stays public so the /upload page works without login. That endpoint
+# detects an admin session optionally to tag the upload's origin.
 
 
 def service() -> GalleryService:
@@ -23,21 +23,29 @@ def service() -> GalleryService:
 async def create_submission(
     file: UploadFile = File(...),
     title: str = Form(""),
+    mode: str = Form("auto"),
+    detail: int = Form(2),
+    session: dict | None = Depends(optional_admin),
 ) -> dict:
     if not file.filename:
         raise HTTPException(400, "Dateiname fehlt")
     # Read at most one byte past the limit so oversized uploads never land
     # fully in memory; the service re-checks and reports the proper message.
     data = await file.read(MAX_UPLOAD_BYTES + 1)
-    return service().create(file.filename, data, title=title)
+    uploader = "admin" if session else "public"
+    # mode/detail only apply to the admin asset path; public uploads ignore them.
+    return service().create(
+        file.filename, data, title=title, uploader=uploader, mode=mode, detail=detail
+    )
 
 
 @router.get("/gallery")
 def list_submissions(
     include_archived: bool = True,
+    uploader: str | None = None,
     _: dict = Depends(require_admin),
 ) -> list[dict]:
-    return service().list(include_archived=include_archived)
+    return service().list(include_archived=include_archived, uploader=uploader)
 
 
 # Declared before the "/gallery/{item_id}" routes so it is not captured as an id.
@@ -56,9 +64,14 @@ def submission_svg(item_id: str, _: dict = Depends(require_admin)) -> dict:
     return service().svg_preview(item_id)
 
 
+@router.get("/gallery/{item_id}/preview/{page}")
+def submission_page_preview(item_id: str, page: int, _: dict = Depends(require_admin)) -> dict:
+    return service().preview(item_id, page)
+
+
 @router.get("/gallery/{item_id}/thumbnail")
 def submission_thumbnail(item_id: str, _: dict = Depends(require_admin)) -> dict:
-    return service().svg_thumbnail(item_id)
+    return service().thumbnail(item_id)
 
 
 @router.get("/gallery/{item_id}/gcode/preview")

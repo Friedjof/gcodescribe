@@ -1,7 +1,6 @@
 import { type ReactNode, useEffect, useState } from "react";
 import { api, type AuthSession, type AuthSetupStart } from "./api";
 import Convert from "./components/Convert";
-import Place from "./components/Place";
 import Paint from "./components/Paint";
 import Games from "./components/Games";
 import Gallery from "./components/Gallery";
@@ -11,7 +10,7 @@ import Paper from "./components/Paper";
 import Segmented from "./components/Segmented";
 import { useI18n } from "./i18n";
 
-type Tab = "place" | "paint" | "games" | "gallery" | "convert" | "paper" | "calibrate" | "control";
+type Tab = "paint" | "games" | "gallery" | "convert" | "paper" | "calibrate" | "control";
 
 export default function App() {
   return (
@@ -24,12 +23,12 @@ export default function App() {
 // Heavy, stateful tabs: mount once on first visit and keep them alive (hidden)
 // so switching back is instant instead of refetching + rebuilding the canvas.
 // The lighter list/state tabs stay unmount-on-switch so they reflect fresh data.
-const KEEP_ALIVE: Tab[] = ["place", "paint", "games", "gallery", "convert", "paper", "calibrate"];
+const KEEP_ALIVE: Tab[] = ["paint", "games", "gallery", "convert", "paper", "calibrate"];
 
 function AdminApp() {
   const { lang, setLang, t } = useI18n();
-  const [tab, setTab] = useState<Tab>("place");
-  const [visited, setVisited] = useState<Set<Tab>>(() => new Set<Tab>(["place"]));
+  const [tab, setTab] = useState<Tab>("paint");
+  const [visited, setVisited] = useState<Set<Tab>>(() => new Set<Tab>(["paint"]));
   const [status, setStatus] = useState<any>(null);
 
   useEffect(() => {
@@ -56,7 +55,6 @@ function AdminApp() {
   }, []);
 
   const tabs: { value: Tab; label: string }[] = [
-    { value: "place", label: t("tabs.place") },
     { value: "paint", label: t("tabs.paint") },
     { value: "games", label: t("tabs.games") },
     { value: "gallery", label: t("tabs.gallery") },
@@ -94,10 +92,7 @@ function AdminApp() {
         {KEEP_ALIVE.map((value) =>
           visited.has(value) ? (
             <div key={value} style={{ display: tab === value ? "contents" : "none" }}>
-              {value === "place" && (
-                <Place status={status} onAction={refreshStatus} onOpenPaint={() => setTab("paint")} />
-              )}
-              {value === "paint" && <Paint visible={tab === "paint"} />}
+              {value === "paint" && <Paint visible={tab === "paint"} status={status} onAction={refreshStatus} />}
               {value === "games" && <Games onOpenPaint={() => setTab("paint")} />}
               {value === "gallery" && <Gallery onOpenPaint={() => setTab("paint")} />}
               {value === "paper" && (

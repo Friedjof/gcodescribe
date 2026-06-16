@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type GalleryItem, type GallerySvg, type GcodePreview3D } from "../api";
 import { fmtBytes, fmtDuration } from "../format";
 import { useI18n } from "../i18n";
-import { localize, type Pt } from "../paint/geometry";
+import { galleryItemObject } from "../paint/insertAsset";
 import Gcode3D from "./Gcode3D";
 import Gcode3DOverlay from "./Gcode3DOverlay";
 import Modal from "./Modal";
@@ -54,31 +54,9 @@ export default function GalleryDetail({
     setErr(null);
     const name = item.title || item.filename.replace(/\.[^.]+$/, "");
     Promise.all([api.getCalibration(), api.createPage(name)])
-      .then(([cal, page]) => {
-        const { local } = localize(svg.polylines as Pt[][]);
-        const scale = Math.min(
-          1,
-          (cal.plot_width * 0.9) / Math.max(svg.width, 1),
-          (cal.plot_height * 0.9) / Math.max(svg.height, 1)
-        );
-        return api.savePage(page.id, {
-          objects: [
-            {
-              id: crypto.randomUUID(),
-              type: "image",
-              data: { galleryId: item.id, name, basePolylines: local },
-              cachedPolylines: local,
-              transform: {
-                x: cal.plot_width / 2,
-                y: cal.plot_height / 2,
-                rotation: 0,
-                scale,
-              },
-              plotted: false,
-            },
-          ],
-        });
-      })
+      .then(([cal, page]) =>
+        api.savePage(page.id, { objects: [galleryItemObject(item, svg, cal)] })
+      )
       .then(() => onOpenPaint())
       .catch(fail)
       .finally(() => setBusy(false));
@@ -184,27 +162,29 @@ export default function GalleryDetail({
               <p className="muted">{t("common.loading")}</p>
             )}
           </div>
-          <dl className="gallery-metrics">
-            <dt>{t("gallery.m.duration")}</dt>
-            <dd>{fmtDuration(m.duration_s)}</dd>
-            <dt>{t("gallery.m.penLifts")}</dt>
-            <dd>{m.pen_lifts}</dd>
-            <dt>{t("gallery.m.drawLen")}</dt>
-            <dd>{(m.draw_mm / 1000).toFixed(2)} m</dd>
-            <dt>{t("gallery.m.travelLen")}</dt>
-            <dd>{(m.travel_mm / 1000).toFixed(2)} m</dd>
-            <dt>{t("gallery.m.size")}</dt>
-            <dd>{fmtBytes(m.size_bytes)}</dd>
-            <dt>{t("gallery.m.complexity")}</dt>
-            <dd>
-              {m.polyline_count} / {m.point_count}
-            </dd>
-            <dt>{t("gallery.m.score")}</dt>
-            <dd>
-              {t("score.time")} {item.score.time} · {t("score.lifts")} {item.score.lifts} ·{" "}
-              {t("score.size")} {item.score.size} · {t("score.detail")} {item.score.detail}
-            </dd>
-          </dl>
+          {m && item.score && (
+            <dl className="gallery-metrics">
+              <dt>{t("gallery.m.duration")}</dt>
+              <dd>{fmtDuration(m.duration_s)}</dd>
+              <dt>{t("gallery.m.penLifts")}</dt>
+              <dd>{m.pen_lifts}</dd>
+              <dt>{t("gallery.m.drawLen")}</dt>
+              <dd>{(m.draw_mm / 1000).toFixed(2)} m</dd>
+              <dt>{t("gallery.m.travelLen")}</dt>
+              <dd>{(m.travel_mm / 1000).toFixed(2)} m</dd>
+              <dt>{t("gallery.m.size")}</dt>
+              <dd>{fmtBytes(m.size_bytes)}</dd>
+              <dt>{t("gallery.m.complexity")}</dt>
+              <dd>
+                {m.polyline_count} / {m.point_count}
+              </dd>
+              <dt>{t("gallery.m.score")}</dt>
+              <dd>
+                {t("score.time")} {item.score.time} · {t("score.lifts")} {item.score.lifts} ·{" "}
+                {t("score.size")} {item.score.size} · {t("score.detail")} {item.score.detail}
+              </dd>
+            </dl>
+          )}
           {err && <div className="banner err">{err}</div>}
         </div>
       </Modal>

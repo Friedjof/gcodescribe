@@ -195,22 +195,40 @@ export interface GalleryMetrics {
   points_per_mm: number;
 }
 
+export type GalleryUploader = "admin" | "public";
+
 export interface GalleryItem {
   id: string;
   title: string;
   filename: string;
-  kind: "svg" | "png" | "jpeg";
+  // Images/SVG for public submissions; admin assets add PDF/Office kinds.
+  kind: string;
+  uploader: GalleryUploader;
   created: number;
   status: "active" | "archived";
+  mode: Source["mode"];
+  detail: number;
+  pages: SourcePage[];
   width: number;
   height: number;
   lines: number;
-  metrics: GalleryMetrics;
-  score: GalleryScore;
+  // Only single-page public submissions are scored on upload; admin assets
+  // (documents, multi-page) carry neither until placement.
+  metrics?: GalleryMetrics;
+  score?: GalleryScore;
 }
 
 export interface GallerySvg {
   polylines: number[][][];
+  width: number;
+  height: number;
+}
+
+/** One page of a gallery item, rendered on demand. Single-page submissions omit
+ * `bounds`; multi-page admin assets carry the page's content bounds. */
+export interface GalleryPreview {
+  polylines: number[][][];
+  bounds?: [number, number, number, number] | null;
   width: number;
   height: number;
 }
@@ -567,17 +585,26 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ page, x, y, width }),
     }),
-  galleryUpload: (file: File, title: string) => {
+  // `opts` only applies to admin (in-app) uploads, which take the asset path:
+  // a render mode and detail level, mirroring the old createSource controls.
+  galleryUpload: (file: File, title: string, opts?: { mode?: string; detail?: number }) => {
     const fd = new FormData();
     fd.append("file", file);
     fd.append("title", title);
+    if (opts?.mode) fd.append("mode", opts.mode);
+    if (opts?.detail != null) fd.append("detail", String(opts.detail));
     return req<GalleryItem>("/api/gallery", { method: "POST", body: fd });
   },
-  galleryList: (includeArchived = true) =>
-    req<GalleryItem[]>(`/api/gallery?include_archived=${includeArchived}`),
+  galleryList: (includeArchived = true, uploader?: GalleryUploader) =>
+    req<GalleryItem[]>(
+      `/api/gallery?include_archived=${includeArchived}` +
+        (uploader ? `&uploader=${uploader}` : "")
+    ),
   galleryThumbnail: (id: string) => req<GallerySvg>(`/api/gallery/${id}/thumbnail`),
   galleryThumbnails: () => req<Record<string, GallerySvg>>(`/api/gallery/thumbnails`),
   gallerySvg: (id: string) => req<GallerySvg>(`/api/gallery/${id}/svg`),
+  galleryPreview: (id: string, page: number) =>
+    req<GalleryPreview>(`/api/gallery/${id}/preview/${page}`),
   galleryGcode3D: (id: string) =>
     req<GcodePreview3D>(`/api/gallery/${id}/gcode/preview3d`),
   gallerySetTitle: (id: string, title: string) =>
