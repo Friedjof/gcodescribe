@@ -1,8 +1,8 @@
 # GCodeScribe
 
 A browser-based pen plotter controller for turning PDF, SVG, image, and Office
-documents into safe G-code for an **Anycubic i3 Mega S** or any OctoPrint-backed
-printer.
+documents — or built-in generated artwork — into safe G-code for an
+**Anycubic i3 Mega S** or any OctoPrint-backed printer.
 
 <table>
   <tr>
@@ -11,10 +11,12 @@ printer.
   </tr>
 </table>
 
-GCodeScribe combines document conversion, visual layout, paper calibration, G-code
-preview, job management, and printer control in one small web app. Upload a
-document, place it on the virtual bed, calibrate the physical sheet, generate
-G-code, preview the toolpaths, and send it to the printer — all from the same interface.
+GCodeScribe combines document conversion, built-in generators, a paint canvas,
+visual layout, paper calibration, G-code preview, a design gallery, job
+management, and printer control in one small web app. Bring in a document or
+generate one, place it on the virtual bed, calibrate the physical sheet,
+generate G-code, preview the toolpaths, and send it to the printer — all from
+the same interface.
 
 ## Preview
 
@@ -29,18 +31,50 @@ G-code, preview the toolpaths, and send it to the printer — all from the same 
     <td align="center"><strong>Design and plot</strong></td>
     <td align="center"><strong>Live calibration</strong></td>
   </tr>
+  <tr>
+    <td width="33%"><img src="media/images/games-view.png" alt="Built-in game and coloring generators"></td>
+    <td width="33%"><img src="media/images/plot-jobs.png" alt="Generated plot jobs"></td>
+    <td width="33%"><img src="media/images/control.png" alt="Printer control"></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Generators &amp; games</strong></td>
+    <td align="center"><strong>Plot jobs</strong></td>
+    <td align="center"><strong>Printer control</strong></td>
+  </tr>
 </table>
 
 ## Features
 
+### Convert documents
+
 - Convert PDF, SVG, raster images, and Office documents into plotter-ready
   G-code with [vpype](https://vpype.readthedocs.io).
-- Place documents visually on a bed preview before generating G-code. Drag,
-  scale, and fit artwork into the calibrated plot area.
 - Trace image-only PDFs and scans with OpenCV while preserving vector paths
   from vector PDFs. Auto mode chooses the best conversion path automatically.
+- Place documents visually in the **Design &amp; Plot** tab: upload to the
+  gallery, insert any page onto the bed preview, then drag, scale, and fit
+  artwork into the calibrated plot area — or quick-plot a page in two clicks.
+
+### Generate &amp; design
+
+- Generate printable artwork directly in the browser — no source file needed:
+  - **Puzzles:** mazes (classic, masked, hex, polar) and sudoku.
+  - **Games:** dots &amp; boxes, tic-tac-toe, meta tic-tac-toe, connect four,
+    battleships, bingo, and city/country/river sheets.
+  - **Coloring pages:** mandalas and geometric pattern generators.
+- Draw from scratch on the paint canvas: place shapes and text, scale and
+  arrange them, and turn the result into a plot job.
+- Keep every upload and generated design in the **gallery** — the one asset
+  library for images, SVG, and multi-page PDF/Office documents (admin and public
+  `/upload` submissions, filterable by origin) — with thumbnails, titles,
+  archiving, and one-click reuse or insertion into the designer.
+
+### Calibrate &amp; plot safely
+
 - Calibrate pen-up and pen-down Z heights, plot area, origin offsets, margins,
   and feedrates from the browser.
+- Use the live paper calibration wizard to home the machine, jog to sheet
+  corners, capture paper bounds, and map every conversion onto the real sheet.
 - Manage multiple calibration profiles (e.g. "A4 portrait", "postcard front
   left", "thick paper"): create, duplicate, activate, archive, and im-/export
   them as JSON — single profiles or a full bundle. Existing installations are
@@ -50,17 +84,18 @@ G-code, preview the toolpaths, and send it to the printer — all from the same 
   to send a job whose profile does not exactly match the active one — foreign,
   changed (stale), archived, deleted, or pre-profile legacy jobs stay visible
   but are not printable until regenerated or explicitly adopted.
-- Use the live paper calibration wizard to home the machine, jog to sheet
-  corners, capture paper bounds, and map every conversion onto the real sheet.
-- Preview generated G-code against the bed and calibrated paper before sending
-  it to the printer.
-- Track the head position from sent commands and persist it in Redis, with a
-  file-store fallback for simple local setups.
 - Enforce safety checks before saving or printing: generated jobs never contain
   `G28`, Z moves are limited to calibrated pen heights, and drawing moves must
   stay inside the configured plot area.
 - Export calibration as XML and embed calibration metadata in every generated
   G-code job.
+
+### Preview &amp; control
+
+- Preview generated G-code against the bed and calibrated paper before sending
+  it to the printer.
+- Track the head position from sent commands and persist it in Redis, with a
+  file-store fallback for simple local setups.
 - Send, start, pause, cancel, home, jog, and lift/lower the pen through
   OctoPrint from the same UI.
 
@@ -167,7 +202,8 @@ uv run gcodescribe input.svg --profile anycubic
 
 ## How the G-code is built
 
-- PDF / Office input is rendered to SVG (`pdftocairo`, `soffice`).
+- PDF / Office input is rendered to SVG (`pdftocairo`, `soffice`); generators
+  and the paint canvas produce SVG directly.
 - vpype reads the SVG, simplifies / merges / sorts lines, lays it out into the
   plot area and writes G-code with a generated `gwrite` profile.
 - Pen up/down are absolute Z moves at the calibrated heights; travel and draw
