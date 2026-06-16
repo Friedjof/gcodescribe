@@ -265,6 +265,7 @@ export interface Page {
   name: string;
   objects: SceneObject[];
   grid: PageGrid;
+  markdown?: string | null;
   created: number;
   modified: number;
   profileId?: string | null;
@@ -417,7 +418,7 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
     }),
-  savePage: (id: string, updates: Partial<Pick<Page, "objects" | "grid" | "name">>) =>
+  savePage: (id: string, updates: Partial<Pick<Page, "objects" | "grid" | "name" | "markdown">>) =>
     req<Page>(`/api/pages/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },

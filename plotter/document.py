@@ -141,7 +141,7 @@ class DocumentStore:
             page = self._store.get(self._page_key(page_id))
             if page is None:
                 raise KeyError(page_id)
-            for field in ("objects", "grid", "name"):
+            for field in ("objects", "grid", "name", "markdown"):
                 if field in updates and updates[field] is not None:
                     page[field] = updates[field]
             page["modified"] = _now()
@@ -184,6 +184,8 @@ class DocumentStore:
             )
             copy["objects"] = src.get("objects", [])
             copy["grid"] = src.get("grid", dict(DEFAULT_GRID))
+            if src.get("markdown"):
+                copy["markdown"] = src["markdown"]
             copy["modified"] = _now()
             self._store.set(self._page_key(copy["id"]), copy)
             self._refresh_meta(copy)

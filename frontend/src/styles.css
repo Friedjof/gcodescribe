@@ -2321,3 +2321,80 @@ input[type="checkbox"]:disabled {
   text-align: center;
   letter-spacing: 0.08em;
 }
+
+/* ---- Markdown editor ----------------------------------------------------- */
+.paint-md-btn { width: 100%; margin: 8px 0 4px; justify-content: center; }
+.md-editor { width: min(1600px, 96vw); height: 94vh; max-height: 94vh; }
+.md-editor-body { padding: 0; flex-direction: column; flex: 1; min-height: 0; }
+.md-split { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; }
+.md-source-wrap {
+  position: relative;
+  min-height: 360px;
+  border-right: 1px solid var(--border);
+  background: var(--panel);
+  overflow: hidden;
+}
+/* The textarea sits transparently on top of a coloured mirror (.md-highlight);
+   both must share identical metrics so caret and colours line up exactly. */
+.md-highlight,
+.md-source {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 16px 18px;
+  border: 0;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  overflow: auto;
+}
+.md-highlight { color: var(--text); pointer-events: none; }
+.md-source {
+  resize: none;
+  border-radius: 0;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--text);
+}
+.md-source:focus { outline: none; }
+.hl-marker { color: var(--muted); }
+.hl-h1, .hl-h2, .hl-h3 { color: #7aa2ff; font-weight: 600; }
+.hl-strong { color: #f0a868; font-weight: 600; }
+.hl-em { color: #c792ea; font-style: italic; }
+.hl-code { color: #6fcf97; }
+.hl-link { color: #4fc3f7; }
+.md-preview { display: flex; flex-direction: column; min-height: 0; }
+.md-preview-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.md-preview-seg { width: auto; margin-bottom: 0; min-width: 240px; }
+.md-render { flex: 1; overflow: auto; padding: 16px 20px; }
+.md-render h1 { font-size: 22px; margin: 0 0 10px; }
+.md-render h2 { font-size: 18px; margin: 14px 0 8px; }
+.md-render h3 { font-size: 15px; margin: 12px 0 6px; }
+.md-render p { margin: 0 0 10px; line-height: 1.5; white-space: pre-wrap; }
+.md-render .md-li { margin: 2px 0; padding-left: 4px; line-height: 1.5; white-space: pre-wrap; }
+.md-render code {
+  background: var(--panel-2);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+.md-plot { position: relative; flex: 1; min-height: 0; display: flex; padding: 16px; }
+.md-plot .poly-preview { width: 100%; height: 100%; }
+.md-footer { display: flex; flex-direction: column; gap: 12px; width: 100%; }
+.md-options { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+.md-options .field { min-width: 130px; }
+.md-check { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.md-check input { width: auto; }
+.md-debug-toggle { display: flex; align-items: center; gap: 6px; margin-left: auto; padding: 0 8px; font-size: 12px; color: var(--muted); }
+.md-debug-toggle input { width: auto; }
+.md-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.md-err { margin: 0 18px 14px; }
