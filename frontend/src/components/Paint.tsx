@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type Calibration, type GcodePreview3D, type Page, type PageIndex, type SceneObject } from "../api";
 import PaintCanvas, { type Tool } from "./PaintCanvas";
+import MarkdownEditor from "./MarkdownEditor";
+import PagePanel from "./PagePanel";
+import GalleryPopup from "./GalleryPopup";
 import PlotScore from "./PlotScore";
 import Gcode3DOverlay from "./Gcode3DOverlay";
 import Segmented from "./Segmented";
-import { localize, type Pt, type Transform } from "../paint/geometry";
-import { TEXT_FONTS, isOutlineFont, type TextFont } from "../paint/text";
+import { IDENTITY, localize, objectWorldBounds, type Pt, type Transform } from "../paint/geometry";
+import { TEXT_FONTS, type TextFont } from "../paint/text";
 import {
   basePolylines,
   cloneObjects,
@@ -16,19 +19,24 @@ import {
 } from "../paint/sceneObjects";
 import { DEFAULT_VECTOR_STYLE, buildStyledPolylines, normalizeStyle, type FillMode, type StrokeMode, type VectorStyle } from "../paint/styling";
 import { useI18n } from "../i18n";
+import { useToasts } from "./Toasts";
 import { useConfirm, usePrompt } from "./dialogs";
 
 const GRID_STEPS = [1, 5, 10, 25, 50];
 
-// Designer imports plot the preview polylines directly, so they need more
-// detail than the placement canvas. Must match the backend's DESIGNER_POINTS
-// so the cache pre-rendered at upload is hit instead of re-parsing the SVG.
-const DESIGNER_PREVIEW_POINTS = 20000;
-
 type ImageMode = "edges" | "hatch" | "lines" | "dots" | "handwriting";
 
-export default function Paint({ visible = true }: { visible?: boolean }) {
+export default function Paint({
+  visible = true,
+  status,
+  onAction,
+}: {
+  visible?: boolean;
+  status?: any;
+  onAction?: () => void;
+}) {
   const { t } = useI18n();
+  const toast = useToasts();
   const defaultText = t("paint.text");
   const [cal, setCal] = useState<Calibration | null>(null);
   const [index, setIndex] = useState<PageIndex | null>(null);
@@ -37,29 +45,30 @@ export default function Paint({ visible = true }: { visible?: boolean }) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [sending, setSending] = useState(false);
-  const [lastJob, setLastJob] = useState<string | null>(null);
-  const [startedJob, setStartedJob] = useState<string | null>(null);
   const [fullscreen, setFullscreen] = useState<GcodePreview3D | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number; ids: string[] } | null>(null);
   const [imageImport, setImageImport] = useState<{ file: File; at: Pt; mode: ImageMode; detail: number } | null>(null);
   const [importingImage, setImportingImage] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const [mdOpen, setMdOpen] = useState(false);
+  const [galleryOpen, setGalleryOpen] = useState(false);
   const { confirm, ConfirmNode } = useConfirm();
   const { prompt, PromptNode } = usePrompt();
   const saveTimer = useRef<number | undefined>(undefined);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const undoStack = useRef<SceneObject[][]>([]);
   const redoStack = useRef<SceneObject[][]>([]);
   const clipboard = useRef<SceneObject[]>([]);
 
-  const tools: { value: Tool; label: string }[] = [
-    { value: "select", label: t("paint.tool.select") },
-    { value: "pen", label: t("paint.tool.pen") },
-    { value: "line", label: t("paint.tool.line") },
-    { value: "rect", label: t("paint.tool.rect") },
-    { value: "circle", label: t("paint.tool.circle") },
-    { value: "semicircle", label: t("paint.tool.semicircle") },
-    { value: "text", label: t("paint.tool.text") },
+  // Icon + name: the toolbar shows the glyph, the name lives in the tooltip.
+  const tools: { value: Tool; label: string; icon: string }[] = [
+    { value: "select", label: t("paint.tool.select"), icon: "⬚" },
+    { value: "pen", label: t("paint.tool.pen"), icon: "✎" },
+    { value: "line", label: t("paint.tool.line"), icon: "╱" },
+    { value: "rect", label: t("paint.tool.rect"), icon: "▭" },
+    { value: "circle", label: t("paint.tool.circle"), icon: "◯" },
+    { value: "semicircle", label: t("paint.tool.semicircle"), icon: "◗" },
+    { value: "text", label: t("paint.tool.text"), icon: "T" },
   ];
   const imageModes: { value: ImageMode; label: string; description: string }[] = [
     { value: "handwriting", label: t("paint.image.handwriting"), description: t("paint.image.handwritingDesc") },
@@ -69,7 +78,7 @@ export default function Paint({ visible = true }: { visible?: boolean }) {
     { value: "dots", label: t("paint.image.dots"), description: t("paint.image.dotsDesc") },
   ];
 
-  const fail = (e: any) => setErr(String(e.message ?? e));
+  const fail = (e: any) => toast.error(String(e.message ?? e));
 
   useEffect(() => {
     api.getCalibration().then(setCal).catch(fail);
@@ -78,12 +87,30 @@ export default function Paint({ visible = true }: { visible?: boolean }) {
       .then((idx) => {
         setIndex(idx);
         const id = idx.activeId ?? idx.order[0]?.id;
-        if (id) return api.getPage(id).then(setPage);
+        if (id) return api.getPage(id).then(autoAdoptStale).then(setPage);
       })
       .catch(fail);
   }, []);
 
   const reloadIndex = () => api.listPages().then(setIndex).catch(fail);
+
+  // A "stale" page belongs to the *active* profile but was created before the
+  // profile's last edit. Re-stamping it to the current fingerprint changes no
+  // geometry, so we do it silently whenever such a page is opened — no manual
+  // "adopt" click. Genuinely foreign profiles (other/archived/missing) still
+  // require an explicit decision via the banner. If the drawing no longer fits
+  // the changed plot area, adoption is refused (no force) and the page stays
+  // stale so the banner can offer the forced adopt.
+  const autoAdoptStale = (p: Page): Promise<Page> => {
+    if (p.profileStatus !== "stale") return Promise.resolve(p);
+    return api
+      .adoptPageProfile(p.id, false)
+      .then((updated) => {
+        reloadIndex();
+        return updated;
+      })
+      .catch(() => p);
+  };
 
   // Reload calibration + index + page, e.g. after a profile switch (the
   // canvas size and the page's profile status both depend on it).
@@ -141,6 +168,7 @@ export default function Paint({ visible = true }: { visible?: boolean }) {
       .activatePage(id)
       .then(setIndex)
       .then(() => api.getPage(id))
+      .then(autoAdoptStale)
       .then(setPage)
       .catch(fail);
   };
@@ -197,11 +225,9 @@ export default function Paint({ visible = true }: { visible?: boolean }) {
   const generateJob = () => {
     if (!page) return Promise.reject(new Error(t("paint.noPage")));
     setBusy(true);
-    setErr(null);
-    setStartedJob(null);
     return api.pageGcode(page.id, index?.activeProfile)
       .then((job) => {
-        setLastJob(job.filename);
+        toast.success(t("paint.jobCreated", { name: job.filename }));
         return job.filename;
       })
       .finally(() => setBusy(false));
@@ -217,7 +243,7 @@ export default function Paint({ visible = true }: { visible?: boolean }) {
     generateJob()
       .then((filename) => {
         setSending(true);
-        return api.send(filename, true).then(() => setStartedJob(filename));
+        return api.send(filename, true).then(() => toast.success(t("paint.jobStarted", { name: filename })));
       })
       .catch(fail)
       .finally(() => setSending(false));
@@ -227,7 +253,6 @@ export default function Paint({ visible = true }: { visible?: boolean }) {
   const openFullscreen = () => {
     if (!page || loadingPreview) return;
     setLoadingPreview(true);
-    setErr(null);
     api.pagePreview3D(page.id, page.objects)
       .then(setFullscreen)
       .catch(fail)
@@ -251,16 +276,37 @@ export default function Paint({ visible = true }: { visible?: boolean }) {
     persist(page.id, objects);
   };
 
+  // Insert several objects in one undo step (used by the markdown editor).
+  const addObjects = (objs: SceneObject[]) => {
+    if (!page || objs.length === 0) return;
+    remember();
+    let nextZ = page.objects.reduce((max, o, i) => Math.max(max, zValue(o, i)), -1) + 1;
+    const styled = objs.map((obj) => withStyledCache({ ...obj, zOrder: nextZ++ }));
+    const objects = [...page.objects, ...styled];
+    setPage({ ...page, objects });
+    setSelectedIds(styled.map((o) => o.id));
+    persist(page.id, objects);
+  };
+
+  const insertMarkdown = (objs: SceneObject[], markdown: string) => {
+    if (!page) return;
+    addObjects(objs);
+    setPage((p) => (p ? { ...p, markdown } : p));
+    api.savePage(page.id, { markdown }).then(reloadIndex).catch(fail);
+    setMdOpen(false);
+    setTool("select");
+  };
+
   const addTextObject = (at: Pt) => {
     const text = defaultText;
     const size = 12;
-    const font: TextFont = "pdf-serif";
+    const font: TextFont = "sans";
     textGeometryAsync(text, size, font, defaultText)
       .then(({ local, cx, cy }) => {
         addObject({
           id: crypto.randomUUID(),
           type: "text",
-          data: { text, mode: "outline", size, font, basePolylines: local, style: DEFAULT_VECTOR_STYLE },
+          data: { text, mode: "single-line", size, font, basePolylines: local, style: DEFAULT_VECTOR_STYLE },
           cachedPolylines: local,
           transform: { x: at[0] + cx, y: at[1] + cy, rotation: 0, scale: 1 },
           plotted: false,
@@ -269,13 +315,20 @@ export default function Paint({ visible = true }: { visible?: boolean }) {
       .catch(fail);
   };
 
+  // Open the image-import dialog for a picked file, placed at the bed centre.
+  const pickImage = (file: File | undefined) => {
+    if (!file || !cal) return;
+    setImageImport({ file, at: [cal.plot_width / 2, cal.plot_height / 2], mode: "edges", detail: 2 });
+  };
+
   const importImage = () => {
     if (!page || !imageImport || importingImage) return;
     setImportingImage(true);
-    setErr(null);
-    api.createSource(imageImport.file, imageImport.mode, imageImport.detail)
-      .then((source) => api.sourcePreview(source.id, 1, DESIGNER_PREVIEW_POINTS).then((preview) => ({ source, preview })))
-      .then(({ source, preview }) => {
+    // The designer image import lands the file in the unified gallery (as an
+    // admin asset) and places its first page, replacing the old Sources store.
+    api.galleryUpload(imageImport.file, "", { mode: imageImport.mode, detail: imageImport.detail })
+      .then((item) => api.galleryPreview(item.id, 1).then((preview) => ({ item, preview })))
+      .then(({ item, preview }) => {
         if (!preview.polylines.length) throw new Error(t("paint.noLinesImage"));
         const bounds = preview.bounds ?? [0, 0, preview.width, preview.height];
         const width = Math.max(bounds[2] - bounds[0], 1);
@@ -286,8 +339,9 @@ export default function Paint({ visible = true }: { visible?: boolean }) {
           id: crypto.randomUUID(),
           type: "image",
           data: {
-            sourceId: source.id,
-            name: source.name,
+            galleryId: item.id,
+            galleryPage: 1,
+            name: item.filename,
             mode: imageImport.mode,
             detail: imageImport.detail,
             width: preview.width,
@@ -340,9 +394,9 @@ export default function Paint({ visible = true }: { visible?: boolean }) {
     if (!obj) return;
     const data = {
       text: String(obj.data?.text ?? defaultText),
-      mode: isOutlineFont((patch.font ?? obj.data?.font ?? "pdf-serif") as TextFont) ? "outline" : "single-line",
+      mode: "single-line",
       size: Number(obj.data?.size ?? 12),
-      font: (obj.data?.font ?? "pdf-serif") as TextFont,
+      font: (obj.data?.font ?? "sans") as TextFont,
       ...patch,
     };
     textGeometryAsync(data.text, data.size, data.font, defaultText)
@@ -490,6 +544,75 @@ export default function Paint({ visible = true }: { visible?: boolean }) {
     persist(page.id, objects);
   };
 
+  // Combined world bounding box of the current selection, or null if empty.
+  const selectionBounds = (): [number, number, number, number] | null => {
+    if (!page || selectedIds.length === 0) return null;
+    const sel = new Set(selectedIds);
+    let b: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity];
+    for (const obj of page.objects) {
+      if (!sel.has(obj.id)) continue;
+      const local = (obj.cachedPolylines as Pt[][] | undefined) ?? basePolylines(obj);
+      if (!local.length) continue;
+      const [x0, y0, x1, y1] = objectWorldBounds(local, obj.transform ?? IDENTITY);
+      b = [Math.min(b[0], x0), Math.min(b[1], y0), Math.max(b[2], x1), Math.max(b[3], y1)];
+    }
+    return Number.isFinite(b[0]) ? b : null;
+  };
+
+  const mapSelected = (fn: (t: Transform) => Transform) => {
+    if (!page || selectedIds.length === 0) return;
+    remember();
+    const sel = new Set(selectedIds);
+    const objects = page.objects.map((o) =>
+      sel.has(o.id) && o.transform ? { ...o, transform: fn(o.transform) } : o
+    );
+    setPage({ ...page, objects });
+    persist(page.id, objects);
+  };
+
+  // Scale the selection as large as it fits the plot area (keeping aspect) and
+  // centre it. Scales each object's transform about the selection's centre.
+  const fitSelected = () => {
+    const b = selectionBounds();
+    if (!b || !cal) return;
+    const w = Math.max(b[2] - b[0], 0.001);
+    const h = Math.max(b[3] - b[1], 0.001);
+    const factor = Math.min((cal.plot_width * 0.95) / w, (cal.plot_height * 0.95) / h);
+    const gcx = (b[0] + b[2]) / 2, gcy = (b[1] + b[3]) / 2;
+    const tcx = cal.plot_width / 2, tcy = cal.plot_height / 2;
+    mapSelected((t) => {
+      const next: Transform = {
+        ...t,
+        x: tcx + (t.x - gcx) * factor,
+        y: tcy + (t.y - gcy) * factor,
+        scale: (t.scale ?? 1) * factor,
+      };
+      if (t.scaleX != null) next.scaleX = t.scaleX * factor;
+      if (t.scaleY != null) next.scaleY = t.scaleY * factor;
+      return next;
+    });
+  };
+
+  // Move the selection so its bounding box is centred in the plot area.
+  const centerSelected = () => {
+    const b = selectionBounds();
+    if (!b || !cal) return;
+    const dx = cal.plot_width / 2 - (b[0] + b[2]) / 2;
+    const dy = cal.plot_height / 2 - (b[1] + b[3]) / 2;
+    mapSelected((t) => ({ ...t, x: t.x + dx, y: t.y + dy }));
+  };
+
+  // Nudge the selection by (dx, dy) mm without recording undo (the caller does).
+  const nudgeSelected = (dx: number, dy: number) => {
+    if (!page || selectedIds.length === 0) return;
+    const sel = new Set(selectedIds);
+    const objects = page.objects.map((o) =>
+      sel.has(o.id) && o.transform ? { ...o, transform: { ...o.transform, x: o.transform.x + dx, y: o.transform.y + dy } } : o
+    );
+    setPage({ ...page, objects });
+    persist(page.id, objects);
+  };
+
   const restoreObjects = (objects: SceneObject[]) => {
     if (!page) return;
     setPage({ ...page, objects });
@@ -536,6 +659,17 @@ export default function Paint({ visible = true }: { visible?: boolean }) {
           if (editSelectedText((text) => text === defaultText ? e.key : text + e.key)) e.preventDefault();
           return;
         }
+      }
+      const arrow: Record<string, [number, number]> = {
+        ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0],
+      };
+      if (arrow[e.key] && selectedIds.length > 0 && !(e.ctrlKey || e.metaKey || e.altKey)) {
+        e.preventDefault();
+        if (!e.repeat) remember(); // one undo step per burst, even when held
+        const step = page?.grid.step || 1;
+        const [sx, sy] = arrow[e.key];
+        nudgeSelected(sx * step, sy * step);
+        return;
       }
       if ((e.key === "Delete" || e.key === "Backspace") && selectedIds.length > 0) {
         e.preventDefault();
@@ -623,52 +757,18 @@ export default function Paint({ visible = true }: { visible?: boolean }) {
           </div>
         </div>
       )}
-      <aside className="paint-pages">
-        <div className="paint-pages-head">
-          <h3>{t("paint.pages")}</h3>
-          <button className="ghost" title={t("paint.newPage")} onClick={newPage}>＋</button>
-        </div>
-        {index.activeProfile?.name && (
-          <p className="muted paint-profile">{t("paint.activeProfile", { name: index.activeProfile.name })}</p>
-        )}
-        <ul className="page-list">
-          {index.order.map((m) => (
-            <li
-              key={m.id}
-              className={(m.id === page.id ? "active" : "") + (m.profileStatus && m.profileStatus !== "active" ? " foreign-profile" : "")}
-              onClick={() => openPage(m.id)}
-            >
-              <div className="page-info">
-                <span className="page-name">
-                  {m.name}
-                  {m.profileStatus === "other" && (
-                    <span className="pbadge pbadge-other" title={t("paint.pageOtherProfile", { name: m.profileName ?? "?" })}>{m.profileName}</span>
-                  )}
-                  {m.profileStatus === "stale" && (
-                    <span className="pbadge pbadge-warn" title={t("paint.pageStale")}>{t("paint.badgeStale")}</span>
-                  )}
-                  {m.profileStatus === "archived" && (
-                    <span className="pbadge pbadge-muted" title={t("paint.pageArchivedProfile", { name: m.profileName ?? "?" })}>{t("paint.badgeArchived")}</span>
-                  )}
-                  {m.profileStatus === "missing" && (
-                    <span className="pbadge pbadge-muted">
-                      {m.profileId ? t("paint.badgeMissingProfile") : t("paint.badgeNoProfile")}
-                    </span>
-                  )}
-                </span>
-                <span className="muted">
-                  {m.objectCount} {t("paint.objects")}{m.plottedCount > 0 && ` · ${m.plottedCount} ${t("paint.plotted")}`}
-                </span>
-              </div>
-              <div className="page-acts" onClick={(e) => e.stopPropagation()}>
-                <button className="ghost tiny" title={t("paint.rename")} onClick={() => rename(m.id, m.name)}>✎</button>
-                <button className="ghost tiny" title={t("paint.duplicate")} onClick={() => duplicate(m.id)}>⧉</button>
-                <button className="ghost tiny" title={t("paint.delete")} onClick={() => remove(m.id)}>✕</button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </aside>
+      <PagePanel
+        index={index}
+        activePageId={page.id}
+        activeProfileId={index.activeProfile?.id}
+        activeProfileName={index.activeProfile?.name}
+        onOpen={openPage}
+        onNew={newPage}
+        onRename={rename}
+        onDuplicate={duplicate}
+        onRemove={remove}
+        onReorder={(ids) => api.reorderPages(ids).then(setIndex).catch(fail)}
+      />
 
       <section className="card paint-editor">
         <div className="paint-toolbar">
@@ -737,6 +837,12 @@ export default function Paint({ visible = true }: { visible?: boolean }) {
         <div className="paint-workspace">
           <div className="paint-canvas-wrap">
             <PlotScore pageId={page.id} objects={page.objects} />
+            {page.objects.length === 0 && (
+              <div className="paint-empty-hint">
+                <strong>{t("paint.emptyHint")}</strong>
+                <button className="ghost" onClick={() => setGalleryOpen(true)}>▦ {t("gallery.button")}</button>
+              </div>
+            )}
             <PaintCanvas
               cal={cal}
               page={page}
@@ -757,33 +863,57 @@ export default function Paint({ visible = true }: { visible?: boolean }) {
             <Segmented<Tool>
               value={tool}
               onChange={(t) => { setTool(t); if (t !== "select") setSelectedIds([]); }}
-              options={tools}
+              options={tools.map((o) => ({ value: o.value, label: o.icon, title: o.label }))}
               wrap
+              className="paint-tool-grid"
             />
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/*"
+              style={{ display: "none" }}
+              onChange={(e) => { pickImage(e.target.files?.[0]); e.target.value = ""; }}
+            />
+            <div className="paint-asset-row">
+              <button className="ghost" title={t("gallery.button")} aria-label={t("gallery.button")}
+                onClick={() => setGalleryOpen(true)}>▦</button>
+              <button className="ghost" title={t("paint.imageImport")} aria-label={t("paint.imageImport")}
+                onClick={() => imageInputRef.current?.click()}>🖼</button>
+              <button className="ghost" title={t("paint.md.button")} aria-label={t("paint.md.button")}
+                onClick={() => setMdOpen(true)}>⌶</button>
+            </div>
             <div className="paint-tools-actions">
               <button className="ghost" disabled={!hasSelection} onClick={deleteSelected}
-                title={hasSelection ? t("paint.deleteSelection") : t("paint.noSelection")}>
-                🗑 {t("paint.delete")}{selectedObjects.length > 1 ? ` (${selectedObjects.length})` : ""}
+                title={hasSelection ? t("paint.deleteSelection") : t("paint.noSelection")} aria-label={t("paint.delete")}>
+                🗑{selectedObjects.length > 1 ? <span className="act-count">{selectedObjects.length}</span> : ""}
               </button>
               <button className="ghost" disabled={!hasSelection} onClick={duplicateSelected}
-                title={hasSelection ? t("paint.duplicateSelection") : t("paint.noSelection")}>
-                ⧉ {t("paint.duplicate")}
+                title={hasSelection ? t("paint.duplicateSelection") : t("paint.noSelection")} aria-label={t("paint.duplicate")}>
+                ⧉
               </button>
               <button className="ghost" disabled={selectedObjects.length < 2} onClick={() => groupSelected()}
-                title={selectedObjects.length >= 2 ? t("paint.groupSelection") : t("paint.needTwoObjects")}>
-                {t("paint.group")}
+                title={selectedObjects.length >= 2 ? t("paint.groupSelection") : t("paint.needTwoObjects")} aria-label={t("paint.group")}>
+                ⊞
               </button>
               <button className="ghost" disabled={!selectedObjects.some((obj) => obj.groupId)} onClick={() => ungroupSelected()}
-                title={selectedObjects.some((obj) => obj.groupId) ? t("paint.ungroupSelection") : t("paint.noGroupSelected")}>
-                {t("paint.ungroup")}
+                title={selectedObjects.some((obj) => obj.groupId) ? t("paint.ungroupSelection") : t("paint.noGroupSelected")} aria-label={t("paint.ungroup")}>
+                ⊟
+              </button>
+              <button className="ghost" disabled={!hasSelection} onClick={fitSelected}
+                title={hasSelection ? t("paint.fitSelection") : t("paint.noSelection")} aria-label={t("paint.fit")}>
+                ⛶
+              </button>
+              <button className="ghost" disabled={!hasSelection} onClick={centerSelected}
+                title={hasSelection ? t("paint.centerSelection") : t("paint.noSelection")} aria-label={t("paint.center")}>
+                ⌖
               </button>
               <button className="ghost" disabled={!hasSelection} onClick={() => moveSelected(-1)}
-                title={hasSelection ? t("paint.moveBack") : t("paint.noSelection")}>
-                {t("paint.toBack")}
+                title={hasSelection ? t("paint.moveBack") : t("paint.noSelection")} aria-label={t("paint.toBack")}>
+                ⤓
               </button>
               <button className="ghost" disabled={!hasSelection} onClick={() => moveSelected(1)}
-                title={hasSelection ? t("paint.moveFront") : t("paint.noSelection")}>
-                {t("paint.toFront")}
+                title={hasSelection ? t("paint.moveFront") : t("paint.noSelection")} aria-label={t("paint.toFront")}>
+                ⤒
               </button>
             </div>
 
@@ -884,7 +1014,7 @@ export default function Paint({ visible = true }: { visible?: boolean }) {
               <div className="field">
                 <label>{t("paint.font")}</label>
                 <select
-                  value={(selectedText.data?.font ?? "pdf-serif") as TextFont}
+                  value={(selectedText.data?.font ?? "sans") as TextFont}
                   onChange={(e) => updateTextObject(selectedText.id, { font: e.target.value as TextFont })}
                 >
                   {TEXT_FONTS.map((font) => (
@@ -917,11 +1047,27 @@ export default function Paint({ visible = true }: { visible?: boolean }) {
               ? t("paint.hint.text")
             : t("paint.hint.draw")}
         </p>
-        {lastJob && <div className="banner ok">{t("paint.jobCreated", { name: lastJob })}</div>}
-        {startedJob && <div className="banner ok">{t("paint.jobStarted", { name: startedJob })}</div>}
-        {err && <div className="banner err">{err}</div>}
       </section>
       {fullscreen && <Gcode3DOverlay data={fullscreen} onClose={() => setFullscreen(null)} />}
+      {mdOpen && (
+        <MarkdownEditor
+          cal={cal}
+          pageId={page.id}
+          initialMarkdown={page.markdown ?? ""}
+          onClose={() => setMdOpen(false)}
+          onInsert={insertMarkdown}
+        />
+      )}
+      {galleryOpen && (
+        <GalleryPopup
+          cal={cal}
+          status={status}
+          activeProfile={index?.activeProfile}
+          onClose={() => setGalleryOpen(false)}
+          onInsert={addObject}
+          onPlotted={() => { reloadIndex(); onAction?.(); }}
+        />
+      )}
       {ConfirmNode}
       {PromptNode}
     </div>

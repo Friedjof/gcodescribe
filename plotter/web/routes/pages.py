@@ -141,6 +141,15 @@ def activate_page(page_id: str) -> dict:
     return store().set_active(page_id)
 
 
+class ReorderRequest(BaseModel):
+    ids: list[str]
+
+
+@router.post("/pages/reorder")
+def reorder_pages(req: ReorderRequest) -> dict:
+    return store().reorder_pages(req.ids)
+
+
 @router.post("/pages/{page_id}/gcode")
 def page_gcode(page_id: str, req: ExpectedProfileRequest | None = None) -> dict:
     page = store().get_page(page_id)

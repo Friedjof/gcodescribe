@@ -45,6 +45,53 @@ def page_polylines(page: dict) -> list[Polyline]:
     return lines
 
 
+def page_thumbnail(page: dict, target: float = 100.0) -> dict | None:
+    """A tiny preview of a page for the sidebar list.
+
+    Returns ``{"d": svg_path, "w": int, "h": int}`` with coordinates fitted to
+    the drawing's bounding box and quantised to a ``target``-unit grid, or
+    ``None`` for an empty page. Quantising + de-duplicating consecutive points
+    keeps the path string small enough to live in the (fully loaded) page index.
+    """
+    # Unlike page_polylines, the thumbnail shows every object regardless of its
+    # plotted flag — a finished page should still preview its full artwork.
+    objects = sorted(
+        page.get("objects", []), key=lambda obj: float(obj.get("zOrder", 0.0))
+    )
+    lines: list[Polyline] = []
+    for obj in objects:
+        transform = obj.get("transform") or {"x": 0, "y": 0, "rotation": 0, "scale": 1}
+        for raw_line in obj.get("cachedPolylines") or []:
+            if len(raw_line) < 2:
+                continue
+            lines.append([_transform_point(point, transform) for point in raw_line])
+    if not lines:
+        return None
+    xs = [p[0] for line in lines for p in line]
+    ys = [p[1] for line in lines for p in line]
+    min_x, min_y = min(xs), min(ys)
+    w = max(max(xs) - min_x, 1e-6)
+    h = max(max(ys) - min_y, 1e-6)
+    scale = target / max(w, h)
+
+    parts: list[str] = []
+    for line in lines:
+        pts: list[str] = []
+        last: tuple[int, int] | None = None
+        for x, y in line:
+            nx = round((x - min_x) * scale)
+            ny = round((y - min_y) * scale)
+            if (nx, ny) == last:
+                continue  # collapse points that coincide at thumbnail resolution
+            last = (nx, ny)
+            pts.append(f"{nx},{ny}")
+        if len(pts) >= 2:
+            parts.append("M" + "L".join(pts))
+    if not parts:
+        return None
+    return {"d": "".join(parts), "w": round(w * scale), "h": round(h * scale)}
+
+
 def _sorted_for_travel(polylines: list[Polyline]) -> list[Polyline]:
     if len(polylines) > 4000:
         return polylines

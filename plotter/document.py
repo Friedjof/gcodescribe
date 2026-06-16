@@ -19,6 +19,17 @@ def _new_id() -> str:
     return "p-" + uuid.uuid4().hex[:6]
 
 
+def _page_thumbnail(page: dict) -> dict | None:
+    """Compact sidebar preview; tolerant so the store keeps working even if
+    the scene/geometry layer is unavailable."""
+    try:
+        from .scene import page_thumbnail
+
+        return page_thumbnail(page)
+    except Exception:
+        return None
+
+
 def _active_profile_meta() -> dict | None:
     """Active profile for new pages; tolerant so the paint store keeps
     working even if the profile layer is unavailable."""
@@ -66,6 +77,7 @@ class DocumentStore:
             "modified": page.get("modified", 0.0),
             "objectCount": len(objects),
             "plottedCount": sum(1 for o in objects if o.get("plotted")),
+            "thumb": _page_thumbnail(page),
             # Profile the page was created for. Old pages have no profile
             # fields; they are reported as "missing" and must be adopted
             # explicitly (never silently bound to the active profile).
@@ -197,6 +209,23 @@ class DocumentStore:
             if any(m["id"] == page_id for m in index["order"]):
                 index["activeId"] = page_id
                 self._save_index(index)
+            return index
+
+    def reorder_pages(self, ids: list[str]) -> dict:
+        """Reorder the page list to match ``ids``.
+
+        Only known ids are honoured; any pages missing from ``ids`` keep their
+        relative order and are appended after the requested ones, so a partial
+        or stale list can never drop pages.
+        """
+        with self._lock:
+            index = self._index()
+            by_id = {m["id"]: m for m in index["order"]}
+            ordered = [by_id[i] for i in ids if i in by_id]
+            seen = {i for i in ids if i in by_id}
+            ordered += [m for m in index["order"] if m["id"] not in seen]
+            index["order"] = ordered
+            self._save_index(index)
             return index
 
     # -- internal ----------------------------------------------------------

@@ -274,6 +274,12 @@ export interface Page {
   profileStatus?: PageProfileStatus;
 }
 
+export interface PageThumb {
+  d: string;
+  w: number;
+  h: number;
+}
+
 export interface PageMeta {
   id: string;
   name: string;
@@ -281,6 +287,7 @@ export interface PageMeta {
   modified: number;
   objectCount: number;
   plottedCount: number;
+  thumb?: PageThumb | null;
   profileId?: string | null;
   profileName?: string | null;
   profileFingerprint?: string | null;
@@ -429,6 +436,12 @@ export const api = {
     req<Page>(`/api/pages/${id}/duplicate`, { method: "POST" }),
   activatePage: (id: string) =>
     req<PageIndex>(`/api/pages/${id}/activate`, { method: "POST" }),
+  reorderPages: (ids: string[]) =>
+    req<PageIndex>("/api/pages/reorder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
+    }),
   pageGcode: (id: string, expected?: ProfileRef | null) =>
     req<Job>(`/api/pages/${id}/gcode`, {
       method: "POST",
