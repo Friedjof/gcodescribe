@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import Upload from "./components/Upload";
+import { ToastProvider } from "./components/Toasts";
 import { I18nProvider } from "./i18n";
 import "./styles.css";
 
@@ -11,6 +12,8 @@ const isUpload = window.location.pathname.replace(/\/+$/, "") === "/upload";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <I18nProvider>{isUpload ? <Upload /> : <App />}</I18nProvider>
+    <I18nProvider>
+      <ToastProvider>{isUpload ? <Upload /> : <App />}</ToastProvider>
+    </I18nProvider>
   </React.StrictMode>
 );
