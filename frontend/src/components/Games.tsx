@@ -776,7 +776,7 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
                 </span>
               ))}
               <span className="games-chip">{preview.template.width.toFixed(0)} × {preview.template.height.toFixed(0)} mm</span>
-              <span className="games-chip">{preview.template.lines.length} {t("place.linesShort")}</span>
+              <span className="games-chip">{preview.template.lines.length} {t("common.linesShort")}</span>
             </div>
             <PreviewSvg
               cal={cal}
