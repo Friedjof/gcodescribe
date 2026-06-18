@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from ...calibration import Calibration
 from ...jobmeta import job_profile_status, read_job_meta_checked
+from ...printer.manager import BackendBusyError, BackendUnavailableError
 from ...safety import GcodeSafetyChecker, SafetyViolation
 from ...services import PrinterController
 from ...services.profiles import ProfileService, profile_meta
@@ -22,9 +23,63 @@ def controller() -> PrinterController:
     return PrinterController()
 
 
-@router.get("/octoprint/status")
+@router.get("/printer/status")
 def octo_status() -> dict:
     return controller().status()
+
+
+@router.get("/printer/backends")
+def list_backends() -> list[dict]:
+    """Configured backends with availability — drives the frontend selector."""
+    client = controller().client
+    backends = getattr(client, "backends", None)
+    if not callable(backends):
+        return []
+    return backends()
+
+
+@router.get("/printer/serial/ports")
+def list_serial_ports() -> list[dict]:
+    from ...printer.discovery import list_candidates
+
+    return [candidate.as_dict() for candidate in list_candidates()]
+
+
+class SerialProbeRequest(BaseModel):
+    device: str
+
+
+@router.post("/printer/serial/probe")
+def serial_probe(req: SerialProbeRequest) -> dict:
+    """Actively identify a port (M115). Refused while serial holds the port."""
+    from ...printer.discovery import probe
+    from ...printer.serial import peek_worker
+
+    worker = peek_worker()
+    if worker is not None and worker.status().get("online"):
+        raise HTTPException(
+            409, "Serial ist gerade aktiv — zum Prüfen erst auf OctoPrint umschalten."
+        )
+    return probe(req.device)
+
+
+class BackendSelect(BaseModel):
+    id: str  # octoprint | serial
+
+
+@router.post("/printer/backend")
+def set_backend(req: BackendSelect) -> dict:
+    client = controller().client
+    set_active = getattr(client, "set_active", None)
+    if not callable(set_active):
+        raise HTTPException(400, "Backend-Umschaltung nicht verfügbar")
+    try:
+        set_active(req.id)
+    except BackendBusyError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except BackendUnavailableError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"ok": True, "active": client.active_id}
 
 
 @router.get("/position")
@@ -96,7 +151,7 @@ def _require_profile_match(
         )
 
 
-@router.post("/octoprint/send")
+@router.post("/printer/send")
 def octo_send(req: PrintRequest) -> dict:
     ctrl = controller()
     path = jobs_dir() / Path(req.filename).name
@@ -127,7 +182,7 @@ class JobCommand(BaseModel):
     force: bool = False  # accepted for old clients; starts now always home automatically
 
 
-@router.post("/octoprint/job")
+@router.post("/printer/job")
 def octo_job(req: JobCommand) -> dict:
     ctrl = controller()
     if req.command in ("start", "restart"):
@@ -144,7 +199,7 @@ class JogRequest(BaseModel):
     limit: str = "bed"  # bed | plot
 
 
-@router.post("/octoprint/jog")
+@router.post("/printer/jog")
 def octo_jog(req: JogRequest) -> dict:
     return {
         "ok": True,
@@ -156,7 +211,7 @@ class HomeRequest(BaseModel):
     axes: list[str] | None = None
 
 
-@router.post("/octoprint/home")
+@router.post("/printer/home")
 def octo_home(req: HomeRequest) -> dict:
     return {"ok": True, "position": controller().home(req.axes)}
 
@@ -168,7 +223,7 @@ class MoveRequest(BaseModel):
     limit: str = "bed"  # bed | plot
 
 
-@router.post("/octoprint/move")
+@router.post("/printer/move")
 def octo_move(req: MoveRequest) -> dict:
     """Absolute XY move (used by click-to-move in the live view)."""
     position = controller().move_to(
@@ -182,7 +237,7 @@ class CornerMoveRequest(BaseModel):
     target: str = "paper"  # paper | plot
 
 
-@router.post("/octoprint/move-to-corner")
+@router.post("/printer/move-to-corner")
 def octo_move_to_corner(req: CornerMoveRequest) -> dict:
     """Drive to a corner; the pen is always lifted before the XY travel."""
     position = controller().move_to_corner(req.corner, target=req.target)
@@ -193,7 +248,7 @@ class PenRequest(BaseModel):
     down: bool
 
 
-@router.post("/octoprint/pen")
+@router.post("/printer/pen")
 def octo_pen(req: PenRequest) -> dict:
     """Raise or lower the pen using the calibrated Z heights."""
     result = controller().pen(req.down)
@@ -204,7 +259,7 @@ class GcodeRequest(BaseModel):
     commands: list[str]
 
 
-@router.post("/octoprint/gcode")
+@router.post("/printer/gcode")
 def octo_gcode(req: GcodeRequest) -> dict:
     controller().raw_gcode(req.commands)
     return {"ok": True}

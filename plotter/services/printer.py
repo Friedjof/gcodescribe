@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from ..calibration import Calibration
-from ..octoprint import OctoPrintClient
 from ..position import PositionTracker, get_tracker
+from ..printer import PrinterBackend, get_printer_client
 from .errors import NotHomedError, ServiceError
 
 
@@ -15,10 +15,10 @@ class PrinterController:
 
     def __init__(
         self,
-        client: OctoPrintClient | None = None,
+        client: PrinterBackend | None = None,
         tracker: PositionTracker | None = None,
     ):
-        self.client = client or OctoPrintClient()
+        self.client = client or get_printer_client()
         self.tracker = tracker or get_tracker()
 
     # -- queries -----------------------------------------------------------
@@ -49,12 +49,14 @@ class PrinterController:
 
     def home(self, axes: list[str] | None = None) -> dict:
         cal = Calibration.load()
+        self.tracker.z_max = cal.z_max
+        home_axes = axes if cal.trust_axis_home else None
         # Lift the pen a little before homing so the X/Y homing travel can
         # never drag it across the paper.
         self.client.gcode(["G91", f"G0 Z5 F{cal.z_feed:.0f}", "G90"])
         self.tracker.jog(0, 0, 5.0, cal.bed_width, cal.bed_height)
-        self.client.home(axes)
-        self.tracker.home(axes)
+        self.client.home(home_axes)
+        self.tracker.home(home_axes)
         return self.position()
 
     def jog(
@@ -66,6 +68,7 @@ class PrinterController:
         limit: str = "bed",
     ) -> dict:
         cal = Calibration.load()
+        self.tracker.z_max = cal.z_max
         pos = self.tracker.snapshot()
         if pos["homed"]:
             # Known position: clamp the target to the allowed box and send an
@@ -73,7 +76,7 @@ class PrinterController:
             x0, y0, x1, y1, z_floor = self._bounds(cal, limit)
             tx = min(max(pos["x"] + dx, x0), x1)
             ty = min(max(pos["y"] + dy, y0), y1)
-            tz = min(max(pos["z"] + dz, z_floor), self.tracker.Z_MAX)
+            tz = min(max(pos["z"] + dz, z_floor), self.tracker.z_max)
             commands = ["G90"]
             if dz:
                 commands.append(f"G0 Z{tz:.3f} F{cal.z_feed:.0f}")

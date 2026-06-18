@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from ..octoprint import OctoPrintError
 from ..pipeline import PlotterError
+from ..printer import PrinterError, use_serial
 from ..services import ServiceError
 from .auth import require_admin
 from .routes import (
@@ -26,8 +27,19 @@ from .routes import (
 )
 
 
+@asynccontextmanager
+async def _lifespan(_: FastAPI):
+    yield
+    # Release the serial port on shutdown/reload so the next start can reopen it
+    # (a still-held port causes "Resource busy").
+    if use_serial():
+        from ..printer.serial import shutdown_worker
+
+        shutdown_worker()
+
+
 def create_app() -> FastAPI:
-    app = FastAPI(title="Plotter", version="0.2.0")
+    app = FastAPI(title="Plotter", version="0.2.0", lifespan=_lifespan)
 
     app.include_router(auth.router, prefix="/api")
     app.include_router(gallery.router, prefix="/api")
@@ -48,8 +60,8 @@ def create_app() -> FastAPI:
 
     # Domain errors are raised by the service layer and translated here, so
     # the route handlers stay free of try/except boilerplate.
-    @app.exception_handler(OctoPrintError)
-    async def octoprint_error(_: Request, exc: OctoPrintError) -> JSONResponse:
+    @app.exception_handler(PrinterError)
+    async def printer_error(_: Request, exc: PrinterError) -> JSONResponse:
         return JSONResponse(status_code=502, content={"detail": str(exc)})
 
     @app.exception_handler(ServiceError)

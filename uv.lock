@@ -348,6 +348,7 @@ dependencies = [
     { name = "opencv-python-headless" },
     { name = "poppler-utils" },
     { name = "pyotp" },
+    { name = "pyserial" },
     { name = "python-docx" },
     { name = "python-multipart" },
     { name = "python-pptx" },
@@ -377,6 +378,7 @@ requires-dist = [
     { name = "opencv-python-headless", specifier = ">=4.13.0.92" },
     { name = "poppler-utils", specifier = ">=0.1.0" },
     { name = "pyotp", specifier = ">=2.9.0" },
+    { name = "pyserial", specifier = ">=3.5" },
     { name = "python-docx", specifier = ">=1.2.0" },
     { name = "python-multipart", specifier = ">=0.0.9" },
     { name = "python-pptx", specifier = ">=1.0.2" },
@@ -930,6 +932,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/4c/d1/f6bc803daa4c1cfe5b1176427f46dfe3ffee524bea1dee8bdde532e17c41/pyphen-0.15.0.tar.gz", hash = "sha256:a430623decac53dc3691241253263cba36b9dd7a44ffd2680b706af368cda2f2", size = 2072615, upload-time = "2024-04-23T14:30:53.185Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a1/5d/a545d71eba7e031ffd4c670b18b7c7c8b128d0fd0ca79914bd40ab98a456/pyphen-0.15.0-py3-none-any.whl", hash = "sha256:999b430916ab42ae9912537cd95c074e0c6691e89a9d05999f9b610a68f34858", size = 2073328, upload-time = "2024-04-23T14:30:45.575Z" },
+]
+
+[[package]]
+name = "pyserial"
+version = "3.5"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/1e/7d/ae3f0a63f41e4d2f6cb66a5b57197850f919f59e558159a4dd3a818f5082/pyserial-3.5.tar.gz", hash = "sha256:3c77e014170dfffbd816e6ffc205e9842efb10be9f58ec16d3e8675b4925cddb", size = 159125, upload-time = "2020-11-23T03:59:15.045Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/07/bc/587a445451b253b285629263eb51c2d8e9bcea4fc97826266d186f96f558/pyserial-3.5-py2.py3-none-any.whl", hash = "sha256:c4451db6ba391ca6ca299fb3ec7bae67a5c55dde170964c7a14ceefec02f2cf0", size = 90585, upload-time = "2020-11-23T03:59:13.41Z" },
 ]
 
 [[package]]

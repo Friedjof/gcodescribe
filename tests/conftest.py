@@ -4,6 +4,7 @@ import pytest
 
 import plotter.document as document
 import plotter.position as position
+import plotter.printer.factory as printer_factory
 import plotter.services.auth as auth
 from plotter.calibration import Calibration
 
@@ -17,10 +18,12 @@ def workspace(tmp_path, monkeypatch):
     position._tracker = None
     document._doc = None
     auth._store = None
+    printer_factory.reset_manager()
     yield tmp_path
     position._tracker = None
     document._doc = None
     auth._store = None
+    printer_factory.reset_manager()
 
 
 @pytest.fixture
