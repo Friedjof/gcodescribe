@@ -20,6 +20,15 @@ FRONTEND_PORT="${VITE_PORT:-5173}"
 ASSUME_YES="${DEV_YES:-0}"
 [ "${1:-}" = "--yes" ] && ASSUME_YES=1
 
+export PRINTER_SERIAL_ENABLED="${PRINTER_SERIAL_ENABLED:-false}"
+export PRINTER_DEFAULT_BACKEND="${PRINTER_DEFAULT_BACKEND:-}"
+export PRINTER_SERIAL_PORT="${PRINTER_SERIAL_PORT:-/dev/ttyUSB0}"
+export PRINTER_SERIAL_BAUD="${PRINTER_SERIAL_BAUD:-115200}"
+DEV_START_BACKEND="${DEV_START_BACKEND:-1}"
+DEV_START_FRONTEND="${DEV_START_FRONTEND:-1}"
+case "$DEV_START_BACKEND" in 1|true|TRUE|yes|YES|on|ON) DEV_START_BACKEND=1 ;; *) DEV_START_BACKEND=0 ;; esac
+case "$DEV_START_FRONTEND" in 1|true|TRUE|yes|YES|on|ON) DEV_START_FRONTEND=1 ;; *) DEV_START_FRONTEND=0 ;; esac
+
 cyan=$'\033[1;36m'; yellow=$'\033[1;33m'; red=$'\033[1;31m'; green=$'\033[1;32m'; dim=$'\033[2m'; reset=$'\033[0m'
 say() { printf '%s\n' "$*"; }
 
@@ -100,8 +109,16 @@ if [ "${#LEFTOVERS[@]}" -gt 0 ]; then
 fi
 
 # --- start services ---------------------------------------------------------
-say "${cyan}▶ Backend  → http://localhost:${BACKEND_PORT}${reset}"
-say "${cyan}▶ Frontend → http://localhost:${FRONTEND_PORT}  (proxy /api → :${BACKEND_PORT})${reset}"
+if [ "$DEV_START_BACKEND" = 1 ]; then
+  say "${cyan}▶ Backend  → http://localhost:${BACKEND_PORT}${reset}"
+else
+  say "${yellow}○ Backend aus${reset}"
+fi
+if [ "$DEV_START_FRONTEND" = 1 ]; then
+  say "${cyan}▶ Frontend → http://localhost:${FRONTEND_PORT}  (proxy /api → :${BACKEND_PORT})${reset}"
+else
+  say "${yellow}○ Frontend aus${reset}"
+fi
 
 back=; front=
 cleanup() {
@@ -114,14 +131,18 @@ cleanup() {
 }
 trap cleanup INT TERM EXIT
 
-setsid uv run uvicorn plotter.web.app:app \
-  --host 0.0.0.0 \
-  --port "$BACKEND_PORT" \
-  --reload \
-  --reload-dir plotter &
-back=$!
+if [ "$DEV_START_BACKEND" = 1 ]; then
+  setsid uv run uvicorn plotter.web.app:app \
+    --host 0.0.0.0 \
+    --port "$BACKEND_PORT" \
+    --reload \
+    --reload-dir plotter &
+  back=$!
+fi
 
-setsid bash -c 'cd "$1" && exec npm run dev' _ "$ROOT/frontend" &
-front=$!
+if [ "$DEV_START_FRONTEND" = 1 ]; then
+  setsid bash -c 'cd "$1" && exec npm run dev' _ "$ROOT/frontend" &
+  front=$!
+fi
 
 wait
