@@ -15,6 +15,11 @@ import {
   snapPt,
   toPath,
   toMultiPath,
+  alignmentCandidates,
+  snapToGuides,
+  type Bounds,
+  type GuideCandidate,
+  type Guide,
 } from "../paint/geometry";
 
 export type Tool = "select" | "pen" | "line" | "rect" | "circle" | "semicircle" | "text";
@@ -65,7 +70,7 @@ function shapeWorld(tool: Tool, pts: Pt[]): Pt[][] {
 type Draft = { tool: Tool; points: Pt[] };
 type Marquee = { start: Pt; current: Pt; additive: boolean };
 type Drag =
-  | { mode: "move"; ids: string[]; primaryId: string; startMouse: Pt; startTs: Map<string, Transform>; startBoundsAll: [number, number, number, number] }
+  | { mode: "move"; ids: string[]; primaryId: string; startMouse: Pt; startTs: Map<string, Transform>; startBoundsAll: [number, number, number, number]; vGuides: GuideCandidate[]; hGuides: GuideCandidate[] }
   | { mode: "resize"; id: string; edge: ResizeEdge; startBounds: [number, number, number, number]; startLocalBounds: [number, number, number, number] }
   | { mode: "groupScale"; ids: string[]; center: Pt; startDist: number; startTs: Map<string, Transform> }
   | { mode: "rotate"; id: string; center: Pt; startAngle: number; startRotation: number };
@@ -113,7 +118,12 @@ export default function PaintCanvas({
 
   const [draft, setDraft] = useState<Draft | null>(null);
   const [marquee, setMarquee] = useState<Marquee | null>(null);
+  const [guides, setGuides] = useState<Guide[]>([]);
   const drag = useRef<Drag | null>(null);
+
+  // How close (mm) a moving edge/center must come to a reference before it
+  // snaps. Scaled to the plot area so it feels the same regardless of size.
+  const SNAP_TOL = S * 0.008;
 
   // Wrappers that enforce the hard plot-area boundary before every transform write.
   const updateSafe = (id: string, t: Transform) => {
@@ -225,6 +235,16 @@ export default function PaintCanvas({
         const [sx, sy] = snapPt([primary.x + dx, primary.y + dy], step, true);
         dx = sx - primary.x;
         dy = sy - primary.y;
+      }
+      // Alignment guides override the grid per axis when something is in reach.
+      // Hold Alt to bypass snapping entirely for free placement.
+      if (!e.altKey) {
+        const snapped = snapToGuides(d.startBoundsAll, dx, dy, d.vGuides, d.hGuides, SNAP_TOL);
+        dx = snapped.dx;
+        dy = snapped.dy;
+        setGuides(snapped.guides);
+      } else if (guides.length) {
+        setGuides([]);
       }
       // Clamp so no part of any selected object leaves the plot area.
       dx = cl(dx, -d.startBoundsAll[0], W - d.startBoundsAll[2]);
@@ -372,6 +392,7 @@ export default function PaintCanvas({
       setDraft(null);
     }
     drag.current = null;
+    if (guides.length) setGuides([]);
   };
 
   const startMove = (e: React.PointerEvent, obj: SceneObject) => {
@@ -401,12 +422,19 @@ export default function PaintCanvas({
       },
       [Infinity, Infinity, -Infinity, -Infinity]
     );
+    // Alignment references: bounds of every visible object NOT being moved.
+    const staticBounds: Bounds[] = page.objects
+      .filter((o) => !o.plotted && !ids.includes(o.id))
+      .map((o) => objectWorldBounds((o.cachedPolylines ?? []) as Pt[][], o.transform ?? IDENTITY));
+    const { vertical, horizontal } = alignmentCandidates(staticBounds, W, H);
     drag.current = {
       mode: "move",
       ids,
       primaryId: obj.id,
       startMouse: toMM(e),
       startBoundsAll,
+      vGuides: vertical,
+      hGuides: horizontal,
       startTs: new Map(
         page.objects
           .filter((o) => ids.includes(o.id))
@@ -663,6 +691,19 @@ export default function PaintCanvas({
             </g>
           );
         })()}
+
+        {/* alignment guides while dragging */}
+        {guides.map((g, i) =>
+          g.axis === "x" ? (
+            <line key={`g${i}`} x1={g.pos} y1={g.from} x2={g.pos} y2={g.to}
+              stroke="var(--accent)" strokeWidth={STROKE} strokeDasharray={`${STROKE * 3} ${STROKE * 2}`}
+              pointerEvents="none" />
+          ) : (
+            <line key={`g${i}`} x1={g.from} y1={g.pos} x2={g.to} y2={g.pos}
+              stroke="var(--accent)" strokeWidth={STROKE} strokeDasharray={`${STROKE * 3} ${STROKE * 2}`}
+              pointerEvents="none" />
+          )
+        )}
 
         <text x={W / 2} y={H + pad * 0.7} fontSize={S * 0.022}
           fill="var(--muted)" textAnchor="middle">

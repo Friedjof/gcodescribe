@@ -123,6 +123,124 @@ export function snapPt(p: Pt, step: number, on: boolean): Pt {
   return [snap(p[0], step, on), snap(p[1], step, on)];
 }
 
+// --- alignment guides (smart snapping while moving) ---
+
+export type Bounds = [number, number, number, number];
+
+// A candidate alignment line. `pos` is the coordinate on the snapped axis
+// (x for vertical guides, y for horizontal). `from`/`to` span the line on the
+// other axis — the extent of the reference (object bounds or full canvas) — so
+// the overlay can draw the guide only across the relevant region.
+export interface GuideCandidate {
+  pos: number;
+  from: number;
+  to: number;
+}
+
+// A guide that the moving selection actually snapped to, ready to render.
+export interface Guide {
+  axis: "x" | "y";
+  pos: number;
+  from: number;
+  to: number;
+}
+
+// Build vertical (x) and horizontal (y) snap candidates from the canvas edges
+// and a set of static object bounds. Each object contributes its left/center/
+// right (vertical) and top/center/bottom (horizontal). The canvas contributes
+// its two edges and the midline on each axis.
+export function alignmentCandidates(
+  staticBounds: Bounds[],
+  W: number,
+  H: number
+): { vertical: GuideCandidate[]; horizontal: GuideCandidate[] } {
+  const vertical: GuideCandidate[] = [
+    { pos: 0, from: 0, to: H },
+    { pos: W / 2, from: 0, to: H },
+    { pos: W, from: 0, to: H },
+  ];
+  const horizontal: GuideCandidate[] = [
+    { pos: 0, from: 0, to: W },
+    { pos: H / 2, from: 0, to: W },
+    { pos: H, from: 0, to: W },
+  ];
+  for (const [x0, y0, x1, y1] of staticBounds) {
+    vertical.push(
+      { pos: x0, from: y0, to: y1 },
+      { pos: (x0 + x1) / 2, from: y0, to: y1 },
+      { pos: x1, from: y0, to: y1 }
+    );
+    horizontal.push(
+      { pos: y0, from: x0, to: x1 },
+      { pos: (y0 + y1) / 2, from: x0, to: x1 },
+      { pos: y1, from: x0, to: x1 }
+    );
+  }
+  return { vertical, horizontal };
+}
+
+// Given the moving selection's bounds (already offset by the candidate dx/dy)
+// and the candidates for one axis, find the best snap on that axis. Probes the
+// selection's near edge, center and far edge against every candidate and keeps
+// the smallest correction within `tol`. Returns the delta to apply plus the
+// guide to draw, or null when nothing is close enough.
+function snapAxis(
+  lo: number,
+  hi: number,
+  candidates: GuideCandidate[],
+  tol: number
+): { delta: number; cand: GuideCandidate } | null {
+  const probes = [lo, (lo + hi) / 2, hi];
+  let best: { delta: number; cand: GuideCandidate } | null = null;
+  for (const cand of candidates) {
+    for (const probe of probes) {
+      const delta = cand.pos - probe;
+      if (Math.abs(delta) <= tol && (!best || Math.abs(delta) < Math.abs(best.delta))) {
+        best = { delta, cand };
+      }
+    }
+  }
+  return best;
+}
+
+// Snap a candidate move (dx, dy) of a selection to alignment guides. `sel` is
+// the selection's world bounds BEFORE the move; the probe positions are derived
+// by adding the candidate delta. Returns corrected deltas and the guides that
+// were hit (for rendering). X and Y snap independently.
+export function snapToGuides(
+  sel: Bounds,
+  dx: number,
+  dy: number,
+  vertical: GuideCandidate[],
+  horizontal: GuideCandidate[],
+  tol: number
+): { dx: number; dy: number; guides: Guide[] } {
+  const guides: Guide[] = [];
+  const vx = snapAxis(sel[0] + dx, sel[2] + dx, vertical, tol);
+  if (vx) {
+    dx += vx.delta;
+    // Extend the guide along y to also span the moving selection, so the line
+    // visibly connects the reference and the object that snapped to it.
+    guides.push({
+      axis: "x",
+      pos: vx.cand.pos,
+      from: Math.min(vx.cand.from, sel[1] + dy),
+      to: Math.max(vx.cand.to, sel[3] + dy),
+    });
+  }
+  const hy = snapAxis(sel[1] + dy, sel[3] + dy, horizontal, tol);
+  if (hy) {
+    dy += hy.delta;
+    guides.push({
+      axis: "y",
+      pos: hy.cand.pos,
+      from: Math.min(hy.cand.from, sel[0] + dx),
+      to: Math.max(hy.cand.to, sel[2] + dx),
+    });
+  }
+  return { dx, dy, guides };
+}
+
 // --- svg path helper ---
 
 export function toPath(line: Pt[]): string {

@@ -94,6 +94,34 @@ export default function Paint({
 
   const reloadIndex = () => api.listPages().then(setIndex).catch(fail);
 
+  // The Paint tab stays mounted while hidden (KEEP_ALIVE), so its mount effect
+  // runs only once. Meanwhile the Games/Gallery tabs can create a new page and
+  // make it active on the backend. When we become visible again, pick up that
+  // newly activated page so the canvas shows what the user just sent over —
+  // otherwise it keeps displaying the previously open page. Skip the reload when
+  // the active page is already the one on screen, to preserve the undo stack and
+  // any in-flight edits on normal tab returns.
+  const pageIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    pageIdRef.current = page?.id ?? null;
+  }, [page?.id]);
+  useEffect(() => {
+    if (!visible) return;
+    api
+      .listPages()
+      .then((idx) => {
+        setIndex(idx);
+        const id = idx.activeId ?? idx.order[0]?.id;
+        if (id && id !== pageIdRef.current) {
+          undoStack.current = [];
+          redoStack.current = [];
+          setSelectedIds([]);
+          return api.getPage(id).then(autoAdoptStale).then(setPage);
+        }
+      })
+      .catch(fail);
+  }, [visible]);
+
   // A "stale" page belongs to the *active* profile but was created before the
   // profile's last edit. Re-stamping it to the current fingerprint changes no
   // geometry, so we do it silently whenever such a page is opened — no manual

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type GalleryItem, type GallerySvg, type GcodePreview3D } from "../api";
+import { api, type GalleryItem, type GalleryPreview, type GcodePreview3D } from "../api";
 import { fmtBytes, fmtDuration } from "../format";
 import { useI18n } from "../i18n";
 import { galleryItemObject } from "../paint/insertAsset";
@@ -28,7 +28,7 @@ export default function GalleryDetail({
 }) {
   const { t } = useI18n();
   const [view, setView] = useState<View>("2d");
-  const [svg, setSvg] = useState<GallerySvg | null>(null);
+  const [svg, setSvg] = useState<GalleryPreview | null>(null);
   const [gcode, setGcode] = useState<GcodePreview3D | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [showTravels, setShowTravels] = useState(true);
@@ -41,7 +41,9 @@ export default function GalleryDetail({
   const fail = (e: any) => setErr(String(e.message ?? e));
 
   useEffect(() => {
-    api.gallerySvg(item.id).then(setSvg).catch(fail);
+    // Page-1 preview works for every kind (single-image submissions and
+    // multi-page admin assets alike); `/svg` only exists for image.svg items.
+    api.galleryPreview(item.id, 1).then(setSvg).catch(fail);
   }, [item.id]);
 
   useEffect(() => {
@@ -93,6 +95,9 @@ export default function GalleryDetail({
   };
 
   const m = item.metrics;
+  // Multi-page admin assets carry no generated G-code until placement, so the
+  // 3D view (and its /gcode/preview3d fetch) only makes sense once metrics exist.
+  const hasGcode = !!m;
 
   return (
     <>
@@ -108,6 +113,7 @@ export default function GalleryDetail({
           </>
         }
         headerActions={
+          hasGcode && (
           <Segmented<View>
             value={view}
             onChange={setView}
@@ -116,6 +122,7 @@ export default function GalleryDetail({
               { value: "3d", label: "G-code" },
             ]}
           />
+          )
         }
         onClose={onClose}
         footer={
