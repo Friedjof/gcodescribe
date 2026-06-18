@@ -20,9 +20,8 @@ class GcodeSafetyChecker:
 
     Rules:
     - No homing at all inside a job (any ``G28``): machine Z=0 is bed level,
-      not pen level — with paper on the bed that crushes the pen into it. The
-      Anycubic firmware does not reliably honour axis arguments on G28, so
-      even ``G28 X Y`` may home Z. Homing happens once via the app instead.
+      not pen level — with paper on the bed that crushes the pen into it.
+      Homing happens once via the app instead, before the job starts.
     - Every Z target must be exactly one of the two calibrated pen heights
       (``pen_up_z`` / ``pen_down_z``) — no other height is ever allowed.
     - The very first motion must lift the pen to ``pen_up_z``.
