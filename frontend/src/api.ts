@@ -1,6 +1,7 @@
 export interface Calibration {
   bed_width: number;
   bed_height: number;
+  z_max: number;
   plot_width: number;
   plot_height: number;
   origin_x: number;
@@ -13,6 +14,7 @@ export interface Calibration {
   z_feed: number;
   fit_to_area: boolean;
   flip_y: boolean;
+  trust_axis_home: boolean;
   paper_corners: Record<string, [number, number]>;
   paper_margin: number;
 }
@@ -92,6 +94,18 @@ export interface Position {
   z: number;
   homed: boolean;
   homed_axes: string[];
+}
+
+export interface SerialPortCandidate {
+  device: string;
+  byId?: string | null;
+  description?: string | null;
+  manufacturer?: string | null;
+  serialNumber?: string | null;
+  vid?: string | null;
+  pid?: string | null;
+  likelyPrinter: boolean;
+  score: number;
 }
 
 export interface PaperState {
@@ -491,15 +505,35 @@ export const api = {
   testPattern: (name: string) =>
     req<Job>(`/api/testpattern/${name}`, { method: "POST" }),
 
-  octoStatus: () => req<any>("/api/octoprint/status"),
+  octoStatus: () => req<any>("/api/printer/status"),
+  listBackends: () =>
+    req<Array<{ id: string; configured: boolean; online: boolean; active: boolean }>>(
+      "/api/printer/backends"
+    ),
+  setBackend: (id: string) =>
+    req<{ ok: boolean; active: string }>("/api/printer/backend", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    }),
+  listSerialPorts: () => req<SerialPortCandidate[]>("/api/printer/serial/ports"),
+  probeSerialPort: (device: string) =>
+    req<{ device: string; marlin: boolean; firmware: string | null; error?: string }>(
+      "/api/printer/serial/probe",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ device }),
+      }
+    ),
   send: (filename: string, start: boolean) =>
-    req<any>("/api/octoprint/send", {
+    req<any>("/api/printer/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ filename, start }),
     }),
   jobCommand: (command: string) =>
-    req("/api/octoprint/job", {
+    req("/api/printer/job", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ command }),
@@ -510,19 +544,19 @@ export const api = {
     z: number,
     opts?: { speed?: number; limit?: "bed" | "plot" }
   ) =>
-    req("/api/octoprint/jog", {
+    req("/api/printer/jog", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ x, y, z, speed: opts?.speed, limit: opts?.limit ?? "bed" }),
     }),
   home: (axes?: string[]) =>
-    req("/api/octoprint/home", {
+    req("/api/printer/home", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ axes }),
     }),
   pen: (down: boolean) =>
-    req("/api/octoprint/pen", {
+    req("/api/printer/pen", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ down }),
@@ -537,14 +571,14 @@ export const api = {
 
   position: () => req<Position>("/api/position"),
   move: (x: number, y: number) =>
-    req<{ ok: boolean; position: Position }>("/api/octoprint/move", {
+    req<{ ok: boolean; position: Position }>("/api/printer/move", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ x, y }),
     }),
 
   moveToCorner: (corner: string, target: "paper" | "plot" = "paper") =>
-    req<{ ok: boolean; position: Position }>("/api/octoprint/move-to-corner", {
+    req<{ ok: boolean; position: Position }>("/api/printer/move-to-corner", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ corner, target }),

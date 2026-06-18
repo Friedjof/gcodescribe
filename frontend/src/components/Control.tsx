@@ -1,8 +1,123 @@
-import { useState } from "react";
-import { api } from "../api";
+import { useEffect, useState } from "react";
+import { api, type SerialPortCandidate } from "../api";
 import { useArrowKeys } from "../hooks";
 import { useI18n } from "../i18n";
 import Segmented from "./Segmented";
+
+type Backend = { id: string; configured: boolean; online: boolean; active: boolean };
+
+function PrinterOverview({ status, onAction }: { status: any; onAction: () => void }) {
+  const { t } = useI18n();
+  const [backends, setBackends] = useState<Backend[]>([]);
+  const [busy, setBusy] = useState(false);
+
+  const load = () => api.listBackends().then(setBackends).catch(() => {});
+  useEffect(() => {
+    load();
+    const id = setInterval(load, 4000);
+    return () => clearInterval(id);
+  }, []);
+
+  const configured = backends.filter((b) => b.configured);
+  if (configured.length === 0) return null;
+
+  const job = status?.job;
+  const jobRunning = ["printing", "paused"].some((s) =>
+    job?.state?.toLowerCase?.().includes(s)
+  );
+
+  const activate = (id: string) => {
+    if (busy) return;
+    setBusy(true);
+    api
+      .setBackend(id)
+      .then(() => {
+        load();
+        onAction();
+      })
+      .catch(() => {})
+      .finally(() => setBusy(false));
+  };
+
+  // Live activity is only known for the active backend (single-active model).
+  const activity = (b: Backend): string => {
+    if (!b.active) return b.online ? t("printer.state.ready") : t("printer.state.offline");
+    const state = job?.state?.toLowerCase?.() ?? "";
+    if (state.includes("printing")) {
+      const pct = job?.progress?.completion;
+      return t("printer.printingPct", { pct: pct != null ? pct.toFixed(0) : "?" });
+    }
+    if (state.includes("paused")) return t("printer.paused");
+    return t("printer.idle");
+  };
+
+  return (
+    <div className="printer-overview">
+      <div className="muted printer-overview-head">{t("control.printersHeading")}</div>
+      <div className="printer-cards">
+        {configured.map((b) => (
+          <div key={b.id} className={`printer-card${b.active ? " active" : ""}`}>
+            <div className="printer-card-top">
+              <span className="dot" data-online={b.online} />
+              <strong>{t(`printer.backend.${b.id}`)}</strong>
+              {b.active && (
+                <span className="pbadge pbadge-active">{t("printer.state.active")}</span>
+              )}
+            </div>
+            <div className="muted printer-card-activity">{activity(b)}</div>
+            {b.active && job?.job?.file?.name && (
+              <div className="muted printer-card-job">{job.job.file.name}</div>
+            )}
+            {!b.active && (
+              <button
+                className="printer-activate"
+                disabled={busy || jobRunning}
+                title={jobRunning ? t("printer.switchBlocked") : ""}
+                onClick={() => activate(b.id)}
+              >
+                {t("printer.activate")}
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SerialPortHint() {
+  const { t } = useI18n();
+  const [ports, setPorts] = useState<SerialPortCandidate[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const refresh = () => {
+    setLoading(true);
+    api.listSerialPorts().then(setPorts).catch(() => setPorts([])).finally(() => setLoading(false));
+  };
+
+  useEffect(refresh, []);
+
+  return (
+    <div className="serial-port-hint">
+      <button onClick={refresh} disabled={loading}>
+        {loading ? t("serial.scanning") : t("serial.rescan")}
+      </button>
+      {ports.length === 0 ? (
+        <p className="muted">{t("serial.noPorts")}</p>
+      ) : (
+        <ul className="serial-port-list">
+          {ports.map((p) => (
+            <li key={p.byId ?? p.device}>
+              <code>{p.byId ?? p.device}</code>
+              {p.likelyPrinter && <span className="pbadge pbadge-active">{t("serial.likelyPrinter")}</span>}
+              <span className="muted">{p.description || p.manufacturer || p.device}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 export default function Control({
   status,
@@ -46,10 +161,21 @@ export default function Control({
     return (
       <div className="card">
         <h2>{t("control.title")}</h2>
-        <p className="muted">
-          {t("control.offlineHint")}
-          <code> OCTOPRINT_URL</code> {t("common.and")} <code>OCTOPRINT_API_KEY</code>.
-        </p>
+        <PrinterOverview status={status} onAction={onAction} />
+        {status?.backend === "serial" ? (
+          <>
+            <p className="muted">
+              {t("control.offlineHintSerial")}
+              <code> PRINTER_SERIAL_PORT</code>.
+            </p>
+            <SerialPortHint />
+          </>
+        ) : (
+          <p className="muted">
+            {t("control.offlineHint")}
+            <code> OCTOPRINT_URL</code> {t("common.and")} <code>OCTOPRINT_API_KEY</code>.
+          </p>
+        )}
       </div>
     );
 
@@ -57,6 +183,7 @@ export default function Control({
     <div className="grid">
       <section className="card">
         <h2>{t("control.motion")}</h2>
+        <PrinterOverview status={status} onAction={onAction} />
         <Segmented
           value={step}
           onChange={setStep}

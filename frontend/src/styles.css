@@ -2571,3 +2571,38 @@ input[type="checkbox"]:disabled {
 .md-debug-toggle input { width: auto; }
 .md-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .md-err { margin: 0 18px 14px; }
+
+/* Printer backend switcher (OctoPrint <-> USB/Serial) */
+.backend-switch { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.backend-opt {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--border, #ccc); background: transparent;
+  font-size: 0.9em;
+}
+.backend-opt.on { background: var(--accent, #2d7); color: #fff; border-color: transparent; }
+.backend-opt:disabled { cursor: default; opacity: 0.8; }
+.backend-opt .dot { width: 8px; height: 8px; border-radius: 50%; background: #b33; }
+.backend-opt .dot[data-online="true"] { background: #2c2; }
+
+/* Printer overview (Steuerung): one card per configured backend */
+.printer-overview { margin-bottom: 16px; }
+.printer-overview-head { font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+.printer-cards { display: flex; flex-wrap: wrap; gap: 10px; }
+.printer-card {
+  flex: 1 1 160px; min-width: 150px;
+  border: 1px solid var(--border); border-radius: 10px;
+  padding: 10px 12px; background: rgba(255, 255, 255, 0.02);
+}
+.printer-card.active { border-color: var(--ok); background: rgba(48, 209, 88, 0.06); }
+.printer-card-top { display: flex; align-items: center; gap: 7px; }
+.printer-card-activity { font-size: 0.85em; margin-top: 4px; }
+.printer-card-job { font-size: 0.8em; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.printer-card .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: 0 0 auto; }
+.printer-card .dot[data-online="true"] { background: var(--ok); }
+.printer-activate { margin-top: 8px; font-size: 0.85em; padding: 4px 10px; }
+
+/* Serial port discovery hint */
+.serial-port-hint { margin-top: 10px; }
+.serial-port-list { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-direction: column; gap: 6px; }
+.serial-port-list li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 0.85em; }
