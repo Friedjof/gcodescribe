@@ -7,7 +7,7 @@ import GalleryPopup from "./GalleryPopup";
 import PlotScore from "./PlotScore";
 import Gcode3DOverlay from "./Gcode3DOverlay";
 import Segmented from "./Segmented";
-import { IDENTITY, localize, objectWorldBounds, type Pt, type Transform } from "../paint/geometry";
+import { IDENTITY, bounds, localize, objectWorldBounds, type Pt, type Transform } from "../paint/geometry";
 import { TEXT_FONTS, type TextFont } from "../paint/text";
 import {
   basePolylines,
@@ -52,6 +52,7 @@ export default function Paint({
   const [importingImage, setImportingImage] = useState(false);
   const [mdOpen, setMdOpen] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
+  const [sizeLinked, setSizeLinked] = useState(true);
   const { confirm, ConfirmNode } = useConfirm();
   const { prompt, PromptNode } = usePrompt();
   const saveTimer = useRef<number | undefined>(undefined);
@@ -628,6 +629,61 @@ export default function Paint({
     return Number.isFinite(b[0]) ? b : null;
   };
 
+  const objectLocalSize = (obj: SceneObject): { width: number; height: number; localWidth: number; localHeight: number } | null => {
+    const local = (obj.cachedPolylines as Pt[][] | undefined) ?? basePolylines(obj);
+    if (!local.length) return null;
+    const flat = local.flat();
+    if (!flat.length) return null;
+    const [x0, y0, x1, y1] = bounds(flat);
+    const t = obj.transform ?? IDENTITY;
+    const sx = Math.abs(t.scaleX ?? t.scale);
+    const sy = Math.abs(t.scaleY ?? t.scale);
+    const localWidth = Math.max(x1 - x0, 0);
+    const localHeight = Math.max(y1 - y0, 0);
+    return {
+      width: localWidth * sx,
+      height: localHeight * sy,
+      localWidth,
+      localHeight,
+    };
+  };
+
+  const setSelectedObjectSize = (axis: "width" | "height", target: number) => {
+    if (!page || selectedIds.length !== 1 || !Number.isFinite(target) || target <= 0) return;
+    const obj = page.objects.find((o) => o.id === selectedIds[0]);
+    if (!obj) return;
+    const size = objectLocalSize(obj);
+    if (!size) return;
+    const current = axis === "width" ? size.width : size.height;
+    const base = axis === "width" ? size.localWidth : size.localHeight;
+    if ((sizeLinked && current <= 0) || (!sizeLinked && base <= 0)) return;
+    remember();
+    const objects = page.objects.map((o) => {
+      if (o.id !== obj.id) return o;
+      const t = o.transform ?? IDENTITY;
+      const sx = t.scaleX ?? t.scale;
+      const sy = t.scaleY ?? t.scale;
+      const factor = sizeLinked ? target / current : 1;
+      const nextSx = sizeLinked
+        ? sx * factor
+        : axis === "width" ? Math.sign(sx || 1) * (target / base) : sx;
+      const nextSy = sizeLinked
+        ? sy * factor
+        : axis === "height" ? Math.sign(sy || 1) * (target / base) : sy;
+      return {
+        ...o,
+        transform: {
+          ...t,
+          scaleX: nextSx,
+          scaleY: nextSy,
+          scale: Math.max(Math.abs(nextSx), Math.abs(nextSy)),
+        },
+      };
+    });
+    setPage({ ...page, objects });
+    persist(page.id, objects);
+  };
+
   const mapSelected = (fn: (t: Transform) => Transform) => {
     if (!page || selectedIds.length === 0) return;
     remember();
@@ -784,6 +840,7 @@ export default function Paint({
   const selectedText = selectedObjects.length === 1 && selectedObjects[0].type === "text"
     ? selectedObjects[0]
     : null;
+  const selectedObjectSize = selectedObjects.length === 1 ? objectLocalSize(selectedObjects[0]) : null;
   const selectedStyle = selectedObjects.length > 0 ? objectStyle(selectedObjects[0]) : DEFAULT_VECTOR_STYLE;
   const canUngroupMenu = !!menu && page.objects.some((obj) => menu.ids.includes(obj.id) && obj.groupId);
 
@@ -1004,6 +1061,51 @@ export default function Paint({
             </div>
 
             <div className="paint-style-panel">
+              <div className="paint-object-size-head">
+                <h4>{t("paint.object")}</h4>
+                <button
+                  type="button"
+                  className={`ghost tiny ${sizeLinked ? "active" : ""}`}
+                  aria-pressed={sizeLinked}
+                  title={t("paint.keepAspect")}
+                  onClick={() => setSizeLinked((v) => !v)}
+                >
+                  {sizeLinked ? "🔗" : "⛓"}
+                </button>
+              </div>
+              <div className="paint-size-fields">
+                <label className="field">{t("common.width")}
+                  <div className="input-unit">
+                    <input
+                      type="number"
+                      min={0.1}
+                      step={0.5}
+                      disabled={!selectedObjectSize || selectedObjectSize.localWidth <= 0}
+                      value={selectedObjectSize ? Number(selectedObjectSize.width.toFixed(1)) : ""}
+                      onChange={(e) => {
+                        if (e.target.value !== "") setSelectedObjectSize("width", Number(e.target.value));
+                      }}
+                    />
+                    <em>mm</em>
+                  </div>
+                </label>
+                <label className="field">{t("common.height")}
+                  <div className="input-unit">
+                    <input
+                      type="number"
+                      min={0.1}
+                      step={0.5}
+                      disabled={!selectedObjectSize || selectedObjectSize.localHeight <= 0}
+                      value={selectedObjectSize ? Number(selectedObjectSize.height.toFixed(1)) : ""}
+                      onChange={(e) => {
+                        if (e.target.value !== "") setSelectedObjectSize("height", Number(e.target.value));
+                      }}
+                    />
+                    <em>mm</em>
+                  </div>
+                </label>
+              </div>
+
               <h4>{t("paint.style.line")}</h4>
               <label className="field">
                 {t("paint.style.type")}

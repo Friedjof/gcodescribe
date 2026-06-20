@@ -1918,6 +1918,10 @@ kbd {
   min-width: 0;
 }
 .paint-empty-hint {
+.paint-object-size-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.paint-object-size-head h4 { margin-bottom: 0; }
+.paint-object-size-head .active { border-color: var(--accent); color: var(--accent); }
+.paint-size-fields { display: grid; grid-template-columns: 1fr; gap: 6px; margin-top: -2px; }
   position: absolute;
   inset: 0;
   z-index: 1;
