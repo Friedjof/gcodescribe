@@ -59,6 +59,17 @@ export default function Paint({
   const undoStack = useRef<SceneObject[][]>([]);
   const redoStack = useRef<SceneObject[][]>([]);
   const clipboard = useRef<SceneObject[]>([]);
+  // The undo/redo stacks live in refs (mutating them must not re-render mid
+  // edit); this state mirrors their depth so the toolbar buttons can enable
+  // and disable in step with them.
+  const [history, setHistory] = useState({ undo: 0, redo: 0 });
+  const syncHistory = () =>
+    setHistory({ undo: undoStack.current.length, redo: redoStack.current.length });
+  const resetHistory = () => {
+    undoStack.current = [];
+    redoStack.current = [];
+    syncHistory();
+  };
 
   // Icon + name: the toolbar shows the glyph, the name lives in the tooltip.
   const tools: { value: Tool; label: string; icon: string }[] = [
@@ -113,8 +124,7 @@ export default function Paint({
         setIndex(idx);
         const id = idx.activeId ?? idx.order[0]?.id;
         if (id && id !== pageIdRef.current) {
-          undoStack.current = [];
-          redoStack.current = [];
+          resetHistory();
           setSelectedIds([]);
           return api.getPage(id).then(autoAdoptStale).then(setPage);
         }
@@ -189,8 +199,7 @@ export default function Paint({
   const openPage = (id: string) => {
     if (id === page?.id) return;
     window.clearTimeout(saveTimer.current);
-    undoStack.current = [];
-    redoStack.current = [];
+    resetHistory();
     setSelectedIds([]);
     api
       .activatePage(id)
@@ -203,8 +212,7 @@ export default function Paint({
 
   const newPage = () =>
     api.createPage().then((p) => {
-      undoStack.current = [];
-      redoStack.current = [];
+      resetHistory();
       setPage(p);
       setSelectedIds([]);
       return reloadIndex();
@@ -212,8 +220,7 @@ export default function Paint({
 
   const duplicate = (id: string) =>
     api.duplicatePage(id).then((p) => {
-      undoStack.current = [];
-      redoStack.current = [];
+      resetHistory();
       setPage(p);
       setSelectedIds([]);
       return reloadIndex();
@@ -235,8 +242,7 @@ export default function Paint({
     api.deletePage(id).then((idx) => {
       setIndex(idx);
       const nextId = idx.activeId ?? idx.order[0]?.id;
-      undoStack.current = [];
-      redoStack.current = [];
+      resetHistory();
       setSelectedIds([]);
       if (nextId) return api.getPage(nextId).then(setPage);
       setPage(null);
@@ -292,6 +298,7 @@ export default function Paint({
     if (!page) return;
     undoStack.current.push(cloneObjects(page.objects));
     redoStack.current = [];
+    syncHistory();
   };
 
   const addObject = (obj: SceneObject) => {
@@ -652,6 +659,7 @@ export default function Paint({
     if (!page || undoStack.current.length === 0) return;
     const previous = undoStack.current.pop()!;
     redoStack.current.push(cloneObjects(page.objects));
+    syncHistory();
     restoreObjects(previous);
   };
 
@@ -659,6 +667,7 @@ export default function Paint({
     if (!page || redoStack.current.length === 0) return;
     const next = redoStack.current.pop()!;
     undoStack.current.push(cloneObjects(page.objects));
+    syncHistory();
     restoreObjects(next);
   };
 
@@ -911,6 +920,14 @@ export default function Paint({
                 onClick={() => setMdOpen(true)}>⌶</button>
             </div>
             <div className="paint-tools-actions">
+              <button className="ghost" disabled={history.undo === 0} onClick={undo}
+                title={t("paint.undo")} aria-label={t("paint.undo")}>
+                ↶
+              </button>
+              <button className="ghost" disabled={history.redo === 0} onClick={redo}
+                title={t("paint.redo")} aria-label={t("paint.redo")}>
+                ↷
+              </button>
               <button className="ghost" disabled={!hasSelection} onClick={deleteSelected}
                 title={hasSelection ? t("paint.deleteSelection") : t("paint.noSelection")} aria-label={t("paint.delete")}>
                 🗑{selectedObjects.length > 1 ? <span className="act-count">{selectedObjects.length}</span> : ""}
