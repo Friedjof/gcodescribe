@@ -256,10 +256,12 @@ export default function Paint({
     api.savePage(page.id, { grid }).then(reloadIndex).catch(fail);
   };
 
-  const generateJob = () => {
+  // Build a job for the whole page, or — when `objects` is given — for just
+  // that subset (a selection plotted on its own).
+  const generateJob = (objects?: SceneObject[]) => {
     if (!page) return Promise.reject(new Error(t("paint.noPage")));
     setBusy(true);
-    return api.pageGcode(page.id, index?.activeProfile)
+    return api.pageGcode(page.id, index?.activeProfile, objects)
       .then((job) => {
         toast.success(t("paint.jobCreated", { name: job.filename }));
         return job.filename;
@@ -281,6 +283,38 @@ export default function Paint({
       })
       .catch(fail)
       .finally(() => setSending(false));
+  };
+
+  // Plot only the selected objects, then mark them plotted so they show dimmed
+  // and the rest of the page can be plotted later. Lets you add elements to a
+  // sheet that already has artwork and send just the new ones.
+  const plotSelection = () => {
+    if (!page || busy || sending || pageBlocked || selectedIds.length === 0) return;
+    const ids = [...selectedIds];
+    const subset = page.objects.filter((o) => ids.includes(o.id) && !o.plotted);
+    if (subset.length === 0) return;
+    generateJob(subset)
+      .then((filename) => {
+        setSending(true);
+        return api.send(filename, true).then(() => {
+          toast.success(t("paint.selectionPlotted", { name: filename }));
+          remember();
+          markPlotted(ids);
+          setSelectedIds([]);
+        });
+      })
+      .catch(fail)
+      .finally(() => setSending(false));
+  };
+
+  // Flag objects as already plotted (dimmed, excluded from later plots). Undoable
+  // via the surrounding remember() and persisted like any other edit.
+  const markPlotted = (ids: string[]) => {
+    if (!page) return;
+    const sel = new Set(ids);
+    const objects = page.objects.map((o) => (sel.has(o.id) ? { ...o, plotted: true } : o));
+    setPage({ ...page, objects });
+    persist(page.id, objects);
   };
 
   // Render the page's G-code transiently (no job file) and show it fullscreen.
@@ -841,6 +875,13 @@ export default function Paint({
                 onClick={directPlot}
               >
                 {busy ? t("paint.generating") : sending ? t("paint.starting") : t("paint.directPlot")}
+              </button>
+              <button
+                disabled={busy || sending || pageBlocked || !hasSelection}
+                title={!hasSelection ? t("paint.noSelection") : pageBlocked ? t("paint.gcodeBlocked") : t("paint.plotSelectionHint")}
+                onClick={plotSelection}
+              >
+                {t("paint.plotSelection")}
               </button>
               <button disabled={loadingPreview} onClick={openFullscreen}>
                 {loadingPreview ? t("common.loading") : t("convert.fullscreen")}

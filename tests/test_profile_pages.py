@@ -156,6 +156,59 @@ class TestPageGcodeGuard:
         assert "Legacy" in r.json()["detail"]
 
 
+class TestSelectionGcode:
+    """Plot only a chosen subset of a page's objects (designer selection plot)."""
+
+    def _pen_downs(self, filename: str) -> int:
+        from plotter.storage import jobs_dir
+
+        text = (jobs_dir() / filename).read_text()
+        return sum(1 for line in text.splitlines() if line.startswith("G1 Z"))
+
+    def _two_object_page(self, client) -> dict:
+        page = client.post("/api/pages", json={"name": "Zwei"}).json()
+        a = {**_line_object(10, 10, 20, 20), "id": "o-A"}
+        b = {**_line_object(60, 60, 70, 70), "id": "o-B"}
+        client.put(f"/api/pages/{page['id']}", json={"objects": [a, b]})
+        return {"page": page, "a": a, "b": b}
+
+    def test_subset_plots_only_chosen_objects(self, client):
+        ctx = self._two_object_page(client)
+        page_id = ctx["page"]["id"]
+
+        # Read each job right after it is written: same-second plots of one page
+        # share a timestamped filename, so a later plot would overwrite it.
+        selection = client.post(f"/api/pages/{page_id}/gcode", json={"objects": [ctx["a"]]})
+        assert selection.status_code == 200
+        selection_downs = self._pen_downs(selection.json()["filename"])
+
+        full = client.post(f"/api/pages/{page_id}/gcode")
+        assert full.status_code == 200
+        full_downs = self._pen_downs(full.json()["filename"])
+
+        # One stroke for the single-object plot, two for the whole page.
+        assert selection_downs == 1
+        assert full_downs == 2
+
+    def test_no_objects_field_plots_the_whole_page(self, client):
+        ctx = self._two_object_page(client)
+        r = client.post(f"/api/pages/{ctx['page']['id']}/gcode", json={})
+        assert r.status_code == 200
+        assert self._pen_downs(r.json()["filename"]) == 2
+
+    def test_empty_selection_is_rejected(self, client):
+        ctx = self._two_object_page(client)
+        r = client.post(f"/api/pages/{ctx['page']['id']}/gcode", json={"objects": []})
+        assert r.status_code == 400
+
+    def test_selection_still_obeys_profile_guard(self, client):
+        ctx = self._two_object_page(client)
+        svc = ProfileService()
+        svc.activate(svc.create("Postkarte")["id"])
+        r = client.post(f"/api/pages/{ctx['page']['id']}/gcode", json={"objects": [ctx["a"]]})
+        assert r.status_code == 409
+
+
 class TestAdoptProfile:
     def test_adopt_binds_legacy_page(self, client):
         store = get_document_store()

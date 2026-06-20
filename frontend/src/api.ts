@@ -456,13 +456,15 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ids }),
     }),
-  pageGcode: (id: string, expected?: ProfileRef | null) =>
+  // Pass `objects` to plot only that subset (a selection); omit for the whole page.
+  pageGcode: (id: string, expected?: ProfileRef | null, objects?: SceneObject[]) =>
     req<Job>(`/api/pages/${id}/gcode`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         expected_profile_id: expected?.id,
         expected_profile_fingerprint: expected?.fingerprint,
+        objects,
       }),
     }),
   adoptPageProfile: (id: string, force = false, expected?: ProfileRef | null) =>
