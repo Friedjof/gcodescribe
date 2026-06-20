@@ -67,6 +67,15 @@ header h1 {
 }
 .header-actions { display: flex; align-items: center; gap: 8px; }
 .lang-select { padding: 6px 9px; border-radius: 999px; font-size: 12px; }
+.notify-enable {
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid rgba(10, 132, 255, 0.38);
+  background: rgba(10, 132, 255, 0.12);
+  color: var(--text);
+}
+.notify-enable:hover { background: rgba(10, 132, 255, 0.2); }
 
 .pen {
   color: var(--accent);

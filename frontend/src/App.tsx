@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { api, type AuthSession, type AuthSetupStart } from "./api";
 import Convert from "./components/Convert";
 import Paint from "./components/Paint";
@@ -8,6 +8,7 @@ import Calibrate from "./components/Calibrate";
 import Control from "./components/Control";
 import Paper from "./components/Paper";
 import Segmented from "./components/Segmented";
+import { useToasts } from "./components/Toasts";
 import { useI18n } from "./i18n";
 
 type Tab = "paint" | "games" | "gallery" | "convert" | "paper" | "calibrate" | "control";
@@ -24,25 +25,38 @@ export default function App() {
 // so switching back is instant instead of refetching + rebuilding the canvas.
 // The lighter list/state tabs stay unmount-on-switch so they reflect fresh data.
 const KEEP_ALIVE: Tab[] = ["paint", "games", "gallery", "convert", "paper", "calibrate"];
+const PLOT_PROGRESS_THRESHOLDS = [25, 50, 90, 100];
 
 function AdminApp() {
   const { lang, setLang, t } = useI18n();
+  const toast = useToasts();
   const [tab, setTab] = useState<Tab>("paint");
   const [visited, setVisited] = useState<Set<Tab>>(() => new Set<Tab>(["paint"]));
   const [status, setStatus] = useState<any>(null);
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">(() =>
+    typeof Notification === "undefined" ? "unsupported" : Notification.permission
+  );
+  const progressNotify = useRef<{
+    jobKey: string | null;
+    notified: Set<number>;
+    lastProgress: number | null;
+    wasPrinting: boolean;
+  }>({ jobKey: null, notified: new Set(), lastProgress: null, wasPrinting: false });
 
   useEffect(() => {
     setVisited((prev) => (prev.has(tab) ? prev : new Set(prev).add(tab)));
   }, [tab]);
 
+  const notificationsActive = notificationPermission === "granted";
   const refreshStatus = () => api.octoStatus().then(setStatus).catch(() => setStatus(null));
 
   useEffect(() => {
     refreshStatus();
-    // Don't poll a (possibly slow) printer while the tab is backgrounded;
-    // refresh immediately when the user returns instead.
+    // Don't poll a (possibly slow) printer while the tab is backgrounded unless
+    // browser notifications are enabled; then polling must continue so progress
+    // milestones can fire while the app is not visible.
     const id = setInterval(() => {
-      if (!document.hidden) refreshStatus();
+      if (!document.hidden || notificationsActive) refreshStatus();
     }, 4000);
     const onVisible = () => {
       if (!document.hidden) refreshStatus();
@@ -52,7 +66,68 @@ function AdminApp() {
       clearInterval(id);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, []);
+  }, [notificationsActive]);
+
+  const requestNotifications = () => {
+    if (typeof Notification === "undefined") {
+      setNotificationPermission("unsupported");
+      toast.warn(t("notify.unsupported"));
+      return;
+    }
+    Notification.requestPermission().then((permission) => {
+      setNotificationPermission(permission);
+      if (permission === "granted") toast.success(t("notify.enabled"));
+      else toast.warn(t("notify.denied"));
+    });
+  };
+
+  useEffect(() => {
+    const tracker = progressNotify.current;
+    const job = status?.job;
+    const jobKey = job?.job?.file?.name ?? null;
+    const state = String(job?.state ?? "").toLowerCase();
+    const printing = !!job && state.includes("printing");
+    const rawProgress = job?.progress?.completion;
+    const progress = typeof rawProgress === "number" && Number.isFinite(rawProgress)
+      ? Math.max(0, Math.min(100, rawProgress))
+      : null;
+
+    const notifyMilestone = (pct: number, key = tracker.jobKey) => {
+      if (!key || tracker.notified.has(pct)) return;
+      tracker.notified.add(pct);
+      const message = pct >= 100
+        ? t("notify.plotDone")
+        : t("notify.plotProgress", { pct });
+      toast.success(message);
+      if (notificationPermission === "granted") {
+        new Notification(t("notify.title"), {
+          body: message,
+          tag: `gcodescribe-plot-${key}`,
+        });
+      }
+    };
+
+    if (!job && tracker.wasPrinting && (tracker.lastProgress ?? 0) >= 90) {
+      notifyMilestone(100);
+    }
+
+    if (jobKey !== tracker.jobKey) {
+      tracker.jobKey = jobKey;
+      tracker.notified = new Set();
+      tracker.lastProgress = null;
+      tracker.wasPrinting = false;
+    }
+
+    if (printing && progress != null) {
+      const crossed = PLOT_PROGRESS_THRESHOLDS.filter(
+        (pct) => pct <= progress && !tracker.notified.has(pct)
+      );
+      const next = crossed[crossed.length - 1];
+      if (next != null) notifyMilestone(next);
+      tracker.lastProgress = progress;
+    }
+    tracker.wasPrinting = printing;
+  }, [notificationPermission, status, t, toast]);
 
   const tabs: { value: Tab; label: string }[] = [
     { value: "paint", label: t("tabs.paint") },
@@ -71,6 +146,11 @@ function AdminApp() {
           <span className="pen">✎</span> GCodeScribe
         </h1>
         <div className="header-actions">
+          {notificationPermission !== "unsupported" && notificationPermission !== "granted" && (
+            <button className="notify-enable" onClick={requestNotifications} title={t("notify.enableHint")}>
+              {t("notify.enable")}
+            </button>
+          )}
           <select className="lang-select" value={lang} onChange={(e) => setLang(e.target.value as "de" | "en" | "ba" | "fr" | "es")}>
             <option value="de">{t("lang.de")}</option>
             <option value="en">{t("lang.en")}</option>
