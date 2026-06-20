@@ -53,6 +53,7 @@ export default function Paint({
   const [mdOpen, setMdOpen] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [sizeLinked, setSizeLinked] = useState(true);
+  const [clipboardCount, setClipboardCount] = useState(0);
   const { confirm, ConfirmNode } = useConfirm();
   const { prompt, PromptNode } = usePrompt();
   const saveTimer = useRef<number | undefined>(undefined);
@@ -551,6 +552,19 @@ export default function Paint({
     if (!page || selectedIds.length === 0) return;
     const selected = new Set(selectedIds);
     clipboard.current = cloneObjects(page.objects.filter((obj) => selected.has(obj.id)));
+    setClipboardCount(clipboard.current.length);
+  };
+
+  const cutSelected = () => {
+    if (!page || selectedIds.length === 0) return;
+    remember();
+    const selected = new Set(selectedIds);
+    clipboard.current = cloneObjects(page.objects.filter((obj) => selected.has(obj.id)));
+    setClipboardCount(clipboard.current.length);
+    const objects = page.objects.filter((obj) => !selected.has(obj.id));
+    setPage({ ...page, objects });
+    setSelectedIds([]);
+    persist(page.id, objects);
   };
 
   const pasteObjects = (source = clipboard.current) => {
@@ -808,6 +822,11 @@ export default function Paint({
         copySelected();
         return;
       }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "x") {
+        e.preventDefault();
+        cutSelected();
+        return;
+      }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v") {
         e.preventDefault();
         pasteObjects();
@@ -1029,6 +1048,18 @@ export default function Paint({
               <button className="ghost" disabled={!hasSelection} onClick={deleteSelected}
                 title={hasSelection ? t("paint.deleteSelection") : t("paint.noSelection")} aria-label={t("paint.delete")}>
                 🗑{selectedObjects.length > 1 ? <span className="act-count">{selectedObjects.length}</span> : ""}
+              </button>
+              <button className="ghost" disabled={!hasSelection} onClick={copySelected}
+                title={hasSelection ? t("paint.copySelection") : t("paint.noSelection")} aria-label={t("paint.copy")}>
+                ⧉
+              </button>
+              <button className="ghost" disabled={!hasSelection} onClick={cutSelected}
+                title={hasSelection ? t("paint.cutSelection") : t("paint.noSelection")} aria-label={t("paint.cut")}>
+                ✂
+              </button>
+              <button className="ghost" disabled={clipboardCount === 0} onClick={() => pasteObjects()}
+                title={clipboardCount > 0 ? t("paint.pasteSelection") : t("paint.clipboardEmpty")} aria-label={t("paint.paste")}>
+                ⎘{clipboardCount > 1 ? <span className="act-count">{clipboardCount}</span> : ""}
               </button>
               <button className="ghost" disabled={!hasSelection} onClick={duplicateSelected}
                 title={hasSelection ? t("paint.duplicateSelection") : t("paint.noSelection")} aria-label={t("paint.duplicate")}>

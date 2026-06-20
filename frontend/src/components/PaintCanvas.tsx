@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Calibration, Page, SceneObject } from "../api";
 import {
   type Pt,
@@ -21,6 +21,7 @@ import {
   type GuideCandidate,
   type Guide,
 } from "../paint/geometry";
+import { useI18n } from "../i18n";
 
 export type Tool = "select" | "pen" | "line" | "rect" | "circle" | "semicircle" | "text";
 
@@ -69,6 +70,7 @@ function shapeWorld(tool: Tool, pts: Pt[]): Pt[][] {
 
 type Draft = { tool: Tool; points: Pt[] };
 type Marquee = { start: Pt; current: Pt; additive: boolean };
+type ViewBox = { x: number; y: number; w: number; h: number };
 type Drag =
   | { mode: "move"; ids: string[]; primaryId: string; startMouse: Pt; startTs: Map<string, Transform>; startBoundsAll: [number, number, number, number]; vGuides: GuideCandidate[]; hGuides: GuideCandidate[] }
   | { mode: "resize"; id: string; edge: ResizeEdge; startBounds: [number, number, number, number]; startLocalBounds: [number, number, number, number] }
@@ -77,6 +79,8 @@ type Drag =
 
 const cl = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const zValue = (obj: SceneObject, index: number) => obj.zOrder ?? index;
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 12;
 
 export default function PaintCanvas({
   cal,
@@ -105,6 +109,7 @@ export default function PaintCanvas({
   onImageDrop: (file: File, at: Pt) => void;
   onTextAdd: (at: Pt) => void;
 }) {
+  const { t } = useI18n();
   const svgRef = useRef<SVGSVGElement>(null);
   const W = cal.plot_width;
   const H = cal.plot_height;
@@ -113,17 +118,69 @@ export default function PaintCanvas({
   const major = step * 5;
   const pad = Math.max(W, H) * 0.04 + 4;
   const S = Math.max(W, H);
-  const STROKE = S * 0.0045;
-  const HANDLE = S * 0.016;
+  const baseView: ViewBox = { x: -pad, y: -pad, w: W + 2 * pad, h: H + 2 * pad };
 
   const [draft, setDraft] = useState<Draft | null>(null);
   const [marquee, setMarquee] = useState<Marquee | null>(null);
   const [guides, setGuides] = useState<Guide[]>([]);
+  const [view, setView] = useState<ViewBox>(baseView);
+  const [spaceDown, setSpaceDown] = useState(false);
   const drag = useRef<Drag | null>(null);
+  const pan = useRef<{ pointerId: number; startClient: Pt; startView: ViewBox } | null>(null);
+  const zoom = baseView.w / view.w;
+  const STROKE = (S * 0.0045) / zoom;
+  const HANDLE = (S * 0.016) / zoom;
 
   // How close (mm) a moving edge/center must come to a reference before it
   // snaps. Scaled to the plot area so it feels the same regardless of size.
   const SNAP_TOL = S * 0.008;
+
+  useEffect(() => {
+    setView(baseView);
+  }, [baseView.x, baseView.y, baseView.w, baseView.h]);
+
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.code === "Space") setSpaceDown(true);
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.code === "Space") setSpaceDown(false);
+    };
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+    };
+  }, []);
+
+  const clampView = (next: ViewBox): ViewBox => {
+    const x = next.w >= baseView.w
+      ? baseView.x + (baseView.w - next.w) / 2
+      : cl(next.x, baseView.x, baseView.x + baseView.w - next.w);
+    const y = next.h >= baseView.h
+      ? baseView.y + (baseView.h - next.h) / 2
+      : cl(next.y, baseView.y, baseView.y + baseView.h - next.h);
+    return { ...next, x, y };
+  };
+
+  const zoomAt = (factor: number, anchor?: Pt) => {
+    setView((current) => {
+      const currentZoom = baseView.w / current.w;
+      const nextZoom = cl(currentZoom * factor, MIN_ZOOM, MAX_ZOOM);
+      const nextW = baseView.w / nextZoom;
+      const nextH = baseView.h / nextZoom;
+      const a = anchor ?? [current.x + current.w / 2, current.y + current.h / 2];
+      return clampView({
+        x: a[0] - (a[0] - current.x) * (nextW / current.w),
+        y: a[1] - (a[1] - current.y) * (nextH / current.h),
+        w: nextW,
+        h: nextH,
+      });
+    });
+  };
+
+  const resetZoom = () => setView(baseView);
 
   // Wrappers that enforce the hard plot-area boundary before every transform write.
   const updateSafe = (id: string, t: Transform) => {
@@ -181,7 +238,20 @@ export default function PaintCanvas({
     onImageDrop(file, snapPt(clientToMM(e.clientX, e.clientY), step, snapOn));
   };
 
+  const onWheel = (e: React.WheelEvent) => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault();
+    const factor = Math.exp(-e.deltaY * 0.0015);
+    zoomAt(factor, clientToMM(e.clientX, e.clientY));
+  };
+
   const onSvgDown = (e: React.PointerEvent) => {
+    if (e.button === 0 && spaceDown) {
+      e.preventDefault();
+      pan.current = { pointerId: e.pointerId, startClient: [e.clientX, e.clientY], startView: view };
+      svgRef.current!.setPointerCapture(e.pointerId);
+      return;
+    }
     if (tool === "select") {
       if (e.button !== 0) return;
       const p = toMM(e);
@@ -200,6 +270,15 @@ export default function PaintCanvas({
   };
 
   const onSvgMove = (e: React.PointerEvent) => {
+    if (pan.current) {
+      const svg = svgRef.current;
+      if (!svg) return;
+      const rect = svg.getBoundingClientRect();
+      const dx = ((e.clientX - pan.current.startClient[0]) / rect.width) * pan.current.startView.w;
+      const dy = ((e.clientY - pan.current.startClient[1]) / rect.height) * pan.current.startView.h;
+      setView(clampView({ ...pan.current.startView, x: pan.current.startView.x - dx, y: pan.current.startView.y - dy }));
+      return;
+    }
     if (marquee) {
       setMarquee({ ...marquee, current: toMM(e) });
       return;
@@ -350,6 +429,10 @@ export default function PaintCanvas({
 
   const onSvgUp = (e: React.PointerEvent) => {
     svgRef.current!.releasePointerCapture?.(e.pointerId);
+    if (pan.current?.pointerId === e.pointerId) {
+      pan.current = null;
+      return;
+    }
     if (marquee) {
       const mb = marqueeBounds(marquee);
       const isClick = Math.hypot(mb[2] - mb[0], mb[3] - mb[1]) < 1;
@@ -540,14 +623,21 @@ export default function PaintCanvas({
 
   return (
     <div className="paint-canvas">
+      <div className="paint-zoom-controls">
+        <button className="ghost tiny" type="button" title={t("paint.zoomOut")} onClick={() => zoomAt(1 / 1.2)}>−</button>
+        <span>{t("paint.zoomLevel", { pct: String(Math.round(zoom * 100)) })}</span>
+        <button className="ghost tiny" type="button" title={t("paint.zoomIn")} onClick={() => zoomAt(1.2)}>+</button>
+        <button className="ghost tiny" type="button" title={t("paint.zoomReset")} onClick={resetZoom}>↺</button>
+      </div>
       <svg
         ref={svgRef}
-        viewBox={`${-pad} ${-pad} ${W + 2 * pad} ${H + 2 * pad}`}
+        viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
         preserveAspectRatio="xMidYMid meet"
-        style={{ cursor: tool === "select" ? "default" : "crosshair", touchAction: "none" }}
+        style={{ cursor: spaceDown ? "grab" : tool === "select" ? "default" : "crosshair", touchAction: "none" }}
         onPointerDown={onSvgDown}
         onPointerMove={onSvgMove}
         onPointerUp={onSvgUp}
+        onWheel={onWheel}
         onDragOver={(e) => e.preventDefault()}
         onDrop={onDrop}
       >
