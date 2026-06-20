@@ -178,7 +178,7 @@ def octo_send(req: PrintRequest) -> dict:
 
 
 class JobCommand(BaseModel):
-    command: str  # start | pause | cancel | restart
+    command: str  # start | pause | resume | cancel | restart
     force: bool = False  # accepted for old clients; starts now always home automatically
 
 

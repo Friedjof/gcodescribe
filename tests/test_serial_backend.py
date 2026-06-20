@@ -276,7 +276,7 @@ def test_progress_advances():
 # -- pause / cancel --------------------------------------------------------
 
 
-def test_pause_lifts_pen(cal):
+def test_pause_lifts_pen_and_parks_at_finish_position(cal):
     release = threading.Event()
 
     def responder(cmd):
@@ -297,16 +297,22 @@ def test_pause_lifts_pen(cal):
         assert _wait_until(
             lambda: (worker.status().get("job") or {}).get("state") == "Paused"
         )
-        # A pen-up move at the calibrated height was queued.
+        # A pen-up move and the normal finish/park position were queued.
         assert _wait_until(
             lambda: any(f"Z{cal.pen_up_z:.3f}" in s for s in transport.sent)
+        )
+        assert _wait_until(
+            lambda: any(
+                f"X{cal.bed_width / 2:.3f}" in s and f"Y{cal.bed_height:.3f}" in s
+                for s in transport.sent
+            )
         )
     finally:
         release.set()
         worker.shutdown()
 
 
-def test_resume_after_pause_does_not_resend_completed_line():
+def test_resume_after_pause_returns_to_saved_position_without_resending_line():
     release_first = threading.Event()
     first_seen = threading.Event()
 
@@ -327,10 +333,12 @@ def test_resume_after_pause_does_not_resend_completed_line():
         assert _wait_until(
             lambda: (worker.status().get("job") or {}).get("state") == "Paused"
         )
-        worker.job_command("start")
+        worker.job_command("resume")
         assert _wait_until(lambda: worker.status()["job"] is None)
         assert transport.sent.count("G0 X1") == 1
         assert transport.sent.count("G0 X2") == 1
+        # Resume returns from the finish/park position to the last confirmed XY.
+        assert any("X1.000" in s and "Y0.000" in s for s in transport.sent)
     finally:
         release_first.set()
         worker.shutdown()

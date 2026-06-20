@@ -135,10 +135,10 @@ class OctoPrintClient:
         )
 
     def job_command(self, command: str) -> None:
-        """command: start | pause | cancel | restart."""
+        """command: start | pause | resume | cancel | restart."""
         body: dict = {"command": command}
-        if command == "pause":
-            body["action"] = "pause"
+        if command in ("pause", "resume"):
+            body = {"command": "pause", "action": command}
         self._request("POST", "/api/job", json=body)
 
     # --- printer control -------------------------------------------------

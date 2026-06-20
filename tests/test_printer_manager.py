@@ -183,3 +183,31 @@ def test_set_backend_octoprint_ok(client):
     r = client.post("/api/printer/backend", json={"id": OCTOPRINT})
     assert r.status_code == 200
     assert r.json()["active"] == OCTOPRINT
+
+
+def test_resume_job_command_does_not_home(client, monkeypatch):
+    from plotter.web.routes import printer as printer_routes
+
+    class FakeClient:
+        def __init__(self):
+            self.commands: list[str] = []
+
+        def job_command(self, command):
+            self.commands.append(command)
+
+    class FakeController:
+        def __init__(self):
+            self.client = FakeClient()
+            self.home_calls = 0
+
+        def home(self):
+            self.home_calls += 1
+
+    fake = FakeController()
+    monkeypatch.setattr(printer_routes, "controller", lambda: fake)
+
+    r = client.post("/api/printer/job", json={"command": "resume"})
+
+    assert r.status_code == 200
+    assert fake.home_calls == 0
+    assert fake.client.commands == ["resume"]

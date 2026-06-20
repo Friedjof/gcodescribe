@@ -110,6 +110,13 @@ class SerialWorker:
         self._job_name: str | None = None
         self._job_index = 0
         self._job_generation = 0
+        self._absolute = True
+        self._x = 0.0
+        self._y = 0.0
+        self._z = 0.0
+        self._park_requested = False
+        self._resume_requested = False
+        self._resume_xy: tuple[float, float] | None = None
 
         self._running = True
         self._thread = threading.Thread(
@@ -154,6 +161,8 @@ class SerialWorker:
     def job_command(self, command: str) -> None:
         if command in ("start", "restart"):
             self._start(reset=command == "restart")
+        elif command == "resume":
+            self._resume()
         elif command == "pause":
             self._pause()
         elif command == "cancel":
@@ -204,13 +213,28 @@ class SerialWorker:
             self._state = PRINTING
         self._wake.set()
 
+    def _resume(self) -> None:
+        with self._lock:
+            if self._state != PAUSED:
+                return
+            if self._park_requested:
+                self._resume_requested = True
+                self._wake.set()
+                return
+            resume_xy = self._resume_xy
+            self._resume_xy = None
+            if resume_xy is not None:
+                self._queue.append(_Command(self._return_from_pause_lines(*resume_xy)))
+            self._state = PRINTING
+        self._wake.set()
+
     def _pause(self) -> None:
         with self._lock:
             if self._state != PRINTING:
                 return
             self._state = PAUSED
-        # Lift the pen so a paused job can't bleed ink onto the paper.
-        self._submit(self._pen_up_lines(), wait=False)
+            self._park_requested = True
+        self._wake.set()
 
     def _cancel(self) -> None:
         with self._lock:
@@ -229,6 +253,26 @@ class SerialWorker:
 
         cal = Calibration.load()
         return ["G90", f"G1 Z{cal.pen_up_z:.3f} F{cal.z_feed:.0f}"]
+
+    @staticmethod
+    def _park_lines() -> list[str]:
+        from ..calibration import Calibration
+
+        cal = Calibration.load()
+        return [
+            *SerialWorker._pen_up_lines(),
+            f"G0 X{cal.bed_width / 2:.3f} Y{cal.bed_height:.3f} F{cal.travel_feed:.0f}",
+        ]
+
+    @staticmethod
+    def _return_from_pause_lines(x: float, y: float) -> list[str]:
+        from ..calibration import Calibration
+
+        cal = Calibration.load()
+        return [
+            *SerialWorker._pen_up_lines(),
+            f"G0 X{x:.3f} Y{y:.3f} F{cal.travel_feed:.0f}",
+        ]
 
     # -- command submission ------------------------------------------------
 
@@ -263,6 +307,16 @@ class SerialWorker:
                 self._run_command(cmd)
                 continue
 
+            cmd = self._take_pause_park_command()
+            if cmd is not None:
+                self._run_command(cmd)
+                continue
+
+            cmd = self._take_pending_resume_command()
+            if cmd is not None:
+                self._run_command(cmd)
+                continue
+
             job_line = self._take_job_line()
             if job_line is not None:
                 self._stream_line(*job_line)
@@ -276,6 +330,26 @@ class SerialWorker:
             if self._queue:
                 return self._queue.popleft()
         return None
+
+    def _take_pause_park_command(self) -> _Command | None:
+        with self._lock:
+            if self._state != PAUSED or not self._park_requested:
+                return None
+            self._park_requested = False
+            self._resume_xy = (self._x, self._y)
+        return _Command(self._park_lines())
+
+    def _take_pending_resume_command(self) -> _Command | None:
+        with self._lock:
+            if self._state != PAUSED or not self._resume_requested:
+                return None
+            self._resume_requested = False
+            resume_xy = self._resume_xy
+            self._resume_xy = None
+            self._state = PRINTING
+        if resume_xy is None:
+            return None
+        return _Command(self._return_from_pause_lines(*resume_xy))
 
     def _take_job_line(self) -> tuple[int, int, str] | None:
         with self._lock:
@@ -392,6 +466,7 @@ class SerialWorker:
             if resp:
                 low = resp.lower()
                 if low.startswith("ok"):
+                    self._track_position(line)
                     return
                 if "busy" in low:
                     deadline = time.monotonic() + ACK_TIMEOUT
@@ -410,6 +485,45 @@ class SerialWorker:
             self._online = False
             self._last_error = str(exc)
         self._close_port()
+
+    def _track_position(self, line: str) -> None:
+        stripped = line.split(";", 1)[0].strip()
+        if not stripped:
+            return
+        parts = stripped.split()
+        if not parts:
+            return
+        cmd = parts[0].upper()
+        if cmd == "G90":
+            with self._lock:
+                self._absolute = True
+            return
+        if cmd == "G91":
+            with self._lock:
+                self._absolute = False
+            return
+        if cmd not in ("G0", "G00", "G1", "G01"):
+            return
+        values: dict[str, float] = {}
+        for part in parts[1:]:
+            axis = part[:1].upper()
+            if axis not in ("X", "Y", "Z"):
+                continue
+            try:
+                values[axis] = float(part[1:])
+            except ValueError:
+                continue
+        if not values:
+            return
+        with self._lock:
+            if self._absolute:
+                self._x = values.get("X", self._x)
+                self._y = values.get("Y", self._y)
+                self._z = values.get("Z", self._z)
+            else:
+                self._x += values.get("X", 0.0)
+                self._y += values.get("Y", 0.0)
+                self._z += values.get("Z", 0.0)
 
     def _close_port(self) -> None:
         transport, self._transport = self._transport, None

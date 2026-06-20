@@ -250,7 +250,7 @@ export default function Control({
             <button onClick={() => run(() => api.jobCommand("pause"))}>⏸ {t("control.pause")}</button>
           )}
           {paused && (
-            <button className="primary" onClick={() => run(() => api.jobCommand("pause"))}>
+            <button className="primary" onClick={() => run(() => api.jobCommand("resume"))}>
               ▶ {t("control.resume")}
             </button>
           )}
