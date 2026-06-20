@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from ..pipeline import PlotterError
-from ..printer import PrinterError, use_serial
+from ..printer import PrinterError, get_printer_client, use_serial
 from ..services import ServiceError
 from .auth import require_admin
 from .routes import (
@@ -29,6 +29,11 @@ from .routes import (
 
 @asynccontextmanager
 async def _lifespan(_: FastAPI):
+    if use_serial():
+        # Build the printer manager at process start so an active serial backend
+        # owns the USB port for the whole backend lifetime, not only after the
+        # first protected UI/API request reaches the printer routes.
+        get_printer_client()
     yield
     # Release the serial port on shutdown/reload so the next start can reopen it
     # (a still-held port causes "Resource busy").
