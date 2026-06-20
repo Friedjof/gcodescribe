@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, type GalleryItem, type GallerySvg, type GalleryUploader } from "../api";
 import { useI18n } from "../i18n";
 import GalleryDetail from "./GalleryDetail";
@@ -7,6 +7,10 @@ import ScoreBadge from "./ScoreBadge";
 import Segmented from "./Segmented";
 
 type UploaderFilter = "all" | GalleryUploader;
+const MAX_UPLOAD_MB = 15;
+const ALLOWED = /\.(svg|png|jpe?g|pdf|odt|ods|odp|docx?|xlsx?|pptx?)$/i;
+const ACCEPT =
+  ".svg,.png,.jpg,.jpeg,.pdf,.odt,.ods,.odp,.doc,.docx,.xls,.xlsx,.ppt,.pptx";
 
 // Thumbnails are tiny polyline sets; cache them across tab switches.
 const thumbCache = new Map<string, GallerySvg>();
@@ -20,7 +24,9 @@ export default function Gallery({ onOpenPaint }: { onOpenPaint: () => void }) {
   const [uploaderFilter, setUploaderFilter] = useState<UploaderFilter>("all");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   // Bump to re-render once batched thumbnails have landed in the cache.
   const [, setThumbTick] = useState(0);
 
@@ -51,6 +57,24 @@ export default function Gallery({ onOpenPaint }: { onOpenPaint: () => void }) {
     return () => clearInterval(id);
   }, []);
 
+  const upload = (file: File | undefined | null) => {
+    if (!file || uploading) return;
+    if (!ALLOWED.test(file.name)) return setErr(t("upload.badType"));
+    if (file.size > MAX_UPLOAD_MB * 1024 * 1024) {
+      return setErr(t("upload.tooLarge", { mb: String(MAX_UPLOAD_MB) }));
+    }
+    setUploading(true);
+    setErr(null);
+    api
+      .galleryUpload(file, "")
+      .then(() => refresh())
+      .catch((e) => setErr(String(e.message ?? e)))
+      .finally(() => {
+        setUploading(false);
+        if (fileRef.current) fileRef.current.value = "";
+      });
+  };
+
   const q = query.trim().toLowerCase();
   const visible = items.filter(
     (i) =>
@@ -62,6 +86,10 @@ export default function Gallery({ onOpenPaint }: { onOpenPaint: () => void }) {
   // Resolve from the list so the open detail reflects refreshes (e.g. a new
   // title) and closes by itself once the item is deleted.
   const selected = items.find((i) => i.id === selectedId) ?? null;
+  const refreshSelected = () => {
+    if (selectedId) thumbCache.delete(selectedId);
+    refresh();
+  };
 
   return (
     <div className="gallery-page">
@@ -82,6 +110,16 @@ export default function Gallery({ onOpenPaint }: { onOpenPaint: () => void }) {
         </div>
 
         <div className="gallery-controls">
+          <input
+            ref={fileRef}
+            type="file"
+            accept={ACCEPT}
+            hidden
+            onChange={(e) => upload(e.target.files?.[0])}
+          />
+          <button className="primary gallery-upload-btn" disabled={uploading} onClick={() => fileRef.current?.click()}>
+            {uploading ? t("upload.uploading") : t("gallery.upload")}
+          </button>
           <Segmented<UploaderFilter>
             className="gallery-filter-seg"
             value={uploaderFilter}
@@ -117,7 +155,7 @@ export default function Gallery({ onOpenPaint }: { onOpenPaint: () => void }) {
         <GalleryDetail
           item={selected}
           onClose={() => setSelectedId(null)}
-          onChanged={refresh}
+          onChanged={refreshSelected}
           onOpenPaint={onOpenPaint}
         />
       )}

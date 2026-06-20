@@ -159,7 +159,7 @@ code {
   font-size: 12px;
 }
 
-button {
+button, .button {
   font-family: inherit;
   background: var(--panel-2);
   color: var(--text);
@@ -170,9 +170,13 @@ button {
   font-size: 13px;
   font-weight: 500;
   transition: background 0.12s, border-color 0.12s, transform 0.05s;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
-button:hover:not(:disabled) { background: var(--panel-3); }
-button:active:not(:disabled) { transform: scale(0.985); }
+button:hover:not(:disabled), .button:hover { background: var(--panel-3); }
+button:active:not(:disabled), .button:active { transform: scale(0.985); }
 button:disabled { opacity: 0.35; cursor: not-allowed; }
 button.primary {
   background: var(--accent);
@@ -181,8 +185,8 @@ button.primary {
 }
 button.primary:hover:not(:disabled) { background: var(--accent-hover); }
 button.danger { color: var(--err); }
-button.ghost { background: none; border-color: transparent; color: var(--muted); }
-button.ghost:hover:not(:disabled) { color: var(--text); background: var(--panel-2); }
+button.ghost, .button.ghost { background: none; border-color: transparent; color: var(--muted); }
+button.ghost:hover:not(:disabled), .button.ghost:hover { color: var(--text); background: var(--panel-2); }
 button.big { padding: 13px 20px; font-size: 14px; }
 
 input, select, textarea {
@@ -1914,6 +1918,10 @@ kbd {
   letter-spacing: 0.07em;
   text-transform: uppercase;
 }
+.paint-object-size-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.paint-object-size-head h4 { margin-bottom: 0; }
+.paint-object-size-head .active { border-color: var(--accent); color: var(--accent); }
+.paint-size-fields { display: grid; grid-template-columns: 1fr; gap: 6px; margin-top: -2px; }
 .paint-style-panel .field { gap: 4px; }
 .paint-style-panel input,
 .paint-style-panel select { width: 100%; padding: 7px 8px; }
@@ -1927,10 +1935,6 @@ kbd {
   min-width: 0;
 }
 .paint-empty-hint {
-.paint-object-size-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.paint-object-size-head h4 { margin-bottom: 0; }
-.paint-object-size-head .active { border-color: var(--accent); color: var(--accent); }
-.paint-size-fields { display: grid; grid-template-columns: 1fr; gap: 6px; margin-top: -2px; }
   position: absolute;
   inset: 0;
   z-index: 1;
@@ -2253,6 +2257,7 @@ kbd {
   flex-wrap: wrap;
 }
 .gallery-filter-seg { width: auto; margin-bottom: 0; min-width: 220px; }
+.gallery-upload-btn { flex: 0 0 auto; }
 .gallery-search {
   flex: 1;
   min-width: 160px;
@@ -2330,6 +2335,16 @@ kbd {
 }
 .gallery-quick-plot:hover:not(:disabled) { background: var(--accent); }
 .gallery-quick-plot:disabled { opacity: 0.35; cursor: default; }
+.gallery-rerender {
+  position: absolute;
+  right: 7px;
+  bottom: 42px;
+  z-index: 2;
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(44, 44, 46, 0.9);
+}
 .gallery-item-meta {
   display: flex;
   flex-direction: column;
@@ -2365,6 +2380,52 @@ kbd {
   background: var(--panel-2);
 }
 .gallery-stage .gallery-stage-svg path { stroke: var(--busy); }
+.gallery-original {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px;
+}
+.gallery-original img {
+  max-width: 100%;
+  max-height: 48vh;
+  object-fit: contain;
+  border-radius: 8px;
+  background: #fff;
+}
+.gallery-original-file {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 24px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+}
+.gallery-render-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.gallery-render-controls .seg {
+  width: auto;
+  min-width: min(100%, 260px);
+  margin: 0;
+  overflow-x: auto;
+}
+.gallery-render-controls .seg button {
+  white-space: nowrap;
+  padding-inline: 9px;
+}
 .gallery-metrics {
   display: grid;
   grid-template-columns: max-content 1fr max-content 1fr;

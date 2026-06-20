@@ -211,6 +211,13 @@ export interface GalleryMetrics {
 
 export type GalleryUploader = "admin" | "public";
 
+export interface GalleryOriginal {
+  filename: string;
+  kind: string;
+  mime: string;
+  size: number;
+}
+
 export interface GalleryItem {
   id: string;
   title: string;
@@ -226,6 +233,7 @@ export interface GalleryItem {
   width: number;
   height: number;
   lines: number;
+  original?: GalleryOriginal | null;
   // Only single-page public submissions are scored on upload; admin assets
   // (documents, multi-page) carry neither until placement.
   metrics?: GalleryMetrics;
@@ -655,6 +663,7 @@ export const api = {
   gallerySvg: (id: string) => req<GallerySvg>(`/api/gallery/${id}/svg`),
   galleryPreview: (id: string, page: number) =>
     req<GalleryPreview>(`/api/gallery/${id}/preview/${page}`),
+  galleryOriginalUrl: (id: string) => `/api/gallery/${id}/original`,
   galleryGcode3D: (id: string) =>
     req<GcodePreview3D>(`/api/gallery/${id}/gcode/preview3d`),
   gallerySetTitle: (id: string, title: string) =>
@@ -662,6 +671,12 @@ export const api = {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title }),
+    }),
+  galleryRender: (id: string, mode: string, detail: number) =>
+    req<GalleryItem>(`/api/gallery/${id}/render`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode, detail }),
     }),
   galleryArchive: (id: string, archived: boolean) =>
     req<GalleryItem>(`/api/gallery/${id}/${archived ? "archive" : "unarchive"}`, {

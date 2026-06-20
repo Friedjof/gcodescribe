@@ -17,7 +17,7 @@ import PolylinePreview from "./PolylinePreview";
 import ScoreBadge from "./ScoreBadge";
 
 type UploaderFilter = "all" | GalleryUploader;
-type RenderMode = "auto" | "vector" | "trace" | "handwriting";
+type RenderMode = "auto" | "vector" | "trace" | "edges" | "hatch" | "lines" | "dots" | "handwriting";
 
 const MAX_UPLOAD_MB = 15;
 // Admin popup accepts the full asset library: images/SVG plus PDF/Office.
@@ -87,6 +87,19 @@ export default function GalleryPopup({
     api
       .galleryUpload(file, "", { mode, detail })
       .then(() => Promise.all([load(), loadThumbs()]))
+      .catch(fail)
+      .finally(() => setBusy(false));
+  };
+
+  const rerender = (item: GalleryItem) => {
+    if (busy) return;
+    setBusy(true);
+    setErr(null);
+    setMsg(null);
+    api
+      .galleryRender(item.id, mode, detail)
+      .then(() => Promise.all([load(), loadThumbs()]))
+      .then(() => setMsg(t("gallery.rendered")))
       .catch(fail)
       .finally(() => setBusy(false));
   };
@@ -209,6 +222,10 @@ export default function GalleryPopup({
                 { value: "auto", label: t("gallery.modeAuto") },
                 { value: "vector", label: t("gallery.modeVector") },
                 { value: "trace", label: t("gallery.modeTrace") },
+                { value: "edges", label: t("paint.image.edges") },
+                { value: "hatch", label: t("paint.image.hatch") },
+                { value: "lines", label: t("paint.image.lines") },
+                { value: "dots", label: t("paint.image.dots") },
                 { value: "handwriting", label: t("gallery.modeHandwriting") },
               ]}
             />
@@ -269,6 +286,14 @@ export default function GalleryPopup({
                     ⏵ {t("gallery.quickPlot")}
                   </button>
                 )}
+                <button
+                  className="gallery-rerender"
+                  disabled={busy || !item.original}
+                  title={t("gallery.rerenderHint")}
+                  onClick={() => rerender(item)}
+                >
+                  {t("gallery.rerender")}
+                </button>
               </div>
             ))}
             {visible.length === 0 && <p className="muted gallery-popup-empty">{t("gallery.empty")}</p>}
