@@ -103,7 +103,7 @@ the same interface.
 
 ```bash
 cp .env.example .env
-# edit .env and set OCTOPRINT_URL / OCTOPRINT_API_KEY
+# edit .env: set OCTOPRINT_* or enable PRINTER_SERIAL_* for direct USB
 docker compose up --build
 ```
 
@@ -122,12 +122,12 @@ the network; use HTTPS if the controller is exposed beyond a trusted setup.
 
 ### Production
 
-`compose.yml` ships the pre-built image released to GHCR rather than building
-locally, with `PLOTTER_AUTH_COOKIE_SECURE` defaulting to `true` (terminate TLS
-at a reverse proxy in front of the service):
+`compose.prod.yml` switches `compose.yml` to the pre-built image released to
+GHCR rather than building locally, with `PLOTTER_AUTH_COOKIE_SECURE` defaulting
+to `true` (terminate TLS at a reverse proxy in front of the service):
 
 ```bash
-cp .env.example .env   # set OCTOPRINT_URL / OCTOPRINT_API_KEY
+cp .env.example .env   # set OCTOPRINT_* or PRINTER_SERIAL_*
 docker compose -f compose.yml -f compose.prod.yml pull
 docker compose -f compose.yml -f compose.prod.yml up -d
 ```
@@ -196,20 +196,26 @@ device with `PRINTER_SERIAL_PORT` and `PRINTER_SERIAL_BAUD`.
 serial are configured, a switch appears in the control panel to pick the active
 backend at runtime — no restart needed. The choice is persisted under
 `<data>/printer_backend.json`; `PRINTER_DEFAULT_BACKEND` sets the initial one.
-Only the active backend talks to a printer; serial connects lazily when selected
-and releases the port when you switch away. Point serial and OctoPrint at
-different physical access paths. Switching forces a re-home (the real position is
-unknown after the change) and is blocked while a job is printing.
+Only the active backend talks to a printer. If serial is active at process start,
+the backend opens the USB port immediately and keeps it for the backend/container
+lifetime. If you switch away from serial, the port is released; switching back
+opens it again. Point serial and OctoPrint at different physical access paths.
+Switching forces a re-home (the real position is unknown after the change) and is
+blocked while a job is printing.
 
 Notes:
 
 - Prefer a stable path like `/dev/serial/by-id/...` over `/dev/ttyUSB0`, which can
   change across reboots (`ls -l /dev/serial/by-id/`).
+- Many Anycubic i3 Mega S firmwares use `PRINTER_SERIAL_BAUD=250000`; `115200` is
+  still common for other Marlin boards.
 - Run only **one** web worker in serial mode — multiple processes would fight
   over the port.
-- In Docker, pass the device in and grant serial-group access: uncomment the
-  `devices:` and `group_add:` blocks in `compose.yml`. Find the right GID with
-  `stat -c '%g' /dev/ttyUSB0` if `dialout` doesn't match.
+- In Docker, `compose.yml` passes `PRINTER_SERIAL_PORT` through as a device and
+  adds the container process to `PRINTER_SERIAL_GROUP` (`dialout` by default). If
+  you set `PRINTER_SERIAL_PORT=/dev/serial/by-id/...`, that same path is passed
+  through. Find the right group id with `stat -c '%g' /dev/ttyUSB0` if `dialout`
+  doesn't match.
 
 Calibration values (bed/plot size, origin, pen Z, feedrates) are edited in the
 UI and stored as profiles under `<data>/profiles/` — one JSON file per profile
