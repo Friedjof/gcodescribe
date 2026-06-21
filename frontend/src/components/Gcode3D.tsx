@@ -3,6 +3,7 @@ import type { GcodePreview3D } from "../api";
 import { useI18n } from "../i18n";
 
 type V3 = [number, number, number];
+export type Gcode3DView = { yaw: number; pitch: number; zoom: number; panX: number; panY: number };
 
 /**
  * Lightweight interactive 3D viewer for a G-code tool path (Canvas 2D, no
@@ -13,6 +14,8 @@ export default function Gcode3D({
   chrome = true,
   showTravels: travelsProp,
   resetToken = 0,
+  viewState,
+  onViewChange,
 }: {
   data: GcodePreview3D;
   chrome?: boolean;
@@ -20,6 +23,8 @@ export default function Gcode3D({
   // modal footer): pass showTravels and bump resetToken to reset the view.
   showTravels?: boolean;
   resetToken?: number;
+  viewState?: Gcode3DView;
+  onViewChange?: (view: Gcode3DView) => void;
 }) {
   const { t } = useI18n();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -34,6 +39,12 @@ export default function Gcode3D({
   useEffect(() => {
     renderRef.current();
   }, [showTravels]);
+
+  useEffect(() => {
+    if (!viewState) return;
+    view.current = { ...viewState };
+    renderRef.current();
+  }, [viewState]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -161,6 +172,7 @@ export default function Gcode3D({
         view.current.panX += dx;
         view.current.panY += dy;
       }
+      onViewChange?.({ ...view.current });
       render();
     };
     const onUp = (e: PointerEvent) => {
@@ -171,6 +183,7 @@ export default function Gcode3D({
       e.preventDefault();
       const f = Math.exp(-e.deltaY * 0.0015);
       view.current.zoom = Math.max(0.2, Math.min(8, view.current.zoom * f));
+      onViewChange?.({ ...view.current });
       render();
     };
     const onContext = (e: Event) => e.preventDefault();
@@ -194,6 +207,7 @@ export default function Gcode3D({
 
   const resetView = () => {
     view.current = { yaw: -0.7, pitch: 1.0, zoom: 1, panX: 0, panY: 0 };
+    onViewChange?.({ ...view.current });
     renderRef.current();
   };
 

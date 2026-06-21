@@ -1,12 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type Calibration, type GcodePreview3D, type Page, type PageIndex, type SceneObject } from "../api";
-import PaintCanvas, { type Tool } from "./PaintCanvas";
+import PaintCanvas, { type Tool, type ViewRotation } from "./PaintCanvas";
 import MarkdownEditor from "./MarkdownEditor";
 import PagePanel from "./PagePanel";
 import GalleryPopup from "./GalleryPopup";
 import PlotScore from "./PlotScore";
 import Gcode3DOverlay from "./Gcode3DOverlay";
+import type { Gcode3DView } from "./Gcode3D";
 import Segmented from "./Segmented";
+import LiveButton from "../stream/LiveButton";
+import { defaultSceneViewBox } from "../paint/SceneView";
+import { useLiveStream } from "../stream/useLiveStream";
 import { IDENTITY, localize, objectWorldBounds, type Pt, type Transform } from "../paint/geometry";
 import { TEXT_FONTS, type TextFont } from "../paint/text";
 import {
@@ -46,12 +50,14 @@ export default function Paint({
   const [busy, setBusy] = useState(false);
   const [sending, setSending] = useState(false);
   const [fullscreen, setFullscreen] = useState<GcodePreview3D | null>(null);
+  const [gcode3dView, setGcode3dView] = useState<Gcode3DView>({ yaw: -0.7, pitch: 1.0, zoom: 1, panX: 0, panY: 0 });
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number; ids: string[] } | null>(null);
   const [imageImport, setImageImport] = useState<{ file: File; at: Pt; mode: ImageMode; detail: number } | null>(null);
   const [importingImage, setImportingImage] = useState(false);
   const [mdOpen, setMdOpen] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
+  const [viewRotation, setViewRotation] = useState<ViewRotation>(0);
   const { confirm, ConfirmNode } = useConfirm();
   const { prompt, PromptNode } = usePrompt();
   const saveTimer = useRef<number | undefined>(undefined);
@@ -59,6 +65,23 @@ export default function Paint({
   const undoStack = useRef<SceneObject[][]>([]);
   const redoStack = useRef<SceneObject[][]>([]);
   const clipboard = useRef<SceneObject[]>([]);
+
+  const live = useLiveStream("designer", () => {
+    if (!cal || !page) return null;
+    return {
+      cal,
+      page: { id: page.id, name: page.name, objects: page.objects, grid: page.grid },
+      meta: {
+        sourceId: "designer",
+        pageName: page.name,
+        viewBox: defaultSceneViewBox(cal, viewRotation),
+        viewRotation,
+        mode: fullscreen ? "gcode3d" : "canvas",
+      },
+      gcode3d: fullscreen,
+      gcode3dView: fullscreen ? gcode3dView : null,
+    };
+  });
 
   // Icon + name: the toolbar shows the glyph, the name lives in the tooltip.
   const tools: { value: Tool; label: string; icon: string }[] = [
@@ -121,6 +144,10 @@ export default function Paint({
       })
       .catch(fail);
   }, [visible]);
+
+  useEffect(() => {
+    if (live.state === "live") live.sendSnapshot("snapshot");
+  }, [cal, page?.id, page?.name, page?.grid, page?.objects, viewRotation, fullscreen, gcode3dView, live.state]);
 
   // A "stale" page belongs to the *active* profile but was created before the
   // profile's last edit. Re-stamping it to the current fingerprint changes no
@@ -817,6 +844,11 @@ export default function Paint({
               </button>
             </label>
             <div className="paint-job-actions">
+              <LiveButton
+                state={live.state}
+                viewers={live.viewers}
+                onClick={() => live.state === "live" || live.state === "connecting" ? live.stop("user-stopped") : live.start()}
+              />
               <button
                 className="primary"
                 disabled={busy || sending || pageBlocked}
@@ -884,7 +916,12 @@ export default function Paint({
               onContextMenuSelection={(ids, x, y) => { setSelectedIds(ids); setMenu({ ids, x, y }); }}
               onImageDrop={(file, at) => setImageImport({ file, at, mode: "edges", detail: 2 })}
               onTextAdd={addTextObject}
+              onCursorMove={live.state === "live" ? live.sendCursor : undefined}
+              onCursorClick={live.state === "live" ? live.sendClick : undefined}
+              viewRotation={viewRotation}
+              onViewRotationChange={setViewRotation}
             />
+            {live.error && <div className="banner err live-error">{live.error}</div>}
           </div>
 
           <aside className="paint-tools-card">
@@ -1076,7 +1113,7 @@ export default function Paint({
             : t("paint.hint.draw")}
         </p>
       </section>
-      {fullscreen && <Gcode3DOverlay data={fullscreen} onClose={() => setFullscreen(null)} />}
+      {fullscreen && <Gcode3DOverlay data={fullscreen} viewState={gcode3dView} onViewChange={setGcode3dView} onClose={() => setFullscreen(null)} />}
       {mdOpen && (
         <MarkdownEditor
           cal={cal}
