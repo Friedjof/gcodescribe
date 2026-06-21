@@ -6,8 +6,8 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from ..octoprint import OctoPrintError
 from ..pipeline import PlotterError
+from ..printer import PrinterError
 from ..services import ServiceError
 from .auth import require_admin
 from .routes import (
@@ -22,6 +22,7 @@ from .routes import (
     printer,
     profiles,
     sources,
+    stream,
     sudoku,
 )
 
@@ -31,6 +32,7 @@ def create_app() -> FastAPI:
 
     app.include_router(auth.router, prefix="/api")
     app.include_router(gallery.router, prefix="/api")
+    app.include_router(stream.router, prefix="/api")
     protected_modules = (
         calibration,
         coloring_pages,
@@ -48,8 +50,8 @@ def create_app() -> FastAPI:
 
     # Domain errors are raised by the service layer and translated here, so
     # the route handlers stay free of try/except boilerplate.
-    @app.exception_handler(OctoPrintError)
-    async def octoprint_error(_: Request, exc: OctoPrintError) -> JSONResponse:
+    @app.exception_handler(PrinterError)
+    async def printer_error(_: Request, exc: PrinterError) -> JSONResponse:
         return JSONResponse(status_code=502, content={"detail": str(exc)})
 
     @app.exception_handler(ServiceError)
@@ -70,6 +72,10 @@ def create_app() -> FastAPI:
         # /upload is the public SPA route handed out for event submissions.
         @app.get("/upload", include_in_schema=False)
         def upload_page() -> FileResponse:
+            return FileResponse(static / "index.html")
+
+        @app.get("/live", include_in_schema=False)
+        def live_page() -> FileResponse:
             return FileResponse(static / "index.html")
 
         app.mount("/", StaticFiles(directory=str(static), html=True), name="static")

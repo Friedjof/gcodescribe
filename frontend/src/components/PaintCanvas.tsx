@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Calibration, Page, SceneObject } from "../api";
 import {
   type Pt,
@@ -55,6 +55,7 @@ function clampedTransform(t: Transform, local: Pt[][], W: number, H: number): Tr
 }
 
 type ResizeEdge = "tl" | "tc" | "tr" | "ml" | "mr" | "bl" | "bc" | "br";
+export type ViewRotation = 0 | 90 | 180 | 270;
 
 function shapeWorld(tool: Tool, pts: Pt[]): Pt[][] {
   if (tool === "pen") return pts.length > 1 ? [pts] : [];
@@ -69,6 +70,7 @@ function shapeWorld(tool: Tool, pts: Pt[]): Pt[][] {
 
 type Draft = { tool: Tool; points: Pt[] };
 type Marquee = { start: Pt; current: Pt; additive: boolean };
+type ViewBox = { x: number; y: number; w: number; h: number };
 type Drag =
   | { mode: "move"; ids: string[]; primaryId: string; startMouse: Pt; startTs: Map<string, Transform>; startBoundsAll: [number, number, number, number]; vGuides: GuideCandidate[]; hGuides: GuideCandidate[] }
   | { mode: "resize"; id: string; edge: ResizeEdge; startBounds: [number, number, number, number]; startLocalBounds: [number, number, number, number] }
@@ -77,6 +79,27 @@ type Drag =
 
 const cl = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const zValue = (obj: SceneObject, index: number) => obj.zOrder ?? index;
+
+function rotatePoint([x, y]: Pt, W: number, H: number, deg: ViewRotation): Pt {
+  const cx = W / 2;
+  const cy = H / 2;
+  const dx = x - cx;
+  const dy = y - cy;
+  if (deg === 90) return [cx - dy, cy + dx];
+  if (deg === 180) return [cx - dx, cy - dy];
+  if (deg === 270) return [cx + dy, cy - dx];
+  return [x, y];
+}
+
+function rotatedBounds(W: number, H: number, deg: ViewRotation): [number, number, number, number] {
+  const pts = [[0, 0], [W, 0], [W, H], [0, H]].map((p) => rotatePoint(p as Pt, W, H, deg));
+  return [
+    Math.min(...pts.map((p) => p[0])),
+    Math.min(...pts.map((p) => p[1])),
+    Math.max(...pts.map((p) => p[0])),
+    Math.max(...pts.map((p) => p[1])),
+  ];
+}
 
 export default function PaintCanvas({
   cal,
@@ -91,6 +114,10 @@ export default function PaintCanvas({
   onContextMenuSelection,
   onImageDrop,
   onTextAdd,
+  onCursorMove,
+  onCursorClick,
+  viewRotation,
+  onViewRotationChange,
 }: {
   cal: Calibration;
   page: Page;
@@ -104,6 +131,10 @@ export default function PaintCanvas({
   onContextMenuSelection: (ids: string[], x: number, y: number) => void;
   onImageDrop: (file: File, at: Pt) => void;
   onTextAdd: (at: Pt) => void;
+  onCursorMove?: (cursor: { x: number; y: number; inside: boolean; tool: Tool }) => void;
+  onCursorClick?: (click: { x: number; y: number; tool: Tool }) => void;
+  viewRotation: ViewRotation;
+  onViewRotationChange: (rotation: ViewRotation) => void;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const W = cal.plot_width;
@@ -119,7 +150,14 @@ export default function PaintCanvas({
   const [draft, setDraft] = useState<Draft | null>(null);
   const [marquee, setMarquee] = useState<Marquee | null>(null);
   const [guides, setGuides] = useState<Guide[]>([]);
+  const viewBounds = rotatedBounds(W, H, viewRotation);
+  const [viewBox, setViewBox] = useState<ViewBox>(() => ({ x: viewBounds[0] - pad, y: viewBounds[1] - pad, w: viewBounds[2] - viewBounds[0] + 2 * pad, h: viewBounds[3] - viewBounds[1] + 2 * pad }));
   const drag = useRef<Drag | null>(null);
+
+  useEffect(() => {
+    const [x0, y0, x1, y1] = rotatedBounds(W, H, viewRotation);
+    setViewBox({ x: x0 - pad, y: y0 - pad, w: x1 - x0 + 2 * pad, h: y1 - y0 + 2 * pad });
+  }, [H, W, pad, viewRotation]);
 
   // How close (mm) a moving edge/center must come to a reference before it
   // snaps. Scaled to the plot area so it feels the same regardless of size.
@@ -162,7 +200,25 @@ export default function PaintCanvas({
     pt.x = e.clientX;
     pt.y = e.clientY;
     const p = pt.matrixTransform(svg.getScreenCTM()!.inverse());
-    return [p.x, p.y];
+    return rotatePoint([p.x, p.y], W, H, ((360 - viewRotation) % 360) as ViewRotation);
+  };
+
+  const emitCursor = (e: React.PointerEvent) => {
+    if (!onCursorMove) return;
+    const [x, y] = toMM(e);
+    onCursorMove({
+      x: W > 0 ? Math.max(0, Math.min(1, x / W)) : 0,
+      y: H > 0 ? Math.max(0, Math.min(1, y / H)) : 0,
+      inside: x >= 0 && x <= W && y >= 0 && y <= H,
+      tool,
+    });
+  };
+
+  const emitClick = (e: React.PointerEvent) => {
+    if (!onCursorClick || e.button !== 0) return;
+    const [x, y] = toMM(e);
+    if (x < 0 || x > W || y < 0 || y > H) return;
+    onCursorClick({ x: W > 0 ? x / W : 0, y: H > 0 ? y / H : 0, tool });
   };
 
   const clientToMM = (clientX: number, clientY: number): Pt => {
@@ -171,7 +227,7 @@ export default function PaintCanvas({
     pt.x = clientX;
     pt.y = clientY;
     const p = pt.matrixTransform(svg.getScreenCTM()!.inverse());
-    return [p.x, p.y];
+    return rotatePoint([p.x, p.y], W, H, ((360 - viewRotation) % 360) as ViewRotation);
   };
 
   const onDrop = (e: React.DragEvent) => {
@@ -179,6 +235,29 @@ export default function PaintCanvas({
     const file = Array.from(e.dataTransfer.files).find((f) => f.type.startsWith("image/"));
     if (!file) return;
     onImageDrop(file, snapPt(clientToMM(e.clientX, e.clientY), step, snapOn));
+  };
+
+  const onWheel = (e: React.WheelEvent<SVGSVGElement>) => {
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const baseW = W + 2 * pad;
+    const baseH = H + 2 * pad;
+    const anchor = rotatePoint(clientToMM(e.clientX, e.clientY), W, H, viewRotation);
+    const currentZoom = baseW / viewBox.w;
+    const nextZoom = cl(currentZoom * Math.exp(-e.deltaY * 0.0015), 0.25, 8);
+    const nextW = baseW / nextZoom;
+    const nextH = baseH / nextZoom;
+    const rx = (anchor[0] - viewBox.x) / viewBox.w;
+    const ry = (anchor[1] - viewBox.y) / viewBox.h;
+
+    setViewBox({
+      x: anchor[0] - rx * nextW,
+      y: anchor[1] - ry * nextH,
+      w: nextW,
+      h: nextH,
+    });
   };
 
   const onSvgDown = (e: React.PointerEvent) => {
@@ -200,6 +279,7 @@ export default function PaintCanvas({
   };
 
   const onSvgMove = (e: React.PointerEvent) => {
+    emitCursor(e);
     if (marquee) {
       setMarquee({ ...marquee, current: toMM(e) });
       return;
@@ -214,7 +294,7 @@ export default function PaintCanvas({
           sp.x = ce.clientX;
           sp.y = ce.clientY;
           const p = sp.matrixTransform(svg.getScreenCTM()!.inverse());
-          pts.push([p.x, p.y]);
+          pts.push(rotatePoint([p.x, p.y], W, H, ((360 - viewRotation) % 360) as ViewRotation));
         }
         setDraft({ ...draft, points: pts });
       } else {
@@ -506,6 +586,8 @@ export default function PaintCanvas({
     return `translate(${t.x} ${t.y}) rotate(${(t.rotation * 180) / Math.PI}) scale(${sx},${sy})`;
   };
 
+  const canvasRotationTransform = `rotate(${viewRotation} ${W / 2} ${H / 2})`;
+
   const draftWorld = draft
     ? draft.tool === "pen"
       ? [draft.points]
@@ -540,14 +622,25 @@ export default function PaintCanvas({
 
   return (
     <div className="paint-canvas">
+      <button
+        className="canvas-rotate-button"
+        type="button"
+        onClick={() => onViewRotationChange(((viewRotation + 90) % 360) as ViewRotation)}
+        title="Canvas-Ansicht drehen (Plot-Koordinaten bleiben unverändert)"
+      >
+        ↻ {viewRotation}°
+      </button>
       <svg
         ref={svgRef}
-        viewBox={`${-pad} ${-pad} ${W + 2 * pad} ${H + 2 * pad}`}
+        viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`}
         preserveAspectRatio="xMidYMid meet"
         style={{ cursor: tool === "select" ? "default" : "crosshair", touchAction: "none" }}
+        onWheel={onWheel}
+        onPointerDownCapture={emitClick}
         onPointerDown={onSvgDown}
         onPointerMove={onSvgMove}
         onPointerUp={onSvgUp}
+        onPointerLeave={() => onCursorMove?.({ x: 0, y: 0, inside: false, tool })}
         onDragOver={(e) => e.preventDefault()}
         onDrop={onDrop}
       >
@@ -563,9 +656,14 @@ export default function PaintCanvas({
           </pattern>
         </defs>
 
+        <g transform={canvasRotationTransform}>
         <rect x={0} y={0} width={W} height={H} rx={1.5} fill="#101013"
           stroke="var(--accent)" strokeWidth={0.6} />
         <rect x={0} y={0} width={W} height={H} fill="url(#pc-grid-major)" />
+        <g className="canvas-orientation-marker">
+          <path d={`M ${W / 2 - S * 0.055} ${-pad * 0.45} L ${W / 2} ${-pad * 0.7} L ${W / 2 + S * 0.055} ${-pad * 0.45}`} />
+          <text x={W / 2} y={-pad * 0.14} textAnchor="middle">OBEN</text>
+        </g>
 
         {/* objects */}
         {objectsByZ.map((obj) => {
@@ -709,6 +807,7 @@ export default function PaintCanvas({
           fill="var(--muted)" textAnchor="middle">
           {W.toFixed(0)} × {H.toFixed(0)} mm
         </text>
+        </g>
       </svg>
     </div>
   );
