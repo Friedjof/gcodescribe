@@ -15,9 +15,30 @@ services:
       OCTOPRINT_URL: "${OCTOPRINT_URL:-}"
       OCTOPRINT_API_KEY: "${OCTOPRINT_API_KEY:-}"
       OCTOPRINT_VERIFY_SSL: "${OCTOPRINT_VERIFY_SSL:-true}"
+      # Direct USB-serial backend (bypasses OctoPrint). Enable it with
+      # PRINTER_SERIAL_ENABLED=true; both backends can be configured at once and
+      # switched at runtime in the UI. PRINTER_DEFAULT_BACKEND picks the initial
+      # one (octoprint|serial) until a choice is persisted. If serial is the
+      # active backend it opens the USB port at app start and keeps it for the
+      # container lifetime. The configured USB device is passed through below.
+      PRINTER_SERIAL_ENABLED: "${PRINTER_SERIAL_ENABLED:-false}"
+      PRINTER_DEFAULT_BACKEND: "${PRINTER_DEFAULT_BACKEND:-}"
+      PRINTER_SERIAL_PORT: "${PRINTER_SERIAL_PORT:-/dev/ttyUSB0}"
+      PRINTER_SERIAL_BAUD: "${PRINTER_SERIAL_BAUD:-115200}"
+      # Deprecated alias for PRINTER_SERIAL_ENABLED=true + default serial.
+      PRINTER_USE_SERIAL: "${PRINTER_USE_SERIAL:-false}"
       REDIS_URL: "redis://redis:6379/0"
       PLOTTER_AUTH_SESSION_TTL: "${PLOTTER_AUTH_SESSION_TTL:-1209600}"
       PLOTTER_AUTH_COOKIE_SECURE: "${PLOTTER_AUTH_COOKIE_SECURE:-false}"
+    # Serial mode: pass the configured USB device into the container and grant
+    # access to the host's serial group. A persistent /dev/serial/by-id/... path
+    # survives reboots better than ttyUSB0. If group name `dialout` is not valid
+    # for your host/container combination, set PRINTER_SERIAL_GROUP to the numeric
+    # GID from: stat -c '%g' /dev/ttyUSB0
+    devices:
+      - "${PRINTER_SERIAL_PORT:-/dev/ttyUSB0}:${PRINTER_SERIAL_PORT:-/dev/ttyUSB0}"
+    group_add:
+      - "${PRINTER_SERIAL_GROUP:-dialout}"
     volumes:
       - gcodescribe-data:/data
     depends_on:

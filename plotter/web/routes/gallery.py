@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from ...gcode_preview import parse_gcode, parse_gcode_3d
+from ...gcode_preview import parse_gcode, parse_gcode_3d_text
 from ...services.gallery import GalleryService
 from ...services.upload_validation import MAX_UPLOAD_BYTES
 from ..auth import optional_admin, require_admin
@@ -74,14 +75,28 @@ def submission_thumbnail(item_id: str, _: dict = Depends(require_admin)) -> dict
     return service().thumbnail(item_id)
 
 
+@router.get("/gallery/{item_id}/original")
+def submission_original(item_id: str, _: dict = Depends(require_admin)) -> FileResponse:
+    path, info = service().original_path(item_id)
+    return FileResponse(
+        path,
+        media_type=info.get("mime") or "application/octet-stream",
+        filename=info.get("filename") or path.name,
+    )
+
+
 @router.get("/gallery/{item_id}/gcode/preview")
 def submission_gcode_preview(item_id: str, _: dict = Depends(require_admin)) -> dict:
     return parse_gcode(service().gcode_path(item_id))
 
 
 @router.get("/gallery/{item_id}/gcode/preview3d")
-def submission_gcode_preview_3d(item_id: str, _: dict = Depends(require_admin)) -> dict:
-    return parse_gcode_3d(service().gcode_path(item_id))
+def submission_gcode_preview_3d(
+    item_id: str,
+    page: int = 1,
+    _: dict = Depends(require_admin),
+) -> dict:
+    return parse_gcode_3d_text(service().gcode_preview_text(item_id, page))
 
 
 # -- admin actions (to be protected once the admin login exists) ---------------
@@ -91,9 +106,19 @@ class TitleRequest(BaseModel):
     title: str = ""
 
 
+class RenderRequest(BaseModel):
+    mode: str = "auto"
+    detail: int = 2
+
+
 @router.patch("/gallery/{item_id}/title")
 def set_submission_title(item_id: str, req: TitleRequest, _: dict = Depends(require_admin)) -> dict:
     return service().set_title(item_id, req.title)
+
+
+@router.post("/gallery/{item_id}/render")
+def render_submission(item_id: str, req: RenderRequest, _: dict = Depends(require_admin)) -> dict:
+    return service().rerender(item_id, mode=req.mode, detail=req.detail)
 
 
 @router.post("/gallery/{item_id}/archive")

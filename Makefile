@@ -1,4 +1,4 @@
-.PHONY: dev build install clean redis redis-stop
+.PHONY: dev dev-plain build install clean redis redis-stop
 
 -include .env
 export
@@ -7,6 +7,10 @@ PLOTTER_DATA_DIR ?= data
 PLOTTER_PORT     ?= 8000
 OCTOPRINT_URL    ?=
 OCTOPRINT_API_KEY ?=
+PRINTER_SERIAL_ENABLED ?= false
+PRINTER_DEFAULT_BACKEND ?=
+PRINTER_SERIAL_PORT ?= /dev/ttyUSB0
+PRINTER_SERIAL_BAUD ?= 115200
 REDIS_PORT       ?= 6379
 REDIS_URL        ?= redis://localhost:$(REDIS_PORT)/0
 
@@ -30,11 +34,13 @@ redis:
 redis-stop:
 	docker rm -f gcodescribe-redis
 
-# Run redis, then backend + frontend via scripts/dev.sh, which first clears any
-# leftovers from a previous run (the "[Errno 98] Address already in use" cause)
-# and starts each service in its own process group so Ctrl-C reaps the whole
-# subtree — uvicorn's reload worker and npm → vite → esbuild.
-dev: redis
+# Interactive dev launcher: choose services, serial options and preflight checks.
+dev:
+	@bash scripts/dev-menu.sh
+
+# Direct dev launcher for scripts/automation. Starts backend + frontend with the
+# current environment; no menu, no Redis bootstrap.
+dev-plain:
 	@bash scripts/dev.sh
 
 clean:

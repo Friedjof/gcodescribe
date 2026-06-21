@@ -11,7 +11,7 @@ import Segmented from "./Segmented";
 import LiveButton from "../stream/LiveButton";
 import { defaultSceneViewBox } from "../paint/SceneView";
 import { useLiveStream } from "../stream/useLiveStream";
-import { IDENTITY, localize, objectWorldBounds, type Pt, type Transform } from "../paint/geometry";
+import { IDENTITY, bounds, localize, objectWorldBounds, type Pt, type Transform } from "../paint/geometry";
 import { TEXT_FONTS, type TextFont } from "../paint/text";
 import {
   basePolylines,
@@ -58,6 +58,8 @@ export default function Paint({
   const [mdOpen, setMdOpen] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [viewRotation, setViewRotation] = useState<ViewRotation>(0);
+  const [sizeLinked, setSizeLinked] = useState(true);
+  const [clipboardCount, setClipboardCount] = useState(0);
   const { confirm, ConfirmNode } = useConfirm();
   const { prompt, PromptNode } = usePrompt();
   const saveTimer = useRef<number | undefined>(undefined);
@@ -65,6 +67,17 @@ export default function Paint({
   const undoStack = useRef<SceneObject[][]>([]);
   const redoStack = useRef<SceneObject[][]>([]);
   const clipboard = useRef<SceneObject[]>([]);
+  // The undo/redo stacks live in refs (mutating them must not re-render mid
+  // edit); this state mirrors their depth so the toolbar buttons can enable
+  // and disable in step with them.
+  const [history, setHistory] = useState({ undo: 0, redo: 0 });
+  const syncHistory = () =>
+    setHistory({ undo: undoStack.current.length, redo: redoStack.current.length });
+  const resetHistory = () => {
+    undoStack.current = [];
+    redoStack.current = [];
+    syncHistory();
+  };
 
   const live = useLiveStream("designer", () => {
     if (!cal || !page) return null;
@@ -136,8 +149,7 @@ export default function Paint({
         setIndex(idx);
         const id = idx.activeId ?? idx.order[0]?.id;
         if (id && id !== pageIdRef.current) {
-          undoStack.current = [];
-          redoStack.current = [];
+          resetHistory();
           setSelectedIds([]);
           return api.getPage(id).then(autoAdoptStale).then(setPage);
         }
@@ -216,8 +228,7 @@ export default function Paint({
   const openPage = (id: string) => {
     if (id === page?.id) return;
     window.clearTimeout(saveTimer.current);
-    undoStack.current = [];
-    redoStack.current = [];
+    resetHistory();
     setSelectedIds([]);
     api
       .activatePage(id)
@@ -230,8 +241,7 @@ export default function Paint({
 
   const newPage = () =>
     api.createPage().then((p) => {
-      undoStack.current = [];
-      redoStack.current = [];
+      resetHistory();
       setPage(p);
       setSelectedIds([]);
       return reloadIndex();
@@ -239,8 +249,7 @@ export default function Paint({
 
   const duplicate = (id: string) =>
     api.duplicatePage(id).then((p) => {
-      undoStack.current = [];
-      redoStack.current = [];
+      resetHistory();
       setPage(p);
       setSelectedIds([]);
       return reloadIndex();
@@ -262,8 +271,7 @@ export default function Paint({
     api.deletePage(id).then((idx) => {
       setIndex(idx);
       const nextId = idx.activeId ?? idx.order[0]?.id;
-      undoStack.current = [];
-      redoStack.current = [];
+      resetHistory();
       setSelectedIds([]);
       if (nextId) return api.getPage(nextId).then(setPage);
       setPage(null);
@@ -277,10 +285,12 @@ export default function Paint({
     api.savePage(page.id, { grid }).then(reloadIndex).catch(fail);
   };
 
-  const generateJob = () => {
+  // Build a job for the whole page, or — when `objects` is given — for just
+  // that subset (a selection plotted on its own).
+  const generateJob = (objects?: SceneObject[]) => {
     if (!page) return Promise.reject(new Error(t("paint.noPage")));
     setBusy(true);
-    return api.pageGcode(page.id, index?.activeProfile)
+    return api.pageGcode(page.id, index?.activeProfile, objects)
       .then((job) => {
         toast.success(t("paint.jobCreated", { name: job.filename }));
         return job.filename;
@@ -304,6 +314,38 @@ export default function Paint({
       .finally(() => setSending(false));
   };
 
+  // Plot only the selected objects, then mark them plotted so they show dimmed
+  // and the rest of the page can be plotted later. Lets you add elements to a
+  // sheet that already has artwork and send just the new ones.
+  const plotSelection = () => {
+    if (!page || busy || sending || pageBlocked || selectedIds.length === 0) return;
+    const ids = [...selectedIds];
+    const subset = page.objects.filter((o) => ids.includes(o.id) && !o.plotted);
+    if (subset.length === 0) return;
+    generateJob(subset)
+      .then((filename) => {
+        setSending(true);
+        return api.send(filename, true).then(() => {
+          toast.success(t("paint.selectionPlotted", { name: filename }));
+          remember();
+          markPlotted(ids);
+          setSelectedIds([]);
+        });
+      })
+      .catch(fail)
+      .finally(() => setSending(false));
+  };
+
+  // Flag objects as already plotted (dimmed, excluded from later plots). Undoable
+  // via the surrounding remember() and persisted like any other edit.
+  const markPlotted = (ids: string[]) => {
+    if (!page) return;
+    const sel = new Set(ids);
+    const objects = page.objects.map((o) => (sel.has(o.id) ? { ...o, plotted: true } : o));
+    setPage({ ...page, objects });
+    persist(page.id, objects);
+  };
+
   // Render the page's G-code transiently (no job file) and show it fullscreen.
   const openFullscreen = () => {
     if (!page || loadingPreview) return;
@@ -319,6 +361,7 @@ export default function Paint({
     if (!page) return;
     undoStack.current.push(cloneObjects(page.objects));
     redoStack.current = [];
+    syncHistory();
   };
 
   const addObject = (obj: SceneObject) => {
@@ -536,6 +579,19 @@ export default function Paint({
     if (!page || selectedIds.length === 0) return;
     const selected = new Set(selectedIds);
     clipboard.current = cloneObjects(page.objects.filter((obj) => selected.has(obj.id)));
+    setClipboardCount(clipboard.current.length);
+  };
+
+  const cutSelected = () => {
+    if (!page || selectedIds.length === 0) return;
+    remember();
+    const selected = new Set(selectedIds);
+    clipboard.current = cloneObjects(page.objects.filter((obj) => selected.has(obj.id)));
+    setClipboardCount(clipboard.current.length);
+    const objects = page.objects.filter((obj) => !selected.has(obj.id));
+    setPage({ ...page, objects });
+    setSelectedIds([]);
+    persist(page.id, objects);
   };
 
   const pasteObjects = (source = clipboard.current) => {
@@ -614,6 +670,61 @@ export default function Paint({
     return Number.isFinite(b[0]) ? b : null;
   };
 
+  const objectLocalSize = (obj: SceneObject): { width: number; height: number; localWidth: number; localHeight: number } | null => {
+    const local = (obj.cachedPolylines as Pt[][] | undefined) ?? basePolylines(obj);
+    if (!local.length) return null;
+    const flat = local.flat();
+    if (!flat.length) return null;
+    const [x0, y0, x1, y1] = bounds(flat);
+    const t = obj.transform ?? IDENTITY;
+    const sx = Math.abs(t.scaleX ?? t.scale);
+    const sy = Math.abs(t.scaleY ?? t.scale);
+    const localWidth = Math.max(x1 - x0, 0);
+    const localHeight = Math.max(y1 - y0, 0);
+    return {
+      width: localWidth * sx,
+      height: localHeight * sy,
+      localWidth,
+      localHeight,
+    };
+  };
+
+  const setSelectedObjectSize = (axis: "width" | "height", target: number) => {
+    if (!page || selectedIds.length !== 1 || !Number.isFinite(target) || target <= 0) return;
+    const obj = page.objects.find((o) => o.id === selectedIds[0]);
+    if (!obj) return;
+    const size = objectLocalSize(obj);
+    if (!size) return;
+    const current = axis === "width" ? size.width : size.height;
+    const base = axis === "width" ? size.localWidth : size.localHeight;
+    if ((sizeLinked && current <= 0) || (!sizeLinked && base <= 0)) return;
+    remember();
+    const objects = page.objects.map((o) => {
+      if (o.id !== obj.id) return o;
+      const t = o.transform ?? IDENTITY;
+      const sx = t.scaleX ?? t.scale;
+      const sy = t.scaleY ?? t.scale;
+      const factor = sizeLinked ? target / current : 1;
+      const nextSx = sizeLinked
+        ? sx * factor
+        : axis === "width" ? Math.sign(sx || 1) * (target / base) : sx;
+      const nextSy = sizeLinked
+        ? sy * factor
+        : axis === "height" ? Math.sign(sy || 1) * (target / base) : sy;
+      return {
+        ...o,
+        transform: {
+          ...t,
+          scaleX: nextSx,
+          scaleY: nextSy,
+          scale: Math.max(Math.abs(nextSx), Math.abs(nextSy)),
+        },
+      };
+    });
+    setPage({ ...page, objects });
+    persist(page.id, objects);
+  };
+
   const mapSelected = (fn: (t: Transform) => Transform) => {
     if (!page || selectedIds.length === 0) return;
     remember();
@@ -679,6 +790,7 @@ export default function Paint({
     if (!page || undoStack.current.length === 0) return;
     const previous = undoStack.current.pop()!;
     redoStack.current.push(cloneObjects(page.objects));
+    syncHistory();
     restoreObjects(previous);
   };
 
@@ -686,6 +798,7 @@ export default function Paint({
     if (!page || redoStack.current.length === 0) return;
     const next = redoStack.current.pop()!;
     undoStack.current.push(cloneObjects(page.objects));
+    syncHistory();
     restoreObjects(next);
   };
 
@@ -736,6 +849,11 @@ export default function Paint({
         copySelected();
         return;
       }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "x") {
+        e.preventDefault();
+        cutSelected();
+        return;
+      }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v") {
         e.preventDefault();
         pasteObjects();
@@ -768,6 +886,7 @@ export default function Paint({
   const selectedText = selectedObjects.length === 1 && selectedObjects[0].type === "text"
     ? selectedObjects[0]
     : null;
+  const selectedObjectSize = selectedObjects.length === 1 ? objectLocalSize(selectedObjects[0]) : null;
   const selectedStyle = selectedObjects.length > 0 ? objectStyle(selectedObjects[0]) : DEFAULT_VECTOR_STYLE;
   const canUngroupMenu = !!menu && page.objects.some((obj) => menu.ids.includes(obj.id) && obj.groupId);
 
@@ -865,6 +984,13 @@ export default function Paint({
               >
                 {busy ? t("paint.generating") : sending ? t("paint.starting") : t("paint.directPlot")}
               </button>
+              <button
+                disabled={busy || sending || pageBlocked || !hasSelection}
+                title={!hasSelection ? t("paint.noSelection") : pageBlocked ? t("paint.gcodeBlocked") : t("paint.plotSelectionHint")}
+                onClick={plotSelection}
+              >
+                {t("paint.plotSelection")}
+              </button>
               <button disabled={loadingPreview} onClick={openFullscreen}>
                 {loadingPreview ? t("common.loading") : t("convert.fullscreen")}
               </button>
@@ -948,9 +1074,29 @@ export default function Paint({
                 onClick={() => setMdOpen(true)}>⌶</button>
             </div>
             <div className="paint-tools-actions">
+              <button className="ghost" disabled={history.undo === 0} onClick={undo}
+                title={t("paint.undo")} aria-label={t("paint.undo")}>
+                ↶
+              </button>
+              <button className="ghost" disabled={history.redo === 0} onClick={redo}
+                title={t("paint.redo")} aria-label={t("paint.redo")}>
+                ↷
+              </button>
               <button className="ghost" disabled={!hasSelection} onClick={deleteSelected}
                 title={hasSelection ? t("paint.deleteSelection") : t("paint.noSelection")} aria-label={t("paint.delete")}>
                 🗑{selectedObjects.length > 1 ? <span className="act-count">{selectedObjects.length}</span> : ""}
+              </button>
+              <button className="ghost" disabled={!hasSelection} onClick={copySelected}
+                title={hasSelection ? t("paint.copySelection") : t("paint.noSelection")} aria-label={t("paint.copy")}>
+                ⧉
+              </button>
+              <button className="ghost" disabled={!hasSelection} onClick={cutSelected}
+                title={hasSelection ? t("paint.cutSelection") : t("paint.noSelection")} aria-label={t("paint.cut")}>
+                ✂
+              </button>
+              <button className="ghost" disabled={clipboardCount === 0} onClick={() => pasteObjects()}
+                title={clipboardCount > 0 ? t("paint.pasteSelection") : t("paint.clipboardEmpty")} aria-label={t("paint.paste")}>
+                ⎘{clipboardCount > 1 ? <span className="act-count">{clipboardCount}</span> : ""}
               </button>
               <button className="ghost" disabled={!hasSelection} onClick={duplicateSelected}
                 title={hasSelection ? t("paint.duplicateSelection") : t("paint.noSelection")} aria-label={t("paint.duplicate")}>
@@ -983,6 +1129,51 @@ export default function Paint({
             </div>
 
             <div className="paint-style-panel">
+              <div className="paint-object-size-head">
+                <h4>{t("paint.object")}</h4>
+                <button
+                  type="button"
+                  className={`ghost tiny ${sizeLinked ? "active" : ""}`}
+                  aria-pressed={sizeLinked}
+                  title={t("paint.keepAspect")}
+                  onClick={() => setSizeLinked((v) => !v)}
+                >
+                  {sizeLinked ? "🔗" : "⛓"}
+                </button>
+              </div>
+              <div className="paint-size-fields">
+                <label className="field">{t("common.width")}
+                  <div className="input-unit">
+                    <input
+                      type="number"
+                      min={0.1}
+                      step={0.5}
+                      disabled={!selectedObjectSize || selectedObjectSize.localWidth <= 0}
+                      value={selectedObjectSize ? Number(selectedObjectSize.width.toFixed(1)) : ""}
+                      onChange={(e) => {
+                        if (e.target.value !== "") setSelectedObjectSize("width", Number(e.target.value));
+                      }}
+                    />
+                    <em>mm</em>
+                  </div>
+                </label>
+                <label className="field">{t("common.height")}
+                  <div className="input-unit">
+                    <input
+                      type="number"
+                      min={0.1}
+                      step={0.5}
+                      disabled={!selectedObjectSize || selectedObjectSize.localHeight <= 0}
+                      value={selectedObjectSize ? Number(selectedObjectSize.height.toFixed(1)) : ""}
+                      onChange={(e) => {
+                        if (e.target.value !== "") setSelectedObjectSize("height", Number(e.target.value));
+                      }}
+                    />
+                    <em>mm</em>
+                  </div>
+                </label>
+              </div>
+
               <h4>{t("paint.style.line")}</h4>
               <label className="field">
                 {t("paint.style.type")}

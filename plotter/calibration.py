@@ -17,9 +17,10 @@ def data_dir() -> Path:
 class Calibration:
     """Plotter calibration. All distances in mm, feedrates in mm/min."""
 
-    # Physical bed (Anycubic i3 Mega S: 210 x 210 mm).
+    # Physical travel limits.
     bed_width: float = 210.0
     bed_height: float = 210.0
+    z_max: float = 205.0
 
     # Usable plot area and its origin offset on the bed.
     plot_width: float = 200.0
@@ -43,6 +44,7 @@ class Calibration:
     # Layout behaviour.
     fit_to_area: bool = True  # scale the drawing to fit plot_width x plot_height
     flip_y: bool = True  # SVG y-axis points down; printer y-axis points up
+    trust_axis_home: bool = False  # true if the firmware honours G28 axis arguments
 
     # Paper calibration: corner positions captured by jogging the head to the
     # sheet's corners (printer coordinates, mm). Keys: bl, br, tr, tl.

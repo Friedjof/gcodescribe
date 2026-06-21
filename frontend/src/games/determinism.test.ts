@@ -6,6 +6,7 @@ import { buildSudokuTemplate } from "./sudoku";
 const cal: Calibration = {
   bed_width: 220,
   bed_height: 220,
+  z_max: 205,
   plot_width: 180,
   plot_height: 160,
   origin_x: 0,
@@ -18,6 +19,7 @@ const cal: Calibration = {
   z_feed: 600,
   fit_to_area: true,
   flip_y: false,
+  trust_axis_home: false,
   paper_corners: {},
   paper_margin: 0,
 };

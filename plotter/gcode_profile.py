@@ -19,8 +19,7 @@ def build_vpype_config(cal: Calibration, profile: str = "plotter") -> str:
     )
 
     # Never home inside a job. Machine Z=0 is bed level, not pen level (there
-    # is paper on the bed), and the Anycubic firmware does not reliably honour
-    # axis arguments on G28 — "G28 X Y" can home Z too and crush the pen.
+    # is paper on the bed), so an in-job G28 could crush the pen.
     # The app refuses to start a print unless the machine was homed, so the
     # absolute coordinates are already trustworthy. First motion: lift the pen.
     document_start = f"G21\nG90\n{pen_up}"

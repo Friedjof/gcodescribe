@@ -23,8 +23,9 @@ RUN apt-get update \
         poppler-utils libgl1 libglib2.0-0 curl \
     && rm -rf /var/lib/apt/lists/*
 
-# uv for fast, reproducible installs.
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+# uv for fast, reproducible installs. Install from PyPI so builds do not depend
+# on pulling the helper image from GHCR.
+RUN pip install --no-cache-dir uv==0.8.23
 
 # Run as an unprivileged user. The data volume is created and chowned here so
 # the non-root process can write to it (named volumes inherit this ownership).
