@@ -7,6 +7,7 @@ from pathlib import Path
 from .calibration import Calibration
 from .export import calibration_comment
 from .jobmeta import profile_comment, write_job_meta
+from .linemerge import merge_polylines
 from .pipeline import PlotterError
 from .safety import GcodeSafetyChecker
 from .storage import jobs_dir
@@ -119,6 +120,9 @@ def scene_gcode(page: dict, cal: Calibration) -> str:
     polylines = page_polylines(page)
     if not polylines:
         raise PlotterError("Die Seite enthält keine ungeplotteten Linien.")
+    # Join pieces that meet end-to-end into continuous strokes, so a wall the
+    # eye reads as one line is plotted without lifting the pen at every segment.
+    polylines = merge_polylines(polylines)
 
     pen_up = f"G0 Z{cal.pen_up_z:.3f} F{cal.z_feed:.0f}"
     pen_down = f"G1 Z{cal.pen_down_z:.3f} F{cal.z_feed:.0f}"

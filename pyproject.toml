@@ -24,6 +24,7 @@ dependencies = [
     "pyotp>=2.9.0",
     "dokusan>=0.1.0",
     "scikit-image>=0.26.0",
+    "pyserial>=3.5",
 ]
 
 [project.scripts]

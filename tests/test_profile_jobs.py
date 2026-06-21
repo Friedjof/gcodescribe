@@ -125,13 +125,13 @@ class TestSendGuard:
     def test_matching_job_is_sent(self, client):
         filename = _make_job(client)
         with patch.object(op.OctoPrintClient, "upload", return_value={"done": True}):
-            r = client.post("/api/octoprint/send", json={"filename": filename, "start": False})
+            r = client.post("/api/printer/send", json={"filename": filename, "start": False})
         assert r.status_code == 200
 
     def test_legacy_job_is_blocked(self, client, workspace):
         (workspace / "jobs").mkdir(exist_ok=True)
         (workspace / "jobs" / "alt.gcode").write_text("G21\nG90\n")
-        r = client.post("/api/octoprint/send", json={"filename": "alt.gcode", "start": False})
+        r = client.post("/api/printer/send", json={"filename": "alt.gcode", "start": False})
         assert r.status_code == 409
         assert "Legacy" in r.json()["detail"]
 
@@ -140,7 +140,7 @@ class TestSendGuard:
         svc = ProfileService()
         other = svc.create("Postkarte")
         svc.activate(other["id"])
-        r = client.post("/api/octoprint/send", json={"filename": filename, "start": False})
+        r = client.post("/api/printer/send", json={"filename": filename, "start": False})
         assert r.status_code == 409
         assert "gehört zu Profil" in r.json()["detail"]
 
@@ -149,7 +149,7 @@ class TestSendGuard:
         # Same profile id, but a safety-relevant value changed afterwards.
         svc = ProfileService()
         svc.update(svc.active_id(), calibration={"pen_down_z": 2.9})
-        r = client.post("/api/octoprint/send", json={"filename": filename, "start": False})
+        r = client.post("/api/printer/send", json={"filename": filename, "start": False})
         assert r.status_code == 409
         assert "geändert" in r.json()["detail"]
 
@@ -159,7 +159,7 @@ class TestSendGuard:
         meta = read_job_meta(path)
         meta["profile"] = {}
         job_meta_path(path).write_text(json.dumps(meta))
-        r = client.post("/api/octoprint/send", json={"filename": filename, "start": False})
+        r = client.post("/api/printer/send", json={"filename": filename, "start": False})
         assert r.status_code == 409
         assert "Legacy" in r.json()["detail"]
 
@@ -170,7 +170,7 @@ class TestSendGuard:
         meta["profile"]["id"] = "prof-geloescht"
         meta["profile"]["name"] = "Gelöscht"
         job_meta_path(path).write_text(json.dumps(meta))
-        r = client.post("/api/octoprint/send", json={"filename": filename, "start": False})
+        r = client.post("/api/printer/send", json={"filename": filename, "start": False})
         assert r.status_code == 409
         assert "existiert nicht mehr" in r.json()["detail"]
 
@@ -181,7 +181,7 @@ class TestSendGuard:
         other = svc.create("Postkarte")
         svc.activate(other["id"])
         svc.archive(original)
-        r = client.post("/api/octoprint/send", json={"filename": filename, "start": False})
+        r = client.post("/api/printer/send", json={"filename": filename, "start": False})
         assert r.status_code == 409
         assert "archiviert" in r.json()["detail"]
 
@@ -189,6 +189,6 @@ class TestSendGuard:
         filename = _make_job(client)
         path = workspace / "jobs" / filename
         job_meta_path(path).write_text("{kaputt")
-        r = client.post("/api/octoprint/send", json={"filename": filename, "start": False})
+        r = client.post("/api/printer/send", json={"filename": filename, "start": False})
         assert r.status_code == 409
         assert "Metadaten sind beschädigt" in r.json()["detail"]

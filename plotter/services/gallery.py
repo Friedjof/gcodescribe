@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import mimetypes
 import shutil
+import tempfile
 import time
 import uuid
 from pathlib import Path
@@ -38,6 +40,15 @@ _SVG_PREVIEW_FILE = "preview-svg.json"
 _SVG_THUMB_FILE = "preview-thumb.json"
 _FULL_PREVIEW_POINTS = 20000
 _THUMB_PREVIEW_POINTS = 1200
+_ORIGINAL_MIME = {
+    "svg": "image/svg+xml",
+    "png": "image/png",
+    "jpeg": "image/jpeg",
+    "jpg": "image/jpeg",
+    "pdf": "application/pdf",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+}
 
 
 class GalleryService:
@@ -113,6 +124,7 @@ class GalleryService:
         original.write_bytes(data)
         pages, mode_used = build_pages(original, item_dir, suffix, mode, detail)
         first = pages[0]
+        original_meta = self._original_meta(filename, original.name, kind, len(data))
         return {
             "id": item_id,
             "title": title,
@@ -127,6 +139,7 @@ class GalleryService:
             "width": first["width"],
             "height": first["height"],
             "lines": first["lines"],
+            "original": original_meta,
         }
 
     def _build_submission(
@@ -135,6 +148,7 @@ class GalleryService:
     ) -> dict:
         original = item_dir / f"original.{kind if kind != 'jpeg' else 'jpg'}"
         original.write_bytes(data)
+        original_meta = self._original_meta(filename, original.name, kind, len(data))
 
         svg = item_dir / _SVG_FILE
         if kind == "svg":
@@ -177,8 +191,152 @@ class GalleryService:
             "width": width,
             "height": height,
             "lines": lines,
+            "original": original_meta,
             "profile": active_meta,
             **evaluate_gcode(gcode, MAX_GCODE_BYTES),
+        }
+
+    def rerender(self, item_id: str, *, mode: str, detail: int) -> dict:
+        """Rebuild derived pages/previews from the stored original, in-place.
+
+        The original file and stable item identity are preserved. All derived
+        artifacts are generated in a temporary directory first, then swapped in
+        only after conversion succeeds.
+        """
+        if mode not in VALID_MODES:
+            raise ServiceError(f"Unbekannter Modus: {mode}")
+        detail = max(1, min(int(detail), 3))
+        meta = self.get(item_id)
+        item_dir = self.root / item_id
+        original, original_info = self.original_path(item_id)
+        suffix = original.suffix.lower()
+        with tempfile.TemporaryDirectory(prefix=f"gallery-render-{item_id}-") as tmp_raw:
+            tmp = Path(tmp_raw)
+            source = original
+            if suffix == ".svg":
+                # build_pages() treats SVGs as already-rendered pages, so place a
+                # copy in the temp dir to make the later swap self-contained.
+                source = tmp / "page-0001.svg"
+                shutil.copy(original, source)
+            pages, mode_used = build_pages(source, tmp, suffix, mode, detail)
+            if meta.get("uploader") == "admin":
+                updated = self._rerender_asset(meta, item_dir, tmp, pages, mode_used, detail)
+            else:
+                updated = self._rerender_submission(meta, item_dir, tmp, pages, mode_used, detail)
+        updated["original"] = {**original_info, "size": original.stat().st_size}
+        (item_dir / "meta.json").write_text(json.dumps(updated, indent=2))
+        return updated
+
+    def _rerender_asset(
+        self,
+        meta: dict,
+        item_dir: Path,
+        tmp: Path,
+        pages: list[dict],
+        mode: str,
+        detail: int,
+    ) -> dict:
+        self._clear_derived(item_dir)
+        for page in pages:
+            src = tmp / page["file"]
+            dst = item_dir / page["file"]
+            if src.resolve() != dst.resolve():
+                shutil.copy(src, dst)
+        self._copy_preview_caches(tmp, item_dir)
+        first = pages[0]
+        updated = dict(meta)
+        for key in ("score", "metrics", "profile"):
+            updated.pop(key, None)
+        updated.update(
+            {
+                "mode": mode,
+                "detail": detail,
+                "pages": pages,
+                "width": first["width"],
+                "height": first["height"],
+                "lines": first["lines"],
+            }
+        )
+        return updated
+
+    def _rerender_submission(
+        self,
+        meta: dict,
+        item_dir: Path,
+        tmp: Path,
+        pages: list[dict],
+        mode: str,
+        detail: int,
+    ) -> dict:
+        page = pages[0]
+        rendered = tmp / page["file"]
+        drawing = load_svg_drawing(rendered, quantization_mm=0.25)
+        if drawing.is_empty():
+            raise PlotterError("Das Bild enthält keine plottbaren Linien.")
+
+        profile = ProfileService().active()
+        active_meta = profile_meta(profile)
+        cal = Calibration().merged(profile["calibration"])
+        gcode = profile_comment(active_meta) + self._fitted_gcode(
+            drawing, cal, name=meta.get("filename") or meta["id"]
+        )
+        if len(gcode.encode()) > MAX_GCODE_BYTES:
+            raise UploadTooLarge(
+                "Der erzeugte G-code überschreitet "
+                f"{MAX_GCODE_BYTES // (1024 * 1024)} MB — das Motiv ist zu komplex."
+            )
+
+        self._clear_derived(item_dir)
+        shutil.copy(rendered, item_dir / _SVG_FILE)
+        self._write_preview_cache(item_dir, drawing)
+        (item_dir / _GCODE_FILE).write_text(gcode)
+        width = round(drawing.width, 3)
+        height = round(drawing.height, 3)
+        lines = len(drawing.polylines)
+        updated = dict(meta)
+        updated.update(
+            {
+                "mode": mode,
+                "detail": detail,
+                "pages": [{"n": 1, "file": _SVG_FILE, "width": width, "height": height, "lines": lines}],
+                "width": width,
+                "height": height,
+                "lines": lines,
+                "profile": active_meta,
+                **evaluate_gcode(gcode, MAX_GCODE_BYTES),
+            }
+        )
+        return updated
+
+    @staticmethod
+    def _clear_derived(item_dir: Path) -> None:
+        for pattern in (
+            _SVG_FILE,
+            _GCODE_FILE,
+            _SVG_PREVIEW_FILE,
+            _SVG_THUMB_FILE,
+            "page-*.svg",
+            "preview-p*.json",
+            "thumb.json",
+        ):
+            for path in item_dir.glob(pattern):
+                path.unlink(missing_ok=True)
+
+    @staticmethod
+    def _copy_preview_caches(src: Path, dst: Path) -> None:
+        for pattern in ("preview-p*.json", "thumb.json"):
+            for path in src.glob(pattern):
+                shutil.copy(path, dst / path.name)
+
+    @staticmethod
+    def _original_meta(filename: str, stored: str, kind: str, size: int) -> dict:
+        mime = _ORIGINAL_MIME.get(kind) or mimetypes.guess_type(filename)[0] or "application/octet-stream"
+        return {
+            "filename": filename,
+            "stored": stored,
+            "kind": kind,
+            "mime": mime,
+            "size": size,
         }
 
     @staticmethod
@@ -203,6 +361,7 @@ class GalleryService:
             except (OSError, json.JSONDecodeError):
                 continue
             self._normalize(meta)
+            self._attach_existing_original(meta, meta_file.parent)
             if not include_archived and meta.get("status") == "archived":
                 continue
             if uploader and meta.get("uploader") != uploader:
@@ -216,6 +375,7 @@ class GalleryService:
             raise ServiceError(f"Einreichung nicht gefunden: {item_id}")
         meta = json.loads(meta_file.read_text())
         self._normalize(meta)
+        self._attach_existing_original(meta, meta_file.parent)
         return meta
 
     @staticmethod
@@ -232,6 +392,41 @@ class GalleryService:
             }]
         meta.setdefault("mode", "vector" if meta.get("kind") == "svg" else "trace")
         meta.setdefault("detail", 2)
+        meta.setdefault("original", GalleryService._legacy_original_meta(meta))
+
+    @staticmethod
+    def _attach_existing_original(meta: dict, item_dir: Path) -> None:
+        original = meta.get("original")
+        stored = (original or {}).get("stored")
+        if stored and "/" not in stored and "\\" not in stored:
+            path = item_dir / stored
+            if path.exists():
+                original["size"] = path.stat().st_size
+                meta["original"] = original
+                return
+        meta["original"] = None
+
+    @staticmethod
+    def _legacy_original_meta(meta: dict) -> dict | None:
+        kind = meta.get("kind")
+        filename = meta.get("filename") or "original"
+        if not kind:
+            return None
+        stored = f"original.{kind if kind != 'jpeg' else 'jpg'}"
+        return GalleryService._original_meta(filename, stored, kind, 0)
+
+    def original_path(self, item_id: str) -> tuple[Path, dict]:
+        meta = self.get(item_id)
+        original = meta.get("original") or {}
+        stored = original.get("stored")
+        if not stored or "/" in stored or "\\" in stored:
+            raise ServiceError(f"Originaldatei nicht gefunden: {item_id}")
+        path = self.root / item_id / stored
+        if not path.exists():
+            raise ServiceError(f"Originaldatei nicht gefunden: {item_id}")
+        info = dict(original)
+        info["size"] = path.stat().st_size
+        return path, info
 
     @staticmethod
     def _page_entry(meta: dict, page: int) -> dict:
@@ -245,6 +440,23 @@ class GalleryService:
         if not path.exists():
             raise ServiceError(f"Einreichung nicht gefunden: {item_id}")
         return path
+
+    def gcode_preview_text(self, item_id: str, page: int = 1) -> str:
+        """Stored submission G-code, or transient fitted G-code for admin assets."""
+        path = self.root / item_id / _GCODE_FILE
+        if path.exists():
+            return path.read_text(errors="replace")
+        meta = self.get(item_id)
+        entry = self._page_entry(meta, page)
+        drawing = load_svg_drawing(self.root / item_id / entry["file"], quantization_mm=0.25)
+        if drawing.is_empty():
+            raise PlotterError("Die Seite enthält keine plottbaren Linien.")
+        profile = ProfileService().active()
+        active_meta = profile_meta(profile)
+        cal = Calibration().merged(profile["calibration"])
+        return profile_comment(active_meta) + self._fitted_gcode(
+            drawing, cal, name=meta.get("filename") or item_id
+        )
 
     def svg_preview(self, item_id: str, *, max_points: int = _FULL_PREVIEW_POINTS) -> dict:
         """Polylines of the derived SVG (mm, y down) for safe 2D rendering."""

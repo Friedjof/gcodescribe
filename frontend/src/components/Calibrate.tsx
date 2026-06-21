@@ -6,6 +6,7 @@ import { useConfirm } from "./dialogs";
 const FIELDS: { key: keyof Calibration; labelKey: string; unit: string; groupKey: string }[] = [
   { key: "bed_width", labelKey: "calibrate.bedWidth", unit: "mm", groupKey: "calibrate.groupArea" },
   { key: "bed_height", labelKey: "calibrate.bedHeight", unit: "mm", groupKey: "calibrate.groupArea" },
+  { key: "z_max", labelKey: "calibrate.zMax", unit: "mm", groupKey: "calibrate.groupArea" },
   { key: "plot_width", labelKey: "calibrate.plotWidth", unit: "mm", groupKey: "calibrate.groupArea" },
   { key: "plot_height", labelKey: "calibrate.plotHeight", unit: "mm", groupKey: "calibrate.groupArea" },
   { key: "origin_x", labelKey: "calibrate.originX", unit: "mm", groupKey: "calibrate.groupArea" },
@@ -296,6 +297,15 @@ export default function Calibrate() {
                   onClick={() => set("flip_y", !cal.flip_y)}
                 >
                   <span>{t("calibrate.flipY")}</span>
+                  <i />
+                </button>
+                <button
+                  type="button"
+                  className={"toggle-pill" + (cal.trust_axis_home ? " on" : "")}
+                  aria-pressed={cal.trust_axis_home}
+                  onClick={() => set("trust_axis_home", !cal.trust_axis_home)}
+                >
+                  <span>{t("calibrate.trustAxisHome")}</span>
                   <i />
                 </button>
               </div>

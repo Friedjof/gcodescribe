@@ -150,8 +150,15 @@ def reorder_pages(req: ReorderRequest) -> dict:
     return store().reorder_pages(req.ids)
 
 
+class PageGcodeRequest(ExpectedProfileRequest):
+    # When set, only this subset of objects is plotted instead of the whole
+    # page. Lets the designer plot a selection on its own, so extra elements
+    # can be added to an already-plotted sheet and sent without redrawing it.
+    objects: list | None = None
+
+
 @router.post("/pages/{page_id}/gcode")
-def page_gcode(page_id: str, req: ExpectedProfileRequest | None = None) -> dict:
+def page_gcode(page_id: str, req: PageGcodeRequest | None = None) -> dict:
     page = store().get_page(page_id)
     if not page:
         raise HTTPException(404, "Seite nicht gefunden")
@@ -195,7 +202,13 @@ def page_gcode(page_id: str, req: ExpectedProfileRequest | None = None) -> dict:
             "geändert. Bitte die Seite prüfen und das Profil neu übernehmen.",
         )
     cal = Calibration().merged(profile["calibration"])
-    path = save_scene_job(page, cal, profile=active)
+    # A selection plot overrides the page's objects with just the chosen subset;
+    # the profile check above still runs against the full stored page.
+    to_plot = {**page, "objects": req.objects} if req and req.objects is not None else page
+    try:
+        path = save_scene_job(to_plot, cal, profile=active)
+    except PlotterError as exc:
+        raise HTTPException(400, str(exc)) from exc
     return _job_info(path, active_profile=active).model_dump()
 
 

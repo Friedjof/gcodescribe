@@ -26,6 +26,18 @@ import { MAZE_TYPES } from "../games/mazeTypes";
 import { buildMazeTemplate, mazeRequestArea } from "../games/maze";
 import { buildSudokuTemplate } from "../games/sudoku";
 
+const COLORING_PATTERN_OPTIONS: Array<{ value: ColoringPatternMode; icon: string; labelKey: string }> = [
+  { value: "scales", icon: "◠", labelKey: "games.option.coloring.scales" },
+  { value: "bubbles", icon: "○", labelKey: "games.option.coloring.bubbles" },
+  { value: "spiral", icon: "◎", labelKey: "games.option.coloring.spiral" },
+  { value: "stained_glass", icon: "◇", labelKey: "games.option.coloring.stainedGlass" },
+  { value: "hex_mosaic", icon: "⬡", labelKey: "games.option.coloring.hexMosaic" },
+  { value: "truchet", icon: "╱", labelKey: "games.option.coloring.truchet" },
+  { value: "voronoi", icon: "✦", labelKey: "games.option.coloring.voronoi" },
+  { value: "wave_field", icon: "≋", labelKey: "games.option.coloring.waveField" },
+  { value: "penrose", icon: "✶", labelKey: "games.option.coloring.penrose" },
+];
+
 export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
   const { t } = useI18n();
   const [selected, setSelected] = useState<GameId>(ALL_GAMES[0].id);
@@ -640,21 +652,25 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
                       <>
                         <div className="games-setting-row">
                           <span className="games-setting-label">{t("games.param.coloringMode")}</span>
-                          <Segmented<ColoringPatternMode>
-                            value={coloringPatternMode}
-                            onChange={updateColoringPatternMode}
-                            options={[
-                              { value: "scales", label: t("games.option.coloring.scales") },
-                              { value: "bubbles", label: t("games.option.coloring.bubbles") },
-                              { value: "spiral", label: t("games.option.coloring.spiral") },
-                              { value: "stained_glass", label: t("games.option.coloring.stainedGlass") },
-                              { value: "hex_mosaic", label: t("games.option.coloring.hexMosaic") },
-                              { value: "truchet", label: t("games.option.coloring.truchet") },
-                              { value: "voronoi", label: t("games.option.coloring.voronoi") },
-                              { value: "wave_field", label: t("games.option.coloring.waveField") },
-                              { value: "penrose", label: t("games.option.coloring.penrose") },
-                            ]}
-                          />
+                          <div className="coloring-pattern-selector" role="radiogroup" aria-label={t("games.param.coloringMode")}>
+                            {COLORING_PATTERN_OPTIONS.map((option) => {
+                              const label = t(option.labelKey);
+                              return (
+                                <button
+                                  key={option.value}
+                                  type="button"
+                                  className={coloringPatternMode === option.value ? "selected" : ""}
+                                  title={label}
+                                  aria-label={label}
+                                  aria-checked={coloringPatternMode === option.value}
+                                  role="radio"
+                                  onClick={() => updateColoringPatternMode(option.value)}
+                                >
+                                  <span aria-hidden="true">{option.icon}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
                         <ComplexityControl
                           value={coloringPatternComplexity}

@@ -1,6 +1,7 @@
 export interface Calibration {
   bed_width: number;
   bed_height: number;
+  z_max: number;
   plot_width: number;
   plot_height: number;
   origin_x: number;
@@ -13,6 +14,7 @@ export interface Calibration {
   z_feed: number;
   fit_to_area: boolean;
   flip_y: boolean;
+  trust_axis_home: boolean;
   paper_corners: Record<string, [number, number]>;
   paper_margin: number;
 }
@@ -92,6 +94,18 @@ export interface Position {
   z: number;
   homed: boolean;
   homed_axes: string[];
+}
+
+export interface SerialPortCandidate {
+  device: string;
+  byId?: string | null;
+  description?: string | null;
+  manufacturer?: string | null;
+  serialNumber?: string | null;
+  vid?: string | null;
+  pid?: string | null;
+  likelyPrinter: boolean;
+  score: number;
 }
 
 export interface PaperState {
@@ -197,6 +211,13 @@ export interface GalleryMetrics {
 
 export type GalleryUploader = "admin" | "public";
 
+export interface GalleryOriginal {
+  filename: string;
+  kind: string;
+  mime: string;
+  size: number;
+}
+
 export interface GalleryItem {
   id: string;
   title: string;
@@ -212,6 +233,7 @@ export interface GalleryItem {
   width: number;
   height: number;
   lines: number;
+  original?: GalleryOriginal | null;
   // Only single-page public submissions are scored on upload; admin assets
   // (documents, multi-page) carry neither until placement.
   metrics?: GalleryMetrics;
@@ -442,13 +464,15 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ids }),
     }),
-  pageGcode: (id: string, expected?: ProfileRef | null) =>
+  // Pass `objects` to plot only that subset (a selection); omit for the whole page.
+  pageGcode: (id: string, expected?: ProfileRef | null, objects?: SceneObject[]) =>
     req<Job>(`/api/pages/${id}/gcode`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         expected_profile_id: expected?.id,
         expected_profile_fingerprint: expected?.fingerprint,
+        objects,
       }),
     }),
   adoptPageProfile: (id: string, force = false, expected?: ProfileRef | null) =>
@@ -491,15 +515,35 @@ export const api = {
   testPattern: (name: string) =>
     req<Job>(`/api/testpattern/${name}`, { method: "POST" }),
 
-  octoStatus: () => req<any>("/api/octoprint/status"),
+  octoStatus: () => req<any>("/api/printer/status"),
+  listBackends: () =>
+    req<Array<{ id: string; configured: boolean; online: boolean; active: boolean }>>(
+      "/api/printer/backends"
+    ),
+  setBackend: (id: string) =>
+    req<{ ok: boolean; active: string }>("/api/printer/backend", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    }),
+  listSerialPorts: () => req<SerialPortCandidate[]>("/api/printer/serial/ports"),
+  probeSerialPort: (device: string) =>
+    req<{ device: string; marlin: boolean; firmware: string | null; error?: string }>(
+      "/api/printer/serial/probe",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ device }),
+      }
+    ),
   send: (filename: string, start: boolean) =>
-    req<any>("/api/octoprint/send", {
+    req<any>("/api/printer/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ filename, start }),
     }),
   jobCommand: (command: string) =>
-    req("/api/octoprint/job", {
+    req("/api/printer/job", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ command }),
@@ -510,19 +554,19 @@ export const api = {
     z: number,
     opts?: { speed?: number; limit?: "bed" | "plot" }
   ) =>
-    req("/api/octoprint/jog", {
+    req("/api/printer/jog", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ x, y, z, speed: opts?.speed, limit: opts?.limit ?? "bed" }),
     }),
   home: (axes?: string[]) =>
-    req("/api/octoprint/home", {
+    req("/api/printer/home", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ axes }),
     }),
   pen: (down: boolean) =>
-    req("/api/octoprint/pen", {
+    req("/api/printer/pen", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ down }),
@@ -537,14 +581,14 @@ export const api = {
 
   position: () => req<Position>("/api/position"),
   move: (x: number, y: number) =>
-    req<{ ok: boolean; position: Position }>("/api/octoprint/move", {
+    req<{ ok: boolean; position: Position }>("/api/printer/move", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ x, y }),
     }),
 
   moveToCorner: (corner: string, target: "paper" | "plot" = "paper") =>
-    req<{ ok: boolean; position: Position }>("/api/octoprint/move-to-corner", {
+    req<{ ok: boolean; position: Position }>("/api/printer/move-to-corner", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ corner, target }),
@@ -619,6 +663,7 @@ export const api = {
   gallerySvg: (id: string) => req<GallerySvg>(`/api/gallery/${id}/svg`),
   galleryPreview: (id: string, page: number) =>
     req<GalleryPreview>(`/api/gallery/${id}/preview/${page}`),
+  galleryOriginalUrl: (id: string) => `/api/gallery/${id}/original`,
   galleryGcode3D: (id: string) =>
     req<GcodePreview3D>(`/api/gallery/${id}/gcode/preview3d`),
   gallerySetTitle: (id: string, title: string) =>
@@ -626,6 +671,12 @@ export const api = {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title }),
+    }),
+  galleryRender: (id: string, mode: string, detail: number) =>
+    req<GalleryItem>(`/api/gallery/${id}/render`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode, detail }),
     }),
   galleryArchive: (id: string, archived: boolean) =>
     req<GalleryItem>(`/api/gallery/${id}/${archived ? "archive" : "unarchive"}`, {

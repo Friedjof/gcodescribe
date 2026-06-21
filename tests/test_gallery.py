@@ -169,7 +169,24 @@ class TestGalleryService:
     def test_create_png_submission(self, cal):
         meta = GalleryService().create("foto.png", _png_bytes(), title="")
         assert meta["kind"] == "png"
+        assert meta["original"]["filename"] == "foto.png"
+        assert meta["original"]["mime"] == "image/png"
+        assert meta["original"]["size"] > 0
         assert meta["metrics"]["draw_mm"] > 0
+
+    def test_original_route_returns_uploaded_file(self, cal, workspace):
+        from fastapi.testclient import TestClient
+
+        from plotter.web.app import create_app
+
+        data = _png_bytes()
+        meta = GalleryService().create("foto.png", data, title="")
+        client = TestClient(create_app())
+        response = client.get(f"/api/gallery/{meta['id']}/original")
+
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("image/png")
+        assert response.content == data
 
     def test_oversized_upload_rejected_without_residue(self, cal):
         svc = GalleryService()
@@ -207,6 +224,51 @@ class TestGalleryService:
         preview = svc.preview(meta["id"], 1)
         assert preview["polylines"]
         assert svc.thumbnail(meta["id"])["polylines"]
+
+    def test_admin_asset_has_transient_gcode_preview(self, cal, workspace):
+        from fastapi.testclient import TestClient
+
+        from plotter.web.app import create_app
+
+        meta = GalleryService().create("doc.svg", SVG, uploader="admin")
+        client = TestClient(create_app())
+        response = client.get(f"/api/gallery/{meta['id']}/gcode/preview3d")
+
+        assert response.status_code == 200
+        assert response.json()["draws"]
+        assert not (GalleryService().root / meta["id"] / "job.gcode").exists()
+
+    def test_rerender_admin_asset_updates_pages_without_job(self, cal):
+        svc = GalleryService()
+        meta = svc.create("doc.svg", SVG, uploader="admin")
+
+        updated = svc.rerender(meta["id"], mode="vector", detail=3)
+
+        assert updated["mode"] == "vector"
+        assert updated["detail"] == 3
+        assert updated["pages"][0]["lines"] >= 1
+        assert updated["original"]["filename"] == "doc.svg"
+        assert not (svc.root / meta["id"] / "job.gcode").exists()
+
+    def test_rerender_public_submission_updates_scored_derivatives(self, cal):
+        svc = GalleryService()
+        meta = svc.create("foto.png", _png_bytes(), title="")
+
+        updated = svc.rerender(meta["id"], mode="lines", detail=1)
+
+        assert updated["mode"] == "lines"
+        assert updated["detail"] == 1
+        assert updated["score"]["total"] >= 0
+        assert (svc.root / meta["id"] / "image.svg").exists()
+        assert (svc.root / meta["id"] / "job.gcode").exists()
+        assert updated["original"]["filename"] == "foto.png"
+
+    def test_rerender_rejects_unknown_mode(self, cal):
+        svc = GalleryService()
+        meta = svc.create("foto.png", _png_bytes(), title="")
+
+        with pytest.raises(Exception, match="Unbekannter Modus"):
+            svc.rerender(meta["id"], mode="bad", detail=2)
 
     def test_admin_rejects_document_only_for_public(self, cal):
         # PDFs/Office are admin-only; the public competition path refuses them.

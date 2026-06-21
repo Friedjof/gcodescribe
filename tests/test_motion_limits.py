@@ -36,6 +36,13 @@ class TestJogLimits:
         assert pos["x"] == cal.bed_width
         assert pos["y"] == 0.0
 
+    def test_z_limit_comes_from_calibration(self, controller, cal):
+        cal.z_max = 12.5
+        cal.save()
+        controller.home()
+        pos = controller.jog(0, 0, 100, limit="bed")
+        assert pos["z"] == 12.5
+
     def test_plot_limit_requires_homing(self, controller):
         with pytest.raises(NotHomedError):
             controller.jog(1, 0, 0, limit="plot")
@@ -66,11 +73,36 @@ class TestHomeSafety:
         assert commands == ["G91", f"G0 Z5 F{cal.z_feed:.0f}", "G90"]
         controller.client.home.assert_called_once()
 
+    def test_home_is_conservative_by_default(self, controller):
+        controller.home(["z"])
+        controller.client.home.assert_called_once_with(None)
+        assert controller.position()["homed"]
+
+    def test_home_can_trust_axis_arguments(self, controller, cal):
+        cal.trust_axis_home = True
+        cal.save()
+        controller.home(["z"])
+        controller.client.home.assert_called_once_with(["z"])
+        pos = controller.position()
+        assert pos["homed"] is False
+        assert pos["homed_axes"] == ["z"]
+
     def test_home_resets_position(self, controller):
         controller.home()
         pos = controller.position()
         assert (pos["x"], pos["y"], pos["z"]) == (0.0, 0.0, 0.0)
         assert pos["homed"]
+
+
+class TestCalibrationDefaults:
+    def test_new_machine_fields_have_backward_compatible_defaults(self, workspace):
+        from plotter.calibration import Calibration
+
+        (workspace / "calibration.json").write_text('{"bed_width": 220}')
+        cal = Calibration.load()
+        assert cal.bed_width == 220
+        assert cal.z_max == 205.0
+        assert cal.trust_axis_home is False
 
 
 class TestPenHeights:
@@ -145,7 +177,7 @@ class TestSendRevalidation:
             from plotter.web.app import app
 
             c = TestClient(app)
-            r = c.post("/api/octoprint/send", json={"filename": "safe.gcode", "start": True})
+            r = c.post("/api/printer/send", json={"filename": "safe.gcode", "start": True})
             assert r.status_code == 200
             assert events == ["lift", "home", "upload"]
             gcode.assert_called_once_with(["G91", f"G0 Z5 F{cal.z_feed:.0f}", "G90"])
@@ -176,7 +208,7 @@ class TestSendRevalidation:
             from plotter.web.app import app
 
             c = TestClient(app)
-            r = c.post("/api/octoprint/send", json={"filename": "upload-only.gcode"})
+            r = c.post("/api/printer/send", json={"filename": "upload-only.gcode"})
             assert r.status_code == 200
             gcode.assert_not_called()
             home.assert_not_called()
@@ -210,7 +242,7 @@ class TestSendRevalidation:
             from plotter.web.app import app
 
             c = TestClient(app)
-            r = c.post("/api/octoprint/job", json={"command": "start"})
+            r = c.post("/api/printer/job", json={"command": "start"})
             assert r.status_code == 200
             assert events == ["lift", "home", "start"]
             gcode.assert_called_once_with(["G91", f"G0 Z5 F{cal.z_feed:.0f}", "G90"])
@@ -239,8 +271,8 @@ class TestSendRevalidation:
             from plotter.web.app import app
 
             c = TestClient(app)
-            c.post("/api/octoprint/home", json={})
-            r = c.post("/api/octoprint/send", json={"filename": "old.gcode", "start": True})
+            c.post("/api/printer/home", json={})
+            r = c.post("/api/printer/send", json={"filename": "old.gcode", "start": True})
             assert r.status_code == 422
             assert "Homing im Job" in r.json()["detail"]
 
@@ -264,7 +296,7 @@ class TestSendRevalidation:
             from plotter.web.app import app
 
             c = TestClient(app)
-            r = c.post("/api/octoprint/send", json={"filename": "stale.gcode", "start": False})
+            r = c.post("/api/printer/send", json={"filename": "stale.gcode", "start": False})
             assert r.status_code == 422
             assert "keine kalibrierte Stift-Höhe" in r.json()["detail"]
 

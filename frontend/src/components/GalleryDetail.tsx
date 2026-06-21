@@ -11,7 +11,8 @@ import ScoreBadge from "./ScoreBadge";
 import Segmented from "./Segmented";
 import { useConfirm, usePrompt } from "./dialogs";
 
-type View = "2d" | "3d";
+type View = "2d" | "3d" | "original";
+type RenderMode = "auto" | "vector" | "trace" | "edges" | "hatch" | "lines" | "dots" | "handwriting";
 
 /** Popup inspection of one submission: 2D artwork by default, switchable to
  * the generated G-code in 3D (with fullscreen), plus admin actions. */
@@ -33,6 +34,8 @@ export default function GalleryDetail({
   const [fullscreen, setFullscreen] = useState(false);
   const [showTravels, setShowTravels] = useState(true);
   const [resetToken, setResetToken] = useState(0);
+  const [renderMode, setRenderMode] = useState<RenderMode>((item.mode || "auto") as RenderMode);
+  const [renderDetail, setRenderDetail] = useState(item.detail || 2);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const { confirm, ConfirmNode } = useConfirm();
@@ -41,10 +44,14 @@ export default function GalleryDetail({
   const fail = (e: any) => setErr(String(e.message ?? e));
 
   useEffect(() => {
+    setSvg(null);
+    setGcode(null);
+    setRenderMode((item.mode || "auto") as RenderMode);
+    setRenderDetail(item.detail || 2);
     // Page-1 preview works for every kind (single-image submissions and
     // multi-page admin assets alike); `/svg` only exists for image.svg items.
     api.galleryPreview(item.id, 1).then(setSvg).catch(fail);
-  }, [item.id]);
+  }, [item.id, item.mode, item.detail, item.lines]);
 
   useEffect(() => {
     if (view === "3d" && !gcode) api.galleryGcode3D(item.id).then(setGcode).catch(fail);
@@ -94,10 +101,28 @@ export default function GalleryDetail({
       .finally(() => setBusy(false));
   };
 
+  const rerender = () => {
+    if (busy) return;
+    setBusy(true);
+    setErr(null);
+    api
+      .galleryRender(item.id, renderMode, renderDetail)
+      .then(() => {
+        setSvg(null);
+        setGcode(null);
+        return api.galleryPreview(item.id, 1).then(setSvg);
+      })
+      .then(onChanged)
+      .catch(fail)
+      .finally(() => setBusy(false));
+  };
+
   const m = item.metrics;
-  // Multi-page admin assets carry no generated G-code until placement, so the
-  // 3D view (and its /gcode/preview3d fetch) only makes sense once metrics exist.
-  const hasGcode = !!m;
+  const hasGcode = item.pages.length > 0;
+  const originalUrl = item.original ? api.galleryOriginalUrl(item.id) : null;
+  const originalPreviewable = !!item.original && (
+    item.original.mime.startsWith("image/") || item.original.kind === "svg"
+  );
 
   return (
     <>
@@ -113,13 +138,14 @@ export default function GalleryDetail({
           </>
         }
         headerActions={
-          hasGcode && (
+          (hasGcode || item.original) && (
           <Segmented<View>
             value={view}
             onChange={setView}
             options={[
               { value: "2d", label: "SVG" },
-              { value: "3d", label: "G-code" },
+              ...(hasGcode ? [{ value: "3d" as View, label: "G-code" }] : []),
+              ...(item.original ? [{ value: "original" as View, label: t("gallery.original") }] : []),
             ]}
           />
           )
@@ -149,6 +175,11 @@ export default function GalleryDetail({
                 <button onClick={() => setFullscreen(true)}>{t("convert.fullscreen")}</button>
               </>
             )}
+            {originalUrl && (
+              <a className="button ghost" href={originalUrl} download={item.original?.filename}>
+                {t("gallery.downloadOriginal")}
+              </a>
+            )}
             <button className="primary" disabled={busy || !svg} onClick={toPaint}>
               {t("gallery.toPaint")}
             </button>
@@ -157,7 +188,25 @@ export default function GalleryDetail({
       >
         <div className="gallery-detail">
           <div className="gallery-stage">
-            {view === "2d" ? (
+            {view === "original" ? (
+              originalUrl && item.original ? (
+                <div className="gallery-original">
+                  {originalPreviewable ? (
+                    <img src={originalUrl} alt={item.original.filename} />
+                  ) : (
+                    <div className="gallery-original-file">
+                      <strong>{item.original.filename}</strong>
+                      <span className="muted">{item.original.mime}</span>
+                    </div>
+                  )}
+                  <p className="muted">
+                    {item.original.filename} · {fmtBytes(item.original.size)}
+                  </p>
+                </div>
+              ) : (
+                <p className="muted">{t("gallery.noOriginal")}</p>
+              )
+            ) : view === "2d" ? (
               svg ? (
                 <PolylinePreview data={svg} className="gallery-stage-svg" />
               ) : (
@@ -168,6 +217,37 @@ export default function GalleryDetail({
             ) : (
               <p className="muted">{t("common.loading")}</p>
             )}
+          </div>
+          <div className="gallery-render-controls">
+            <span className="muted">{t("gallery.renderMode")}</span>
+            <Segmented<RenderMode>
+              value={renderMode}
+              onChange={setRenderMode}
+              options={[
+                { value: "auto", label: t("gallery.modeAuto") },
+                { value: "vector", label: t("gallery.modeVector") },
+                { value: "trace", label: t("gallery.modeTrace") },
+                { value: "edges", label: t("paint.image.edges") },
+                { value: "hatch", label: t("paint.image.hatch") },
+                { value: "lines", label: t("paint.image.lines") },
+                { value: "dots", label: t("paint.image.dots") },
+                { value: "handwriting", label: t("gallery.modeHandwriting") },
+              ]}
+            />
+            {renderMode !== "vector" && (
+              <Segmented
+                value={renderDetail}
+                onChange={setRenderDetail}
+                options={[
+                  { value: 1, label: t("paint.image.low") },
+                  { value: 2, label: t("paint.image.medium") },
+                  { value: 3, label: t("paint.image.high") },
+                ]}
+              />
+            )}
+            <button className="primary" disabled={busy || !item.original} onClick={rerender}>
+              {busy ? t("common.loading") : t("gallery.rerender")}
+            </button>
           </div>
           {m && item.score && (
             <dl className="gallery-metrics">

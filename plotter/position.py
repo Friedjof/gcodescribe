@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import threading
 
+from .calibration import Calibration
 from .state import StateStore, create_store
 
 
@@ -12,15 +13,15 @@ class PositionTracker:
     reconstructed from the home / jog / move commands issued through this app.
     Every change is persisted to the state store (Redis or file), so the
     position survives application restarts. Right after a home the position
-    is exact: the Anycubic i3 Mega S homes to (0, 0, 0).
+    is exact for Cartesian/CoreXY Marlin machines that home to (0, 0, 0).
     """
 
     KEY = "position"
-    Z_MAX = 205.0  # Anycubic i3 Mega S travel; only used to clamp the estimate.
 
-    def __init__(self, store: StateStore):
+    def __init__(self, store: StateStore, z_max: float | None = None):
         self._store = store
         self._lock = threading.Lock()
+        self.z_max = float(z_max if z_max is not None else Calibration.load().z_max)
         saved = store.get(self.KEY) or {}
         self._x = float(saved.get("x", 0.0))
         self._y = float(saved.get("y", 0.0))
@@ -81,7 +82,7 @@ class PositionTracker:
         with self._lock:
             self._x = min(max(self._x + dx, 0.0), bed_w)
             self._y = min(max(self._y + dy, 0.0), bed_h)
-            self._z = min(max(self._z + dz, 0.0), self.Z_MAX)
+            self._z = min(max(self._z + dz, 0.0), self.z_max)
             self._persist_locked()
 
     def set_axes(
@@ -114,5 +115,5 @@ def get_tracker() -> PositionTracker:
     global _tracker
     with _tracker_lock:
         if _tracker is None:
-            _tracker = PositionTracker(create_store())
+            _tracker = PositionTracker(create_store(), Calibration.load().z_max)
         return _tracker
