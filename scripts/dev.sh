@@ -100,6 +100,7 @@ if [ "${#LEFTOVERS[@]}" -gt 0 ]; then
 fi
 
 # --- start services ---------------------------------------------------------
+export PLOTTER_AUTH_DEV_BYPASS=1
 say "${cyan}▶ Backend  → http://localhost:${BACKEND_PORT}${reset}"
 say "${cyan}▶ Frontend → http://localhost:${FRONTEND_PORT}  (proxy /api → :${BACKEND_PORT})${reset}"
 

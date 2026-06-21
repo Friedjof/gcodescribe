@@ -53,6 +53,18 @@ class TestAuthSetup:
 
 
 class TestAuthLogin:
+    def test_dev_bypass_reports_authenticated_session(self, workspace, monkeypatch):
+        monkeypatch.delenv("PLOTTER_AUTH_TEST_BYPASS", raising=False)
+        monkeypatch.setenv("PLOTTER_AUTH_DEV_BYPASS", "1")
+        c = TestClient(create_app())
+
+        assert c.get("/api/auth/session").json() == {
+            "configured": True,
+            "authenticated": True,
+            "username": "dev",
+        }
+        assert c.get("/api/jobs").status_code == 200
+
     def test_protected_route_requires_login(self, workspace, monkeypatch):
         c = client(workspace, monkeypatch)
         assert c.get("/api/jobs").status_code == 401

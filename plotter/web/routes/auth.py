@@ -4,7 +4,7 @@ from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel
 
 from ...services.auth import AuthService
-from ..auth import clear_session_cookie, session_token, set_session_cookie
+from ..auth import auth_bypass_enabled, clear_session_cookie, session_token, set_session_cookie
 
 router = APIRouter(tags=["auth"])
 
@@ -28,6 +28,8 @@ class LoginRequest(BaseModel):
 
 @router.get("/auth/session")
 def auth_session(request: Request) -> dict:
+    if auth_bypass_enabled():
+        return {"configured": True, "authenticated": True, "username": "dev"}
     return AuthService().status(session_token(request))
 
 

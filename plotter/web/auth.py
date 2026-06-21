@@ -9,6 +9,17 @@ from ..services.auth import AuthService, session_ttl_seconds
 SESSION_COOKIE = "gcodescribe_session"
 
 
+def auth_bypass_enabled() -> bool:
+    for name in ("PLOTTER_AUTH_DEV_BYPASS", "PLOTTER_AUTH_TEST_BYPASS"):
+        if os.environ.get(name, "").lower() in ("1", "true", "yes"):
+            return True
+    return False
+
+
+def bypass_session() -> dict:
+    return {"username": "dev", "expires": 0}
+
+
 def cookie_secure() -> bool:
     value = os.environ.get("PLOTTER_AUTH_COOKIE_SECURE", "false").lower()
     return value in ("1", "true", "yes", "on")
@@ -35,8 +46,8 @@ def session_token(request: Request) -> str | None:
 
 
 def require_admin(request: Request) -> dict:
-    if os.environ.get("PLOTTER_AUTH_TEST_BYPASS", "").lower() in ("1", "true", "yes"):
-        return {"username": "test", "expires": 0}
+    if auth_bypass_enabled():
+        return bypass_session()
     session = AuthService().validate_session(session_token(request))
     if session is None:
         raise HTTPException(status_code=401, detail="Login erforderlich.")
@@ -47,6 +58,6 @@ def optional_admin(request: Request) -> dict | None:
     """Like ``require_admin`` but returns ``None`` instead of raising when there
     is no valid admin session. For endpoints that stay public yet behave
     differently for a logged-in admin (e.g. tagging gallery uploads)."""
-    if os.environ.get("PLOTTER_AUTH_TEST_BYPASS", "").lower() in ("1", "true", "yes"):
-        return {"username": "test", "expires": 0}
+    if auth_bypass_enabled():
+        return bypass_session()
     return AuthService().validate_session(session_token(request))
