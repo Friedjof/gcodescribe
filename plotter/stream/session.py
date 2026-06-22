@@ -90,7 +90,9 @@ class StreamSessionManager:
         if publisher is None:
             return
         try:
-            await publisher.send_json({"v": 1, "t": "presence", "ts": time.time(), "viewers": len(session.viewers)})
+            await publisher.send_json(
+                {"v": 1, "t": "presence", "ts": time.time(), "viewers": len(session.viewers)}
+            )
         except Exception:
             pass
 

@@ -6,9 +6,9 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
+from ...services.auth import AuthService
 from ...stream import manager
 from ..auth import SESSION_COOKIE, auth_bypass_enabled, bypass_session, require_admin
-from ...services.auth import AuthService
 
 router = APIRouter(tags=["stream"])
 
@@ -29,7 +29,9 @@ def _auth_bypass_enabled() -> bool:
 
 
 @router.post("/stream/sessions")
-async def create_stream_session(req: CreateStreamRequest, request: Request, admin: dict = Depends(require_admin)) -> dict:
+async def create_stream_session(
+    req: CreateStreamRequest, request: Request, admin: dict = Depends(require_admin)
+) -> dict:
     source_id = req.sourceId.strip()
     if not source_id:
         raise HTTPException(422, "sourceId fehlt")
@@ -43,7 +45,11 @@ async def publish_stream(websocket: WebSocket, session_id: str) -> None:
     await websocket.accept()
     admin = _admin_from_ws(websocket)
     session = await manager.get(session_id)
-    if admin is None or session is None or (not _auth_bypass_enabled() and session.owner != str(admin.get("username") or "admin")):
+    if (
+        admin is None
+        or session is None
+        or (not _auth_bypass_enabled() and session.owner != str(admin.get("username") or "admin"))
+    ):
         await websocket.close(code=1008)
         return
     await manager.attach_publisher(session, websocket)
@@ -81,11 +87,23 @@ async def view_stream(websocket: WebSocket, session_id: str) -> None:
     except Exception:
         await websocket.close(code=1008)
         return
-    if not isinstance(first, dict) or first.get("t") != "join" or first.get("token") != session.viewer_token:
+    if (
+        not isinstance(first, dict)
+        or first.get("t") != "join"
+        or first.get("token") != session.viewer_token
+    ):
         await websocket.close(code=1008)
         return
     await manager.attach_viewer(session, websocket)
-    await websocket.send_json({"v": 1, "t": "ready", "ts": time.time(), "sourceId": session.source_id, "meta": session.last_meta})
+    await websocket.send_json(
+        {
+            "v": 1,
+            "t": "ready",
+            "ts": time.time(),
+            "sourceId": session.source_id,
+            "meta": session.last_meta,
+        }
+    )
     if session.last_snapshot is not None:
         await websocket.send_json(session.last_snapshot)
     await manager.send_presence(session)
