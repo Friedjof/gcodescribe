@@ -1,3 +1,14 @@
-from . import auth, calibration, jobs, pages, paper, printer, sources, stream, sudoku
+from . import auth, calibration, jobs, osm_map, pages, paper, printer, sources, stream, sudoku
 
-__all__ = ["auth", "calibration", "jobs", "pages", "paper", "printer", "sources", "stream", "sudoku"]
+__all__ = [
+    "auth",
+    "calibration",
+    "jobs",
+    "osm_map",
+    "pages",
+    "paper",
+    "printer",
+    "sources",
+    "stream",
+    "sudoku",
+]
