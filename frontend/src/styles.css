@@ -36,7 +36,8 @@ body {
   min-height: 100vh;
   padding: 12px 16px 24px;
 }
-.app.tab-paint {
+.app.tab-paint,
+.app.tab-ai {
   height: 100dvh;
   overflow: hidden;
   padding-bottom: 10px;
@@ -2126,7 +2127,7 @@ kbd {
 }
 @media (max-width: 820px) {
   .paint { grid-template-columns: 1fr; height: auto; min-height: 0; }
-  .app.tab-paint { height: auto; overflow: visible; }
+  .app.tab-paint, .app.tab-ai { height: auto; overflow: visible; }
 }
 
 .paint-pages {
@@ -3304,18 +3305,29 @@ input[type="checkbox"]:disabled {
 .serial-port-list { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-direction: column; gap: 6px; }
 .serial-port-list li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 0.85em; }
 
-/* ── AI Image Designer ───────────────────────────────────────────────── */
-.ai-designer { display: block; }
-.ai-designer.hidden { display: none; }
-.ai-grid {
+/* ── AI Image Designer ─── laid out like the normal designer (Paint) ──── */
+.ai-designer {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  grid-template-columns: 360px 1fr;
   gap: 16px;
   align-items: start;
+  height: calc(100dvh - 122px);
+  min-height: 520px;
 }
-.ai-input, .ai-result { display: flex; flex-direction: column; gap: 12px; }
-.ai-result { position: relative; }
+.ai-designer.hidden { display: none; }
 .ai-designer .small { font-size: 0.82em; }
+
+/* Left: controls column (scrolls internally like the page list). */
+.ai-controls {
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ai-controls h2 { margin: 0; }
+.ai-controls > .muted { margin: 0; }
 .ai-designer .link-btn {
   align-self: flex-start;
   background: none;
@@ -3330,7 +3342,7 @@ input[type="checkbox"]:disabled {
 .ai-dropzone {
   border: 1.5px dashed var(--border);
   border-radius: 12px;
-  min-height: 200px;
+  min-height: 180px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3340,7 +3352,7 @@ input[type="checkbox"]:disabled {
 }
 .ai-dropzone:hover, .ai-dropzone.drag { border-color: var(--accent); background: rgba(10, 132, 255, 0.06); }
 .ai-dropzone.has-image { border-style: solid; }
-.ai-dropzone img { width: 100%; max-height: 320px; object-fit: contain; display: block; }
+.ai-dropzone img { width: 100%; max-height: 260px; object-fit: contain; display: block; }
 .ai-dropzone-empty {
   display: flex;
   flex-direction: column;
@@ -3352,10 +3364,7 @@ input[type="checkbox"]:disabled {
 }
 .ai-dropzone-icon { font-size: 1.8em; }
 
-.ai-style {
-  border-left: 3px solid var(--accent);
-  padding: 4px 0 4px 10px;
-}
+.ai-style { border-left: 3px solid var(--accent); padding: 4px 0 4px 10px; }
 .ai-style strong { font-size: 0.9em; }
 .ai-style p { margin: 4px 0 0; }
 
@@ -3372,26 +3381,61 @@ input[type="checkbox"]:disabled {
 }
 .ai-cost { margin: 0; }
 
-.ai-empty {
+/* Right: editor card — toolbar header, stage, side panel (mirrors Paint). */
+.ai-editor {
+  height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+}
+.ai-editor-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.ai-editor-toolbar h2 { margin: 0; }
+.ai-editor-actions { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.ai-editor-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 12px;
+}
+.ai-editor-body.no-side { grid-template-columns: 1fr; }
+
+.ai-stage {
+  position: relative;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.ai-stage-main {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
   align-items: center;
   justify-content: center;
-  text-align: center;
-  min-height: 320px;
-  gap: 8px;
-  color: var(--muted);
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px;
 }
-.ai-empty-icon { font-size: 2.4em; opacity: 0.5; }
-.ai-empty h3 { margin: 0; color: var(--text); }
-
-.ai-images {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-.ai-images figure { margin: 0; display: flex; flex-direction: column; gap: 6px; }
-.ai-images img, .ai-images .ai-poly, .ai-images .ai-ph {
+.ai-stage-main .poly-preview { width: 100%; height: 100%; }
+.ai-stage-thumbs { display: flex; gap: 10px; flex: 0 0 auto; }
+.ai-stage-thumbs figure { margin: 0; flex: 1 1 0; max-width: 180px; display: flex; flex-direction: column; gap: 6px; }
+.ai-stage-thumbs img, .ai-stage-thumbs .ai-ph {
   width: 100%;
   aspect-ratio: 1 / 1;
   object-fit: contain;
@@ -3399,9 +3443,22 @@ input[type="checkbox"]:disabled {
   border: 1px solid var(--border);
   border-radius: 8px;
 }
-.ai-images .ai-poly { padding: 4px; }
 
-.ai-quality { display: flex; align-items: center; gap: 10px; }
+.ai-side {
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  background: var(--panel-2, rgba(255,255,255,0.03));
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.ai-empty-icon { font-size: 2.4em; opacity: 0.5; }
+
+.ai-quality { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .ai-badge {
   font-size: 0.8em;
   font-weight: 600;
@@ -3413,17 +3470,10 @@ input[type="checkbox"]:disabled {
 .ai-quality.medium .ai-badge { color: var(--warn); border-color: rgba(255, 214, 10, 0.4); }
 .ai-quality.bad .ai-badge { color: var(--err); border-color: rgba(255, 69, 58, 0.4); }
 
-.ai-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
-
-@media (max-width: 860px) {
-  .ai-grid { grid-template-columns: 1fr; }
-  .ai-images { grid-template-columns: 1fr 1fr; }
-}
-
-/* AI Designer: variant strip + feedback */
-.ai-variant-strip { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* Variant chips live in the editor toolbar. */
+.ai-variant-strip { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .ai-variant-chip {
-  min-width: 38px;
+  min-width: 36px;
   padding: 4px 10px;
   border-radius: 999px;
   border: 1px solid var(--border);
@@ -3433,6 +3483,10 @@ input[type="checkbox"]:disabled {
   font-size: 0.85em;
 }
 .ai-variant-chip.active { color: var(--text); border-color: var(--accent); background: rgba(10, 132, 255, 0.12); }
+
+.ai-recompute { border-top: 1px solid var(--border); padding-top: 12px; }
+.ai-recompute > span { color: var(--muted); font-size: 0.9em; }
+
 .ai-feedback {
   border-top: 1px solid var(--border);
   padding-top: 12px;
@@ -3449,17 +3503,11 @@ input[type="checkbox"]:disabled {
   color: var(--muted);
   cursor: pointer;
   font-size: 0.8em;
+  text-align: left;
 }
 .ai-chip:hover { color: var(--text); border-color: var(--accent); }
 
-/* AI Designer: recompute (re-trace) control on a result */
-.ai-recompute {
-  border-top: 1px solid var(--border);
-  padding-top: 12px;
-}
-.ai-recompute > span { color: var(--muted); font-size: 0.9em; }
-
-/* AI Designer: generation loading overlay + reusable spinner */
+/* Generation loading overlay (covers the stage) + reusable spinner. */
 .ai-result-busy {
   position: absolute;
   inset: 0;
@@ -3485,8 +3533,8 @@ input[type="checkbox"]:disabled {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* AI Designer: collapsible prompt view */
-.ai-prompt-view { margin-top: 6px; }
+/* Collapsible prompt view. */
+.ai-prompt-view { margin: 0; }
 .ai-prompt-view > summary {
   cursor: pointer;
   color: var(--accent);
@@ -3507,4 +3555,11 @@ input[type="checkbox"]:disabled {
   background: var(--panel-2, rgba(255,255,255,0.04));
   border: 1px solid var(--border);
   border-radius: 8px;
+}
+
+@media (max-width: 860px) {
+  .ai-designer { grid-template-columns: 1fr; height: auto; min-height: 0; }
+  .ai-editor-body { grid-template-columns: 1fr; }
+  .ai-stage { min-height: 360px; }
+  .ai-controls, .ai-side { overflow: visible; }
 }

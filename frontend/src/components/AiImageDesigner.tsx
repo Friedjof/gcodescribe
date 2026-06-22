@@ -133,244 +133,250 @@ export default function AiImageDesigner({
 
   return (
     <section className={`ai-designer ${visible ? "" : "hidden"}`.trim()}>
-      <div className="ai-grid">
-        {/* Input column */}
-        <div className="card ai-input">
-          <h2>{t("ai.title")}</h2>
-          <p className="muted">{t("ai.subtitle")}</p>
+      {/* Left: controls column, mirroring the designer's tools card. */}
+      <aside className="card ai-controls">
+        <h2>{t("ai.title")}</h2>
+        <p className="muted small">{t("ai.subtitle")}</p>
 
-          <div
-            className={`ai-dropzone ${dragging ? "drag" : ""} ${previewUrl ? "has-image" : ""}`.trim()}
-            onClick={() => inputRef.current?.click()}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragging(true);
-            }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setDragging(false);
-              pick(e.dataTransfer.files?.[0]);
-            }}
-          >
-            {previewUrl ? (
-              <img src={previewUrl} alt={file?.name ?? ""} />
-            ) : (
-              <div className="ai-dropzone-empty">
-                <span className="ai-dropzone-icon">⬆</span>
-                <span>{t("ai.uploadHint")}</span>
-                <span className="muted small">{t("ai.uploadTypes", { mb: maxMb })}</span>
+        <div
+          className={`ai-dropzone ${dragging ? "drag" : ""} ${previewUrl ? "has-image" : ""}`.trim()}
+          onClick={() => inputRef.current?.click()}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragging(false);
+            pick(e.dataTransfer.files?.[0]);
+          }}
+        >
+          {previewUrl ? (
+            <img src={previewUrl} alt={file?.name ?? ""} />
+          ) : (
+            <div className="ai-dropzone-empty">
+              <span className="ai-dropzone-icon">⬆</span>
+              <span>{t("ai.uploadHint")}</span>
+              <span className="muted small">{t("ai.uploadTypes", { mb: maxMb })}</span>
+            </div>
+          )}
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/png,image/jpeg"
+            hidden
+            onChange={(e) => pick(e.target.files?.[0])}
+          />
+        </div>
+        {file && (
+          <button className="link-btn" onClick={() => setFile(null)}>
+            {t("ai.changeImage")}
+          </button>
+        )}
+
+        <div className="ai-style">
+          <strong>{t("ai.styleTitle")}</strong>
+          <p className="muted small">{t("ai.styleHint")}</p>
+          {status?.stylePrompt && (
+            <details className="ai-prompt-view">
+              <summary>{t("ai.showStylePrompt")}</summary>
+              <pre>{status.stylePrompt}</pre>
+            </details>
+          )}
+        </div>
+
+        <label className="ai-field">
+          {t("ai.instructionsLabel")}
+          <textarea
+            rows={3}
+            value={instructions}
+            maxLength={2000}
+            placeholder={t("ai.instructionsPlaceholder")}
+            onChange={(e) => setInstructions(e.target.value)}
+          />
+        </label>
+
+        <label className="ai-field">
+          {t("ai.renderMode")}
+          <Segmented<RenderMode>
+            className="nav"
+            value={renderMode}
+            onChange={setRenderMode}
+            options={[
+              { value: "edges", label: t("ai.mode.edges") },
+              { value: "handwriting", label: t("ai.mode.handwriting") },
+              { value: "trace", label: t("ai.mode.trace") },
+            ]}
+          />
+        </label>
+
+        <label className="ai-field">
+          {t("ai.detail")}
+          <Segmented<number>
+            className="nav"
+            value={detail}
+            onChange={setDetail}
+            options={[
+              { value: 1, label: "1" },
+              { value: 2, label: "2" },
+              { value: 3, label: "3" },
+            ]}
+          />
+        </label>
+
+        <button className="primary" disabled={!file || busy} onClick={() => generate()}>
+          {busy && !selected ? t("ai.generating") : t("ai.generate")}
+        </button>
+        <p className="muted small ai-cost">{t("ai.costHint")}</p>
+        {err && <div className="banner err">{err}</div>}
+      </aside>
+
+      {/* Right: editor card — toolbar header, stage, and a tools side panel. */}
+      <section className="card ai-editor">
+        <div className="ai-editor-toolbar">
+          <h2>{t("ai.resultTitle")}</h2>
+          <div className="ai-editor-actions">
+            {variants.length > 1 && (
+              <div className="ai-variant-strip">
+                {variants.map((v, i) => (
+                  <button
+                    key={v.variantId}
+                    className={`ai-variant-chip ${v.variantId === selectedId ? "active" : ""}`.trim()}
+                    onClick={() => setSelectedId(v.variantId)}
+                  >
+                    {`V${i + 1}`}
+                  </button>
+                ))}
               </div>
             )}
-            <input
-              ref={inputRef}
-              type="file"
-              accept="image/png,image/jpeg"
-              hidden
-              onChange={(e) => pick(e.target.files?.[0])}
-            />
-          </div>
-          {file && (
-            <button className="link-btn" onClick={() => setFile(null)}>
-              {t("ai.changeImage")}
-            </button>
-          )}
-
-          <div className="ai-style">
-            <strong>{t("ai.styleTitle")}</strong>
-            <p className="muted small">{t("ai.styleHint")}</p>
-            {status?.stylePrompt && (
-              <details className="ai-prompt-view">
-                <summary>{t("ai.showStylePrompt")}</summary>
-                <pre>{status.stylePrompt}</pre>
-              </details>
+            {selected && (
+              <button className="primary" disabled={importing} onClick={toDesigner}>
+                {importing ? t("common.loading") : t("ai.openDesigner")}
+              </button>
             )}
           </div>
-
-          <label className="ai-field">
-            {t("ai.instructionsLabel")}
-            <textarea
-              rows={3}
-              value={instructions}
-              maxLength={2000}
-              placeholder={t("ai.instructionsPlaceholder")}
-              onChange={(e) => setInstructions(e.target.value)}
-            />
-          </label>
-
-          <label className="ai-field">
-            {t("ai.renderMode")}
-            <Segmented<RenderMode>
-              className="nav"
-              value={renderMode}
-              onChange={setRenderMode}
-              options={[
-                { value: "edges", label: t("ai.mode.edges") },
-                { value: "handwriting", label: t("ai.mode.handwriting") },
-                { value: "trace", label: t("ai.mode.trace") },
-              ]}
-            />
-          </label>
-
-          <label className="ai-field">
-            {t("ai.detail")}
-            <Segmented<number>
-              className="nav"
-              value={detail}
-              onChange={setDetail}
-              options={[
-                { value: 1, label: "1" },
-                { value: 2, label: "2" },
-                { value: 3, label: "3" },
-              ]}
-            />
-          </label>
-
-          <button className="primary" disabled={!file || busy} onClick={() => generate()}>
-            {busy && !selected ? t("ai.generating") : t("ai.generate")}
-          </button>
-          <p className="muted small ai-cost">{t("ai.costHint")}</p>
-          {err && <div className="banner err">{err}</div>}
         </div>
 
-        {/* Result column */}
-        <div className="card ai-result">
-          {busy && (
-            <div className="ai-result-busy">
-              <span className="spinner" />
-              <h3>{t("ai.generatingTitle")}</h3>
-              <p className="muted small">{t("ai.generatingHint")}</p>
-            </div>
-          )}
-          {variants.length === 0 ? (
-            <div className="ai-empty">
-              <span className="ai-empty-icon">✎</span>
-              <h3>{t("ai.emptyTitle")}</h3>
-              <p className="muted">{t("ai.emptyHint")}</p>
-            </div>
-          ) : (
-            <>
-              {variants.length > 1 && (
-                <div className="ai-variant-strip">
-                  <span className="muted small">{t("ai.variants")}</span>
-                  {variants.map((v, i) => (
-                    <button
-                      key={v.variantId}
-                      className={`ai-variant-chip ${v.variantId === selectedId ? "active" : ""}`.trim()}
-                      onClick={() => setSelectedId(v.variantId)}
-                    >
-                      {`V${i + 1}`}
-                    </button>
-                  ))}
+        <div className={`ai-editor-body ${selected ? "" : "no-side"}`.trim()}>
+          {/* Stage: the plotter line preview is the hero, with reference thumbs. */}
+          <div className="ai-stage">
+            {busy && (
+              <div className="ai-result-busy">
+                <span className="spinner" />
+                <h3>{t("ai.generatingTitle")}</h3>
+                <p className="muted small">{t("ai.generatingHint")}</p>
+              </div>
+            )}
+            {variants.length === 0 ? (
+              <div className="paint-empty-hint">
+                <span className="ai-empty-icon">✎</span>
+                <h3>{t("ai.emptyTitle")}</h3>
+                <p className="muted">{t("ai.emptyHint")}</p>
+              </div>
+            ) : selected ? (
+              <>
+                <div className="ai-stage-main">
+                  <PolylinePreview data={selected.preview} className="ai-poly" />
                 </div>
-              )}
+                <div className="ai-stage-thumbs">
+                  <figure>
+                    <figcaption className="muted small">{t("ai.resultSource")}</figcaption>
+                    {previewUrl ? <img src={previewUrl} alt="" /> : <div className="ai-ph" />}
+                  </figure>
+                  <figure>
+                    <figcaption className="muted small">{t("ai.resultOutput")}</figcaption>
+                    <img src={selected.imageUrl} alt="" />
+                  </figure>
+                </div>
+              </>
+            ) : null}
+          </div>
 
-              {selected && (
-                <>
-                  <div className="ai-images">
-                    <figure>
-                      <figcaption className="muted small">{t("ai.resultSource")}</figcaption>
-                      {previewUrl ? <img src={previewUrl} alt="" /> : <div className="ai-ph" />}
-                    </figure>
-                    <figure>
-                      <figcaption className="muted small">{t("ai.resultOutput")}</figcaption>
-                      <img src={selected.imageUrl} alt="" />
-                    </figure>
-                    <figure>
-                      <figcaption className="muted small">{t("ai.resultLines")}</figcaption>
-                      <PolylinePreview data={selected.preview} className="ai-poly" />
-                    </figure>
+          {/* Side panel: quality, re-trace, feedback and prompt. */}
+          {selected && (
+            <aside className="ai-side">
+              <div className={`ai-quality ${quality?.complexity}`}>
+                <span className="ai-badge">{t(`ai.quality.${quality?.complexity}`)}</span>
+                <span className="muted small">
+                  {t("ai.qualityStats", {
+                    lines: quality?.lineCount ?? 0,
+                    points: quality?.pointCount ?? 0,
+                    short: quality?.shortLineCount ?? 0,
+                  })}
+                </span>
+              </div>
+              {quality?.warnings.map((w) => (
+                <div key={w} className="banner warn">
+                  {w}
+                </div>
+              ))}
+
+              <div className="ai-field ai-recompute">
+                <span>
+                  {t("ai.recompute")}
+                  {rerendering && <span className="muted small"> · {t("ai.generating")}</span>}
+                </span>
+                <Segmented<RenderMode>
+                  className="nav"
+                  value={(selected.galleryItem.mode as RenderMode) ?? "edges"}
+                  onChange={(m) => recompute(m, selected.galleryItem.detail ?? 2)}
+                  options={[
+                    { value: "edges", label: t("ai.mode.edges") },
+                    { value: "handwriting", label: t("ai.mode.handwriting") },
+                    { value: "trace", label: t("ai.mode.trace") },
+                  ]}
+                />
+                <Segmented<number>
+                  className="nav"
+                  value={selected.galleryItem.detail ?? 2}
+                  onChange={(d) => recompute((selected.galleryItem.mode as RenderMode) ?? "edges", d)}
+                  options={[
+                    { value: 1, label: "1" },
+                    { value: 2, label: "2" },
+                    { value: 3, label: "3" },
+                  ]}
+                />
+              </div>
+
+              <div className="ai-feedback">
+                <label className="ai-field">
+                  {t("ai.feedbackLabel")}
+                  <textarea
+                    rows={2}
+                    value={feedback}
+                    maxLength={1000}
+                    placeholder={t("ai.feedbackPlaceholder")}
+                    onChange={(e) => setFeedback(e.target.value)}
+                  />
+                </label>
+                {suggestions.length > 0 && (
+                  <div className="ai-suggestions">
+                    {suggestions.map((s) => (
+                      <button key={s} className="ai-chip" onClick={() => addSuggestion(s)}>
+                        + {s}
+                      </button>
+                    ))}
                   </div>
+                )}
+                <button
+                  className="primary"
+                  disabled={busy || !feedback.trim()}
+                  onClick={() => generate(selected.variantId)}
+                >
+                  {busy ? t("ai.generating") : t("ai.regenerate")}
+                </button>
+              </div>
 
-                  <div className={`ai-quality ${quality?.complexity}`}>
-                    <span className="ai-badge">{t(`ai.quality.${quality?.complexity}`)}</span>
-                    <span className="muted small">
-                      {t("ai.qualityStats", {
-                        lines: quality?.lineCount ?? 0,
-                        points: quality?.pointCount ?? 0,
-                        short: quality?.shortLineCount ?? 0,
-                      })}
-                    </span>
-                  </div>
-                  {quality?.warnings.map((w) => (
-                    <div key={w} className="banner warn">
-                      {w}
-                    </div>
-                  ))}
-
-                  <details className="ai-prompt-view">
-                    <summary>{t("ai.showPrompt")}</summary>
-                    <pre>{selected.prompt.text}</pre>
-                  </details>
-
-                  <div className="ai-field ai-recompute">
-                    <span>
-                      {t("ai.recompute")}
-                      {rerendering && <span className="muted small"> · {t("ai.generating")}</span>}
-                    </span>
-                    <Segmented<RenderMode>
-                      className="nav"
-                      value={(selected.galleryItem.mode as RenderMode) ?? "edges"}
-                      onChange={(m) => recompute(m, selected.galleryItem.detail ?? 2)}
-                      options={[
-                        { value: "edges", label: t("ai.mode.edges") },
-                        { value: "handwriting", label: t("ai.mode.handwriting") },
-                        { value: "trace", label: t("ai.mode.trace") },
-                      ]}
-                    />
-                    <Segmented<number>
-                      className="nav"
-                      value={selected.galleryItem.detail ?? 2}
-                      onChange={(d) => recompute((selected.galleryItem.mode as RenderMode) ?? "edges", d)}
-                      options={[
-                        { value: 1, label: "1" },
-                        { value: 2, label: "2" },
-                        { value: 3, label: "3" },
-                      ]}
-                    />
-                  </div>
-
-                  <div className="ai-actions">
-                    <button className="primary" disabled={importing} onClick={toDesigner}>
-                      {importing ? t("common.loading") : t("ai.openDesigner")}
-                    </button>
-                    <span className="muted small">{t("ai.savedHint")}</span>
-                  </div>
-
-                  <div className="ai-feedback">
-                    <label className="ai-field">
-                      {t("ai.feedbackLabel")}
-                      <textarea
-                        rows={2}
-                        value={feedback}
-                        maxLength={1000}
-                        placeholder={t("ai.feedbackPlaceholder")}
-                        onChange={(e) => setFeedback(e.target.value)}
-                      />
-                    </label>
-                    {suggestions.length > 0 && (
-                      <div className="ai-suggestions">
-                        {suggestions.map((s) => (
-                          <button key={s} className="ai-chip" onClick={() => addSuggestion(s)}>
-                            + {s}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    <button
-                      className="primary"
-                      disabled={busy || !feedback.trim()}
-                      onClick={() => generate(selected.variantId)}
-                    >
-                      {busy ? t("ai.generating") : t("ai.regenerate")}
-                    </button>
-                  </div>
-                </>
-              )}
-            </>
+              <details className="ai-prompt-view">
+                <summary>{t("ai.showPrompt")}</summary>
+                <pre>{selected.prompt.text}</pre>
+              </details>
+              <span className="muted small">{t("ai.savedHint")}</span>
+            </aside>
           )}
         </div>
-      </div>
+      </section>
     </section>
   );
 }
