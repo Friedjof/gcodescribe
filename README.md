@@ -11,12 +11,12 @@ documents — or built-in generated artwork — into safe G-code for an
   </tr>
 </table>
 
-GCodeScribe combines document conversion, built-in generators, a paint canvas,
-visual layout, paper calibration, G-code preview, a design gallery, job
-management, and printer control in one small web app. Bring in a document or
-generate one, place it on the virtual bed, calibrate the physical sheet,
-generate G-code, preview the toolpaths, and send it to the printer — all from
-the same interface.
+GCodeScribe combines document conversion, built-in generators, OpenStreetMap
+map plotting, a paint canvas, visual layout, paper calibration, G-code preview,
+a design gallery, job management, and printer control in one small web app.
+Bring in a document or generate one, place it on the virtual bed, calibrate the
+physical sheet, generate G-code, preview the toolpaths, and send it to the
+printer — all from the same interface.
 
 ## Preview
 
@@ -62,8 +62,12 @@ the same interface.
   - **Games:** dots &amp; boxes, tic-tac-toe, meta tic-tac-toe, connect four,
     battleships, bingo, and city/country/river sheets.
   - **Coloring pages:** mandalas and geometric pattern generators.
+  - **Maps:** select a live OpenStreetMap viewport, choose streets, paths,
+    buildings, waterways, water, rail, or transit layers, and turn the result
+    into plotter-ready vector linework.
 - Draw from scratch on the paint canvas: place shapes and text, scale and
-  arrange them, and turn the result into a plot job.
+  arrange them, cover lower lines with mask rectangles, pan/zoom/rotate the
+  canvas view, and turn the result into a plot job.
 - Keep every upload and generated design in the **gallery** — the one asset
   library for images, SVG, and multi-page PDF/Office documents (admin and public
   `/upload` submissions, filterable by origin) — with thumbnails, titles,
@@ -94,6 +98,9 @@ the same interface.
 
 - Preview generated G-code against the bed and calibrated paper before sending
   it to the printer.
+- Start a second-screen live view from the designer, games, or gallery: canvas
+  edits, game templates, gallery previews, and 3D G-code previews can stay live
+  while you switch tabs.
 - Track the head position from sent commands and persist it in Redis, with a
   file-store fallback for simple local setups.
 - Send, start, pause, cancel, home, jog, and lift/lower the pen through
@@ -119,6 +126,10 @@ the network; use HTTPS if the controller is exposed beyond a trusted setup.
 > PDF support works out of the box (`poppler-utils` provides `pdftocairo`,
 > `pdftoppm` and `pdfinfo`; OpenCV does the tracing). For Office documents,
 > add `libreoffice-core` to the runtime stage in the `Dockerfile`.
+
+> OSM map generation uses the public OpenStreetMap tile service in the browser
+> and the public Overpass API from the backend. Keep selected areas small and
+> layer counts reasonable; the backend rejects overly large bounding boxes.
 
 ### Production
 
