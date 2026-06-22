@@ -10,6 +10,7 @@ import type { Gcode3DView } from "./Gcode3D";
 import Segmented from "./Segmented";
 import LiveButton from "../stream/LiveButton";
 import { defaultSceneViewBox } from "../paint/SceneView";
+import { useLiveRegistryState } from "../stream/liveRegistry";
 import { useLiveStream } from "../stream/useLiveStream";
 import { IDENTITY, bounds, localize, objectWorldBounds, type Pt, type Transform } from "../paint/geometry";
 import { TEXT_FONTS, type TextFont } from "../paint/text";
@@ -60,6 +61,9 @@ export default function Paint({
   const [viewRotation, setViewRotation] = useState<ViewRotation>(0);
   const [sizeLinked, setSizeLinked] = useState(true);
   const [clipboardCount, setClipboardCount] = useState(0);
+  const [plotMenuOpen, setPlotMenuOpen] = useState(false);
+  const plotMenuRef = useRef<HTMLDivElement>(null);
+  const globalLive = useLiveRegistryState();
   const { confirm, ConfirmNode } = useConfirm();
   const { prompt, PromptNode } = usePrompt();
   const saveTimer = useRef<number | undefined>(undefined);
@@ -102,6 +106,7 @@ export default function Paint({
     { value: "pen", label: t("paint.tool.pen"), icon: "✎" },
     { value: "line", label: t("paint.tool.line"), icon: "╱" },
     { value: "rect", label: t("paint.tool.rect"), icon: "▭" },
+    { value: "maskRect", label: t("paint.tool.maskRect"), icon: "▰" },
     { value: "circle", label: t("paint.tool.circle"), icon: "◯" },
     { value: "semicircle", label: t("paint.tool.semicircle"), icon: "◗" },
     { value: "text", label: t("paint.tool.text"), icon: "T" },
@@ -157,9 +162,58 @@ export default function Paint({
       .catch(fail);
   }, [visible]);
 
+  // The canvas is laid out in the open page's *own* profile coordinate space,
+  // so its size must follow that profile — not the globally active one. When a
+  // page from another (or archived) profile is opened, load that profile's
+  // calibration so the bed resizes to match; legacy/missing pages fall back to
+  // the active calibration. A token guards against a slow response from a
+  // previously open page overwriting the current one.
+  const calReqRef = useRef(0);
+  useEffect(() => {
+    if (!page) return;
+    const token = ++calReqRef.current;
+    const apply = (next: Calibration) => {
+      if (calReqRef.current === token) setCal(next);
+    };
+    (page.profileId
+      ? api.getProfile(page.profileId).then((p) => p.calibration)
+      : api.getCalibration()
+    )
+      .then(apply)
+      .catch(() => api.getCalibration().then(apply).catch(fail));
+  }, [page?.profileId, page?.profileFingerprint]);
+
   useEffect(() => {
     if (live.state === "live") live.sendSnapshot("snapshot");
   }, [cal, page?.id, page?.name, page?.grid, page?.objects, viewRotation, fullscreen, gcode3dView, live.state]);
+
+  useEffect(() => {
+    if (visible || live.state !== "live") return;
+    live.sendPlaceholder("designer-hidden");
+  }, [visible, live.state]);
+
+  useEffect(() => {
+    if (!visible || !cal || !page) return;
+    if (!globalLive.active || globalLive.sourceId === "designer") return;
+    live.start();
+  }, [visible, cal, page?.id, globalLive.active, globalLive.sourceId]);
+
+  // Close the "plot" split-button dropdown on outside click or Escape.
+  useEffect(() => {
+    if (!plotMenuOpen) return;
+    const onDown = (e: PointerEvent) => {
+      if (!plotMenuRef.current?.contains(e.target as Node)) setPlotMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPlotMenuOpen(false);
+    };
+    window.addEventListener("pointerdown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [plotMenuOpen]);
 
   // A "stale" page belongs to the *active* profile but was created before the
   // profile's last edit. Re-stamping it to the current fingerprint changes no
@@ -976,21 +1030,38 @@ export default function Paint({
               >
                 {busy ? t("paint.generating") : t("paint.generateGcode")}
               </button>
-              <button
-                className="primary"
-                disabled={busy || sending || pageBlocked}
-                title={pageBlocked ? t("paint.gcodeBlocked") : ""}
-                onClick={directPlot}
-              >
-                {busy ? t("paint.generating") : sending ? t("paint.starting") : t("paint.directPlot")}
-              </button>
-              <button
-                disabled={busy || sending || pageBlocked || !hasSelection}
-                title={!hasSelection ? t("paint.noSelection") : pageBlocked ? t("paint.gcodeBlocked") : t("paint.plotSelectionHint")}
-                onClick={plotSelection}
-              >
-                {t("paint.plotSelection")}
-              </button>
+              <div className="split-button" ref={plotMenuRef}>
+                <button
+                  className="primary split-main"
+                  disabled={busy || sending || pageBlocked}
+                  title={pageBlocked ? t("paint.gcodeBlocked") : ""}
+                  onClick={directPlot}
+                >
+                  {busy ? t("paint.generating") : sending ? t("paint.starting") : t("paint.directPlot")}
+                </button>
+                <button
+                  className="primary split-toggle"
+                  disabled={busy || sending || pageBlocked}
+                  aria-haspopup="menu"
+                  aria-expanded={plotMenuOpen}
+                  aria-label={t("paint.plotSelection")}
+                  onClick={() => setPlotMenuOpen((v) => !v)}
+                >
+                  ▾
+                </button>
+                {plotMenuOpen && (
+                  <div className="split-menu" role="menu">
+                    <button
+                      role="menuitem"
+                      disabled={busy || sending || pageBlocked || !hasSelection}
+                      title={!hasSelection ? t("paint.noSelection") : pageBlocked ? t("paint.gcodeBlocked") : t("paint.plotSelectionHint")}
+                      onClick={() => { setPlotMenuOpen(false); plotSelection(); }}
+                    >
+                      {t("paint.plotSelection")}
+                    </button>
+                  </div>
+                )}
+              </div>
               <button disabled={loadingPreview} onClick={openFullscreen}>
                 {loadingPreview ? t("common.loading") : t("convert.fullscreen")}
               </button>
@@ -1129,18 +1200,7 @@ export default function Paint({
             </div>
 
             <div className="paint-style-panel">
-              <div className="paint-object-size-head">
-                <h4>{t("paint.object")}</h4>
-                <button
-                  type="button"
-                  className={`ghost tiny ${sizeLinked ? "active" : ""}`}
-                  aria-pressed={sizeLinked}
-                  title={t("paint.keepAspect")}
-                  onClick={() => setSizeLinked((v) => !v)}
-                >
-                  {sizeLinked ? "🔗" : "⛓"}
-                </button>
-              </div>
+              <h4>{t("paint.object")}</h4>
               <div className="paint-size-fields">
                 <label className="field">{t("common.width")}
                   <div className="input-unit">
@@ -1172,6 +1232,21 @@ export default function Paint({
                     <em>mm</em>
                   </div>
                 </label>
+                <button
+                  type="button"
+                  className={`size-link ${sizeLinked ? "active" : ""}`}
+                  aria-pressed={sizeLinked}
+                  aria-label={t("paint.keepAspect")}
+                  title={t("paint.keepAspect")}
+                  onClick={() => setSizeLinked((v) => !v)}
+                >
+                  <svg className="size-link-ico" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                    <path d="M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                    {!sizeLinked && <line className="size-link-cut" x1="3" y1="3" x2="21" y2="21" />}
+                  </svg>
+                </button>
               </div>
 
               <h4>{t("paint.style.line")}</h4>
