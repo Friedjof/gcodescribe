@@ -8,7 +8,7 @@ OctoPrint-backed printer, or a direct USB-serial Marlin setup.
 <table>
   <tr>
     <td width="70%"><img src="media/images/design-and-plot.png" alt="GCodeScribe designer with artwork placed on the virtual plot bed" width="100%"></td>
-    <td width="30%"><img src="media/images/automaticchickenfeeder-plot.png" alt="Real pen plot created with GCodeScribe" width="100%"></td>
+    <td width="30%"><img src="media/images/pen-mount-printer.jpg" alt="Printer with pen mount prepared for plotting with GCodeScribe" width="100%"></td>
   </tr>
 </table>
 
