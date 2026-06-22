@@ -188,6 +188,28 @@ export interface ColoringPageResponse {
   metadata: Record<string, string | number | boolean>;
 }
 
+export type OsmLayer = "streets" | "paths" | "buildings" | "waterways" | "water" | "rail" | "transit";
+
+export interface OsmMapRequest {
+  south: number;
+  west: number;
+  north: number;
+  east: number;
+  layers: OsmLayer[];
+  width: number;
+  height: number;
+  detail: number;
+  includeFrame?: boolean;
+}
+
+export interface OsmMapResponse {
+  width: number;
+  height: number;
+  viewBox: string;
+  lines: number[][][];
+  metadata: Record<string, unknown>;
+}
+
 // --- gallery (event submissions) ---
 export interface GalleryScore {
   total: number;
@@ -425,6 +447,20 @@ export const api = {
   getColoringPage: (fn: ColoringPageResponse["function"], mode: string, seed: number, width: number, height: number, complexity: number, showSeed: boolean) => {
     const params = new URLSearchParams({ function: fn, mode, seed: String(seed), width: String(Math.round(width)), height: String(Math.round(height)), complexity: String(complexity), show_seed: String(showSeed) });
     return req<ColoringPageResponse>(`/api/coloring-pages?${params.toString()}`);
+  },
+  getOsmMap: (map: OsmMapRequest) => {
+    const params = new URLSearchParams({
+      south: String(map.south),
+      west: String(map.west),
+      north: String(map.north),
+      east: String(map.east),
+      layers: map.layers.join(","),
+      width: String(Math.round(map.width)),
+      height: String(Math.round(map.height)),
+      detail: String(map.detail),
+      include_frame: String(Boolean(map.includeFrame)),
+    });
+    return req<OsmMapResponse>(`/api/osm-map?${params.toString()}`);
   },
   saveCalibration: (c: Partial<Calibration>) =>
     req<Calibration>("/api/calibration", {
