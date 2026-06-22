@@ -11,7 +11,7 @@ from ..services.upload_validation import UnsupportedUpload, UploadTooLarge
 from .client import AiImageRequest, make_client
 from .config import ALLOWED_RENDER_MODES, DEFAULT_RENDER_MODE, AiImageConfig
 from .errors import AiImageError
-from .prompts import STYLE_PROMPT, compose_prompt, style_prompt_hash
+from .prompts import compose_prompt, style_prompt_for, style_prompt_hash
 from .quality import assess
 
 # Input image types accepted as a reference. PDFs/Office docs are out for the
@@ -66,7 +66,7 @@ class AiImageService:
                 "unsupported_file", "Kein Referenzbild — Bild hochladen oder Variante wählen."
             )
 
-        prompt = compose_prompt(instructions, feedback)
+        prompt = compose_prompt(instructions, feedback, render_mode)
         client = make_client(self.config)
         output = client.generate_plotter_image(
             AiImageRequest(
@@ -108,8 +108,8 @@ class AiImageService:
             "providerResponseId": output.provider_response_id,
             "sourceFilename": ref_name,
             "sourceMime": ref_mime,
-            "stylePrompt": STYLE_PROMPT,
-            "stylePromptHash": style_prompt_hash(),
+            "stylePrompt": style_prompt_for(render_mode),
+            "stylePromptHash": style_prompt_hash(render_mode),
             "userInstructions": instructions.strip(),
             "feedback": feedback.strip(),
             "renderMode": render_mode,
@@ -144,6 +144,7 @@ class AiImageService:
         preview = self.gallery.preview(item["id"], 1)
         instructions = ai.get("userInstructions", "")
         feedback = ai.get("feedback", "")
+        mode = ai.get("renderMode", DEFAULT_RENDER_MODE)
         return {
             "variantId": ai.get("variantId"),
             "parentVariantId": ai.get("parentVariantId"),
@@ -151,11 +152,11 @@ class AiImageService:
             "preview": preview,
             "imageUrl": f"/api/gallery/{item['id']}/original",
             "prompt": {
-                "style": ai.get("stylePrompt", STYLE_PROMPT),
+                "style": ai.get("stylePrompt", style_prompt_for(mode)),
                 "instructions": instructions,
                 "feedback": feedback,
                 # The exact, full prompt string that was sent to the model.
-                "text": compose_prompt(instructions, feedback),
+                "text": compose_prompt(instructions, feedback, mode),
             },
             "quality": assess(preview),
         }

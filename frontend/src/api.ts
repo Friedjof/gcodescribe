@@ -287,7 +287,7 @@ export interface AiImageStatus {
   size?: string;
   supportsFeedback?: boolean;
   supportsStreaming?: boolean;
-  stylePrompt?: string;
+  stylePrompts?: Record<string, string>;
 }
 
 export interface AiImageQuality {

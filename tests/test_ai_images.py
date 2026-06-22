@@ -14,7 +14,7 @@ from plotter.ai_images import client as ai_client
 from plotter.ai_images.client import OpenAiImageApiClient
 from plotter.ai_images.config import load_config
 from plotter.ai_images.errors import AiImageError
-from plotter.ai_images.prompts import STYLE_PROMPT, compose_prompt
+from plotter.ai_images.prompts import STYLE_PROMPTS, compose_prompt
 from plotter.ai_images.service import AiImageService
 from plotter.services.gallery import GalleryService
 from plotter.web.app import create_app
@@ -105,7 +105,8 @@ def test_status_enabled_with_fake(workspace, monkeypatch):
     status = load_config().status()
     assert status["enabled"] is True
     assert status["model"]
-    assert STYLE_PROMPT in status["stylePrompt"]
+    assert status["stylePrompts"]["edges"] == STYLE_PROMPTS["edges"]
+    assert set(status["stylePrompts"]) == {"edges", "handwriting", "trace"}
     assert "OPENAI_API_KEY" not in status and "api_key" not in status
 
 
@@ -120,9 +121,18 @@ def test_status_enabled_with_real_key(workspace, monkeypatch):
 
 def test_compose_prompt_keeps_style_and_appends():
     out = compose_prompt("more contour", "less detail")
-    assert STYLE_PROMPT in out
+    assert STYLE_PROMPTS["edges"] in out  # default mode
     assert "more contour" in out
     assert "less detail" in out
+
+
+def test_compose_prompt_varies_by_render_mode():
+    edges = compose_prompt(render_mode="edges")
+    handwriting = compose_prompt(render_mode="handwriting")
+    trace = compose_prompt(render_mode="trace")
+    assert edges != handwriting != trace and edges != trace
+    assert STYLE_PROMPTS["handwriting"] in handwriting
+    assert STYLE_PROMPTS["trace"] in trace
 
 
 def test_compose_prompt_rejects_overlong_instructions():
@@ -144,7 +154,7 @@ def test_generate_persists_gallery_item_with_ai_meta(workspace, monkeypatch):
     assert result["preview"]["polylines"]  # fake motif traced to real lines
     assert result["quality"]["lineCount"] >= 1
     # The composed prompt sent to the model is surfaced for display.
-    assert STYLE_PROMPT in result["prompt"]["text"]
+    assert STYLE_PROMPTS["edges"] in result["prompt"]["text"]
     assert "My fox" not in result["prompt"]["text"]  # title is not part of the prompt
 
     item = result["galleryItem"]
@@ -162,6 +172,16 @@ def test_generate_includes_feedback_suggestions(workspace, monkeypatch):
     )
     assert "feedbackSuggestions" in result["quality"]
     assert isinstance(result["quality"]["feedbackSuggestions"], list)
+
+
+def test_generate_uses_mode_specific_prompt(workspace, monkeypatch):
+    monkeypatch.setenv("AI_IMAGE_FAKE", "true")
+    result = AiImageService(load_config()).generate(
+        filename="p.png", data=_png_bytes(), mime="image/png", render_mode="trace"
+    )
+    assert STYLE_PROMPTS["trace"] in result["prompt"]["text"]
+    stored = GalleryService().get(result["galleryItem"]["id"])
+    assert stored["ai"]["stylePrompt"] == STYLE_PROMPTS["trace"]
 
 
 def test_feedback_variant_chains_to_parent_without_reupload(workspace, monkeypatch):

@@ -131,6 +131,15 @@ export default function AiImageDesigner({
   const quality = selected?.quality;
   const suggestions = quality?.feedbackSuggestions ?? [];
 
+  // Live preview of the prompt that will be sent: the selected mode's style plus
+  // the typed instructions. Updates as the mode or instructions change.
+  const promptPreview = (() => {
+    const base = status?.stylePrompts?.[renderMode];
+    if (!base) return null;
+    const extra = instructions.trim();
+    return extra ? `${base}\n\nUser instructions: ${extra}` : base;
+  })();
+
   return (
     <section className={`ai-designer ${visible ? "" : "hidden"}`.trim()}>
       {/* Left: controls column, mirroring the designer's tools card. */}
@@ -175,17 +184,6 @@ export default function AiImageDesigner({
           </button>
         )}
 
-        <div className="ai-style">
-          <strong>{t("ai.styleTitle")}</strong>
-          <p className="muted small">{t("ai.styleHint")}</p>
-          {status?.stylePrompt && (
-            <details className="ai-prompt-view">
-              <summary>{t("ai.showStylePrompt")}</summary>
-              <pre>{status.stylePrompt}</pre>
-            </details>
-          )}
-        </div>
-
         <label className="ai-field">
           {t("ai.instructionsLabel")}
           <textarea
@@ -224,6 +222,17 @@ export default function AiImageDesigner({
             ]}
           />
         </label>
+
+        {promptPreview && (
+          <div className="ai-style">
+            <strong>{t("ai.styleTitle")}</strong>
+            <p className="muted small">{t("ai.styleHint")}</p>
+            <details className="ai-prompt-view">
+              <summary>{t("ai.showStylePrompt")}</summary>
+              <pre>{promptPreview}</pre>
+            </details>
+          </div>
+        )}
 
         <button className="primary" disabled={!file || busy} onClick={() => generate()}>
           {busy && !selected ? t("ai.generating") : t("ai.generate")}

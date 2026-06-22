@@ -8,32 +8,74 @@ from .errors import AiImageError
 MAX_INSTRUCTIONS_LEN = 2000
 MAX_FEEDBACK_LEN = 1000
 
-# The style prompt is English even though the UI is German: image models follow
-# English instructions more reliably. It is deliberately prescriptive so the
-# raster output vectorizes cleanly — the gallery trace step needs crisp, solid
-# black-on-white edges, not soft or gray ones.
-STYLE_PROMPT = (
-    "Redraw the main subject of the reference image as a clean black-and-white "
-    "line drawing for a pen plotter, in the style of a coloring-book outline.\n"
-    "Hard requirements:\n"
-    "- Pure white (#FFFFFF) background, completely empty — no scenery, frame, "
-    "border, or vignette.\n"
-    "- Lines in pure black (#000000) only. No gray, no color, no gradients.\n"
-    "- Crisp, hard-edged strokes of uniform medium thickness. No anti-aliasing, "
-    "no blur, no soft or feathered edges, no pencil/charcoal texture.\n"
-    "- Smooth, long, continuous outlines that form closed shapes wherever "
-    "possible; reduce the subject to its essential contours plus only a few key "
-    "interior lines.\n"
-    "- Keep large empty white areas. Do not fill anything solid black.\n"
-    "Strictly avoid: shading, hatching, cross-hatching, stippling, dots, "
-    "texture, tiny isolated strokes, shadows, halftone, and dense fine detail.\n"
-    "The image will be vectorized into SVG paths and drawn by a single pen, so "
-    "it must trace into a small number of long, clean paths with few pen lifts."
-)
+# One style prompt per render mode, so the mode selector actually changes the
+# generated image (not just the local vectorization). Prompts are English even
+# though the UI is German — image models follow English more reliably — and are
+# deliberately prescriptive so the gallery trace step gets crisp black-on-white.
+#
+# - edges: outline tracer → clean coloring-book contours, no fills.
+# - handwriting: centreline tracer → single-stroke gestural sketch.
+# - trace: outline tracer over solid black regions → bold stencil/silhouette.
+STYLE_PROMPTS = {
+    "edges": (
+        "Redraw the main subject of the reference image as a clean coloring-book "
+        "outline for a pen plotter.\n"
+        "Hard requirements:\n"
+        "- Pure white (#FFFFFF) background, completely empty — no scenery, frame, "
+        "border, or vignette.\n"
+        "- Lines in pure black (#000000) only. No gray, no color, no gradients.\n"
+        "- Crisp, hard-edged strokes of uniform medium thickness. No anti-aliasing, "
+        "no blur, no soft or feathered edges, no pencil/charcoal texture.\n"
+        "- Smooth, long, continuous outlines that form closed shapes wherever "
+        "possible; reduce the subject to its main contours plus only a few key "
+        "interior lines.\n"
+        "- Keep large empty white areas. Do NOT fill any area solid black.\n"
+        "Strictly avoid: shading, hatching, stippling, dots, texture, tiny "
+        "isolated strokes, shadows, halftone, and dense fine detail.\n"
+        "The image is vectorized into SVG paths drawn by a single pen, so it must "
+        "trace into a small number of long, clean outline paths."
+    ),
+    "handwriting": (
+        "Redraw the main subject of the reference image as a loose single-line ink "
+        "sketch for a pen plotter, in the style of a continuous one-line drawing.\n"
+        "Hard requirements:\n"
+        "- Pure white (#FFFFFF) background, completely empty.\n"
+        "- Thin, uniform, pure black (#000000) strokes only. No gray, no color.\n"
+        "- Flowing, gestural, hand-drawn lines — ideally one continuous path with "
+        "very few pen lifts.\n"
+        "- Each contour is a SINGLE centreline stroke; never double an outline.\n"
+        "- Crisp hard edges: no anti-aliasing, no blur, no shading, no fills, no "
+        "hatching, no texture, no dots.\n"
+        "Capture the subject with the minimum number of essential strokes, so it "
+        "traces into a few long, open polylines."
+    ),
+    "trace": (
+        "Convert the main subject of the reference image into a bold black-and-"
+        "white stencil for a pen plotter, like high-contrast pop-art or a "
+        "paper-cut silhouette.\n"
+        "Hard requirements:\n"
+        "- Pure white (#FFFFFF) background, completely empty.\n"
+        "- Exactly two tones: pure black (#000000) and pure white. No gray, no "
+        "gradients, no anti-aliasing, no halftone.\n"
+        "- Render the subject as a few LARGE solid black shapes with clean, smooth "
+        "boundaries; connected black regions read as bold filled silhouettes with "
+        "simple white cut-out details inside.\n"
+        "- Keep shapes large and simple. Avoid thin scattered marks, stippling, "
+        "dots, fine texture, and isolated specks.\n"
+        "The solid black regions are traced into clean outline paths, so every "
+        "edge must be smooth and continuous."
+    ),
+}
+
+DEFAULT_RENDER_MODE = "edges"
 
 
-def style_prompt_hash() -> str:
-    return hashlib.sha256(STYLE_PROMPT.encode()).hexdigest()[:16]
+def style_prompt_for(render_mode: str) -> str:
+    return STYLE_PROMPTS.get(render_mode, STYLE_PROMPTS[DEFAULT_RENDER_MODE])
+
+
+def style_prompt_hash(render_mode: str = DEFAULT_RENDER_MODE) -> str:
+    return hashlib.sha256(style_prompt_for(render_mode).encode()).hexdigest()[:16]
 
 
 def _clip(text: str, limit: int, label: str) -> str:
@@ -45,15 +87,17 @@ def _clip(text: str, limit: int, label: str) -> str:
     return text
 
 
-def compose_prompt(instructions: str = "", feedback: str = "") -> str:
-    """Final model prompt: fixed plotter style + optional user additions.
+def compose_prompt(
+    instructions: str = "", feedback: str = "", render_mode: str = DEFAULT_RENDER_MODE
+) -> str:
+    """Final model prompt: the mode's style + optional user additions.
 
-    The default style is always kept; user instructions and feedback are
+    The mode-specific style is always kept; user instructions and feedback are
     appended so the user can refine without losing the plotter constraints.
     """
     instructions = _clip(instructions, MAX_INSTRUCTIONS_LEN, "Zusatzanweisungen")
     feedback = _clip(feedback, MAX_FEEDBACK_LEN, "Feedback")
-    parts = [STYLE_PROMPT]
+    parts = [style_prompt_for(render_mode)]
     if instructions:
         parts.append(f"User instructions: {instructions}")
     if feedback:

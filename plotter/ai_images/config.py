@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
-from .prompts import STYLE_PROMPT
+from .prompts import STYLE_PROMPTS
 
 # `gpt-image-2` is the newest image model and the configured default; the real
 # model is whatever OPENAI_IMAGE_MODEL names. Only the Image API ("image-api")
@@ -64,9 +64,9 @@ class AiImageConfig:
             "size": self.size,
             "supportsFeedback": True,
             "supportsStreaming": False,
-            # The base style prompt every generation starts from, so the UI can
-            # preview exactly what gets sent before spending a call.
-            "stylePrompt": STYLE_PROMPT,
+            # The per-mode base style prompts, so the UI can preview exactly what
+            # gets sent for the selected render mode before spending a call.
+            "stylePrompts": STYLE_PROMPTS,
         }
 
 
