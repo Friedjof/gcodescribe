@@ -1,16 +1,49 @@
+# VCS and local tooling
 .git/
+.github/
 .claude/
-.venv/
+.ruff_cache/
 .pytest_cache/
-**/__pycache__/
-*.py[cod]
+.venv/
+.python-version
 
+# Local environment and secrets
 .env
 .env.*
 !.env.example
 
-data/
+# Python caches and build output
+**/__pycache__/
+*.py[cod]
+*$py.class
+.coverage
+htmlcov/
+build/
+dist/
+wheels/
+*.egg-info/
+
+# Frontend dependencies, caches and build output
 frontend/node_modules/
 frontend/dist/
+frontend/coverage/
+frontend/.vite/
+frontend/tsconfig.tsbuildinfo
 plotter/web/static/
-.env
+
+# Runtime data and generated files
+data/
+
+# Files not needed for the image build
+docs/
+media/
+scripts/
+tests/
+compose*.yml
+compose*.yaml
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
