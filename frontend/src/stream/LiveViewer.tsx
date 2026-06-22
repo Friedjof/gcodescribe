@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import Gcode3D from "../components/Gcode3D";
+import PolylinePreview from "../components/PolylinePreview";
+import GamePreviewSvg from "../games/PreviewSvg";
+import { useI18n } from "../i18n";
 import SceneView, { defaultSceneViewBox, type ViewRotation } from "../paint/SceneView";
 import type { DesignerSnapshot, StreamMessage } from "./protocol";
 
@@ -13,6 +16,7 @@ function hashParams() {
 }
 
 export default function LiveViewer() {
+  const { t } = useI18n();
   const [status, setStatus] = useState<"connecting" | "live" | "ended" | "error">("connecting");
   const [snapshot, setSnapshot] = useState<DesignerSnapshot | null>(null);
   const [cursor, setCursor] = useState<{ x: number; y: number; inside: boolean } | null>(null);
@@ -79,25 +83,37 @@ export default function LiveViewer() {
 
   return (
     <main className="live-viewer">
-      {status === "ended" ? (
+      {status === "ended" || snapshot?.meta.mode === "placeholder" ? (
         <div className="live-placeholder">
           <div className="live-placeholder-mark">✎</div>
-          <h1>Bereit für die nächste Live-Ansicht</h1>
-          <p>Die Übertragung wurde beendet. Starte im Designer erneut eine Live-Session, um diesen Bildschirm wieder zu bespielen.</p>
+          <h1>{t("live.viewer.readyTitle")}</h1>
+          <p>{status === "ended" ? t("live.viewer.ended") : t("live.viewer.sessionActive")} {t("live.viewer.autoResume")}</p>
         </div>
       ) : status !== "live" && (
         <div className="live-viewer-status">
-          <strong>{status === "connecting" ? "Live-Ansicht wird verbunden…" : "Live-Ansicht nicht verfügbar"}</strong>
-          <span>Bitte Live-Session im Designer neu starten.</span>
+          <strong>{status === "connecting" ? t("live.viewer.connecting") : t("live.viewer.unavailable")}</strong>
+          <span>{t("live.viewer.restartHint")}</span>
         </div>
       )}
       {status === "live" && snapshot?.meta.mode === "gcode3d" && snapshot.gcode3d && (
         <div className="live-viewer-gcode3d">
           <Gcode3D data={snapshot.gcode3d} chrome={false} showTravels viewState={snapshot.gcode3dView ?? undefined} />
-          <div className="live-gcode3d-label">G-Code 3D Live Preview</div>
+          <div className="live-gcode3d-label">{t("live.viewer.gcode3d")}</div>
         </div>
       )}
-      {status === "live" && snapshot && snapshot.meta.mode !== "gcode3d" && (
+      {status === "live" && snapshot?.meta.mode === "game" && snapshot.game && (
+        <div className="live-viewer-game">
+          <GamePreviewSvg cal={snapshot.cal} lines={snapshot.game.lines} solutionLines={snapshot.game.solutionLines} className="live-game-preview" />
+          <div className="live-gcode3d-label">{snapshot.game.name}</div>
+        </div>
+      )}
+      {status === "live" && snapshot?.meta.mode === "gallery" && snapshot.gallery?.preview && (
+        <div className="live-viewer-gallery">
+          <PolylinePreview data={snapshot.gallery.preview} className="live-gallery-preview" stroke="var(--busy)" />
+          <div className="live-gcode3d-label">{snapshot.gallery.title}</div>
+        </div>
+      )}
+      {status === "live" && snapshot && snapshot.meta.mode !== "gcode3d" && snapshot.meta.mode !== "game" && snapshot.meta.mode !== "gallery" && (
         <div className="live-viewer-canvas">
           <SceneView ref={svgRef} cal={snapshot.cal} page={snapshot.page} viewBox={snapshot.meta.viewBox} viewRotation={snapshot.meta.viewRotation ?? 0} showGrid={false}>
             {cursor?.inside && (

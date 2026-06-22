@@ -1,5 +1,6 @@
-import type { Calibration, GcodePreview3D, Page } from "../api";
+import type { Calibration, GalleryPreview, GcodePreview3D, Page } from "../api";
 import type { Gcode3DView } from "../components/Gcode3D";
+import type { Pt } from "../paint/geometry";
 
 export type StreamState = "idle" | "connecting" | "live" | "error";
 
@@ -8,7 +9,15 @@ export interface StreamMeta {
   pageName?: string;
   viewBox?: { x: number; y: number; w: number; h: number };
   viewRotation?: 0 | 90 | 180 | 270;
-  mode?: "canvas" | "gcode3d";
+  mode?: "canvas" | "gcode3d" | "game" | "gallery" | "placeholder";
+}
+
+export interface GameSnapshot {
+  name: string;
+  lines: Pt[][];
+  solutionLines?: Pt[][];
+  width: number;
+  height: number;
 }
 
 export interface DesignerSnapshot {
@@ -17,6 +26,8 @@ export interface DesignerSnapshot {
   meta: StreamMeta;
   gcode3d?: GcodePreview3D | null;
   gcode3dView?: Gcode3DView | null;
+  game?: GameSnapshot | null;
+  gallery?: { title: string; preview?: GalleryPreview | null; gcode3d?: GcodePreview3D | null } | null;
 }
 
 export type StreamMessage =

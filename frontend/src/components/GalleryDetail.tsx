@@ -4,7 +4,10 @@ import { fmtBytes, fmtDuration } from "../format";
 import { useI18n } from "../i18n";
 import { galleryItemObject } from "../paint/insertAsset";
 import Gcode3D from "./Gcode3D";
+import type { Gcode3DView } from "./Gcode3D";
 import Gcode3DOverlay from "./Gcode3DOverlay";
+import LiveButton from "../stream/LiveButton";
+import { useLiveStream } from "../stream/useLiveStream";
 import Modal from "./Modal";
 import PolylinePreview from "./PolylinePreview";
 import ScoreBadge from "./ScoreBadge";
@@ -18,11 +21,15 @@ type RenderMode = "auto" | "vector" | "trace" | "edges" | "hatch" | "lines" | "d
  * the generated G-code in 3D (with fullscreen), plus admin actions. */
 export default function GalleryDetail({
   item,
+  visible = true,
+  autoLive = false,
   onClose,
   onChanged,
   onOpenPaint,
 }: {
   item: GalleryItem;
+  visible?: boolean;
+  autoLive?: boolean;
   onClose: () => void;
   onChanged: () => void;
   onOpenPaint: () => void;
@@ -36,6 +43,7 @@ export default function GalleryDetail({
   const [resetToken, setResetToken] = useState(0);
   const [renderMode, setRenderMode] = useState<RenderMode>((item.mode || "auto") as RenderMode);
   const [renderDetail, setRenderDetail] = useState(item.detail || 2);
+  const [gcode3dView, setGcode3dView] = useState<Gcode3DView>({ yaw: -0.7, pitch: 1.0, zoom: 1, panX: 0, panY: 0 });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const { confirm, ConfirmNode } = useConfirm();
@@ -124,6 +132,59 @@ export default function GalleryDetail({
     item.original.mime.startsWith("image/") || item.original.kind === "svg"
   );
 
+  const live = useLiveStream("gallery", () => {
+    const width = Math.max(svg?.width ?? 1, 1);
+    const height = Math.max(svg?.height ?? 1, 1);
+    const cal = {
+      bed_width: width,
+      bed_height: height,
+      z_max: 200,
+      plot_width: width,
+      plot_height: height,
+      origin_x: 0,
+      origin_y: 0,
+      pen_up_z: 5,
+      pen_down_z: 0,
+      pen_calibrated: false,
+      travel_feed: 1000,
+      draw_feed: 1000,
+      z_feed: 1000,
+      fit_to_area: true,
+      flip_y: false,
+      trust_axis_home: false,
+      paper_corners: {},
+      paper_margin: 0,
+    };
+    return {
+      cal,
+      page: { id: `gallery-${item.id}`, name: item.title || item.filename, objects: [], grid: { step: 10, snap: false } },
+      meta: { sourceId: "gallery", mode: view === "3d" && gcode ? "gcode3d" : "gallery", pageName: item.title || item.filename },
+      gcode3d: view === "3d" ? gcode : null,
+      gcode3dView: view === "3d" && gcode ? gcode3dView : null,
+      gallery: { title: item.title || item.filename, preview: svg, gcode3d: view === "3d" ? gcode : null },
+    };
+  });
+
+  useEffect(() => {
+    if (!autoLive || live.activeSourceId === "gallery") return;
+    if (view === "2d" && svg) live.start();
+    if (view === "3d" && gcode) live.start();
+  }, [autoLive, view, svg, gcode, live.activeSourceId]);
+
+  useEffect(() => {
+    if (live.state === "live") live.sendSnapshot("snapshot");
+  }, [view, svg, gcode, gcode3dView, showTravels, live.state]);
+
+  useEffect(() => {
+    if (visible || live.state !== "live") return;
+    live.sendPlaceholder("gallery-hidden");
+  }, [visible, live.state]);
+
+  const close = () => {
+    if (live.state === "live") live.sendPlaceholder("gallery-closed");
+    onClose();
+  };
+
   return (
     <>
       <Modal
@@ -138,19 +199,26 @@ export default function GalleryDetail({
           </>
         }
         headerActions={
-          (hasGcode || item.original) && (
-          <Segmented<View>
-            value={view}
-            onChange={setView}
-            options={[
-              { value: "2d", label: "SVG" },
-              ...(hasGcode ? [{ value: "3d" as View, label: "G-code" }] : []),
-              ...(item.original ? [{ value: "original" as View, label: t("gallery.original") }] : []),
-            ]}
-          />
-          )
+          <div className="gallery-modal-actions">
+            <LiveButton
+              state={live.state}
+              viewers={live.viewers}
+              onClick={() => live.state === "live" || live.state === "connecting" ? live.stop("user-stopped") : live.start()}
+            />
+            {(hasGcode || item.original) && (
+              <Segmented<View>
+                value={view}
+                onChange={setView}
+                options={[
+                  { value: "2d", label: "SVG" },
+                  ...(hasGcode ? [{ value: "3d" as View, label: "G-code" }] : []),
+                  ...(item.original ? [{ value: "original" as View, label: t("gallery.original") }] : []),
+                ]}
+              />
+            )}
+          </div>
         }
-        onClose={onClose}
+        onClose={close}
         footer={
           <>
             <button className="ghost" disabled={busy} onClick={remove}>
@@ -213,7 +281,7 @@ export default function GalleryDetail({
                 <p className="muted">{t("common.loading")}</p>
               )
             ) : gcode ? (
-              <Gcode3D data={gcode} chrome={false} showTravels={showTravels} resetToken={resetToken} />
+              <Gcode3D data={gcode} chrome={false} showTravels={showTravels} resetToken={resetToken} viewState={gcode3dView} onViewChange={setGcode3dView} />
             ) : (
               <p className="muted">{t("common.loading")}</p>
             )}
@@ -273,10 +341,11 @@ export default function GalleryDetail({
             </dl>
           )}
           {err && <div className="banner err">{err}</div>}
+          {live.error && <div className="banner err">{live.error}</div>}
         </div>
       </Modal>
       {fullscreen && gcode && (
-        <Gcode3DOverlay data={gcode} showTravels={showTravels} onClose={() => setFullscreen(false)} />
+        <Gcode3DOverlay data={gcode} showTravels={showTravels} viewState={gcode3dView} onViewChange={setGcode3dView} onClose={() => setFullscreen(false)} />
       )}
       {ConfirmNode}
       {PromptNode}

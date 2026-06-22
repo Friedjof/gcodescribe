@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, type GalleryItem, type GallerySvg, type GalleryUploader } from "../api";
 import { useI18n } from "../i18n";
 import GalleryDetail from "./GalleryDetail";
+import { useLiveRegistryState } from "../stream/liveRegistry";
 import PolylinePreview from "./PolylinePreview";
 import ScoreBadge from "./ScoreBadge";
 import Segmented from "./Segmented";
@@ -17,7 +18,7 @@ const thumbCache = new Map<string, GallerySvg>();
 // Keep the last list so re-opening the tab renders instantly while we refetch.
 let listCache: GalleryItem[] = [];
 
-export default function Gallery({ onOpenPaint }: { onOpenPaint: () => void }) {
+export default function Gallery({ visible = true, onOpenPaint }: { visible?: boolean; onOpenPaint: () => void }) {
   const { t, lang } = useI18n();
   const [items, setItems] = useState<GalleryItem[]>(listCache);
   const [showArchived, setShowArchived] = useState(false);
@@ -25,6 +26,7 @@ export default function Gallery({ onOpenPaint }: { onOpenPaint: () => void }) {
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const globalLive = useLiveRegistryState();
   const [err, setErr] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   // Bump to re-render once batched thumbnails have landed in the cache.
@@ -76,7 +78,7 @@ export default function Gallery({ onOpenPaint }: { onOpenPaint: () => void }) {
   };
 
   const q = query.trim().toLowerCase();
-  const visible = items.filter(
+  const visibleItems = items.filter(
     (i) =>
       (showArchived || i.status === "active") &&
       (uploaderFilter === "all" || i.uploader === uploaderFilter) &&
@@ -140,11 +142,11 @@ export default function Gallery({ onOpenPaint }: { onOpenPaint: () => void }) {
         </div>
 
         {err && <div className="banner err">{err}</div>}
-        {visible.length === 0 && <p className="muted">{t("gallery.empty")}</p>}
+        {visibleItems.length === 0 && <p className="muted">{t("gallery.empty")}</p>}
 
         <div className="gallery-scroll">
           <div className="gallery-grid">
-            {visible.map((item) => (
+            {visibleItems.map((item) => (
               <GalleryCard key={item.id} item={item} lang={lang} onOpen={() => setSelectedId(item.id)} />
             ))}
           </div>
@@ -154,6 +156,8 @@ export default function Gallery({ onOpenPaint }: { onOpenPaint: () => void }) {
       {selected && (
         <GalleryDetail
           item={selected}
+          visible={visible}
+          autoLive={globalLive.active}
           onClose={() => setSelectedId(null)}
           onChanged={refreshSelected}
           onOpenPaint={onOpenPaint}

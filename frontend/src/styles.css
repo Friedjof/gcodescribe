@@ -193,16 +193,11 @@ button.big { padding: 13px 20px; font-size: 14px; }
   position: relative;
 }
 .canvas-rotate-button {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 4;
-  padding: 7px 10px;
-  border-radius: 999px;
-  background: rgba(28, 28, 30, 0.82);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  width: auto;
+  padding: 0 10px;
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .canvas-orientation-marker path {
   fill: none;
@@ -327,6 +322,62 @@ button.big { padding: 13px 20px; font-size: 14px; }
   place-items: stretch;
   background: radial-gradient(1000px 700px at 50% -10%, #172237 0%, #050506 58%);
   padding: min(3vw, 28px);
+}
+.live-viewer-game {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: min(4vw, 36px);
+  background: radial-gradient(900px 600px at 50% -10%, #21172d 0%, #050506 58%);
+}
+.live-viewer-gallery {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: min(4vw, 36px);
+  background: radial-gradient(900px 600px at 50% -10%, #172d23 0%, #050506 58%);
+}
+.live-gallery-preview {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 24px 80px rgba(0, 0, 0, 0.45));
+}
+.gallery-modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.live-game-preview {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+}
+.live-game-preview svg {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 24px 80px rgba(0, 0, 0, 0.45));
+}
+.games-modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.games-live-standby {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(48, 209, 88, 0.28);
+  background: rgba(48, 209, 88, 0.08);
+}
+.live-error-inline {
+  margin-top: 10px;
 }
 .live-viewer-gcode3d .g3d {
   min-height: 0;
@@ -821,6 +872,7 @@ input:focus, select:focus, textarea:focus {
   border: none;
   display: inline-flex;
   align-items: center;
+  justify-content: flex-start;
   transition: background 0.18s;
 }
 .switch i {
@@ -1855,6 +1907,143 @@ kbd {
   height: 100%;
 }
 
+.osm-modal {
+  width: min(1180px, 100%);
+  height: calc(100dvh - 28px);
+  max-height: calc(100dvh - 28px);
+}
+
+.osm-modal-body {
+  min-height: 0;
+  padding: 12px 14px;
+}
+
+.osm-editor {
+  display: grid;
+  grid-template-columns: minmax(360px, 1.2fr) minmax(320px, 0.8fr);
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+.osm-map-pane,
+.osm-side-pane {
+  min-height: 0;
+}
+
+.osm-map-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.osm-leaflet {
+  flex: 1;
+  min-height: 360px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  background: #d8d2c5;
+}
+
+.osm-hint {
+  margin: 0;
+  font-size: 12px;
+}
+
+.osm-side-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: auto;
+}
+
+.osm-controls,
+.osm-preview-pane,
+.osm-empty-preview {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--panel);
+}
+
+.osm-controls,
+.osm-preview-pane {
+  padding: 12px;
+}
+
+.osm-controls h3,
+.osm-preview-pane h3 {
+  margin: 0 0 10px;
+  font-size: 13px;
+}
+
+.osm-layer-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.osm-layer-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-2);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.osm-layer-toggle input {
+  accent-color: var(--accent);
+}
+
+.osm-range {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 12px;
+}
+
+.osm-range input {
+  width: 100%;
+}
+
+.osm-frame-toggle {
+  margin-top: 12px;
+}
+
+.osm-preview-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+
+.osm-chip-grid {
+  flex: 0 0 auto;
+}
+
+.osm-preview-svg {
+  min-height: 260px;
+}
+
+.osm-preview-svg svg {
+  height: 100%;
+}
+
+.osm-empty-preview {
+  display: grid;
+  place-items: center;
+  min-height: 260px;
+  padding: 18px;
+  color: var(--muted);
+  text-align: center;
+}
+
 .games-actions {
   display: flex;
   gap: 8px;
@@ -1908,6 +2097,20 @@ kbd {
   .games-modal {
     height: calc(100dvh - 18px);
     max-height: calc(100dvh - 18px);
+  }
+  .osm-modal {
+    height: calc(100dvh - 18px);
+    max-height: calc(100dvh - 18px);
+  }
+  .osm-editor {
+    grid-template-columns: 1fr;
+    overflow: auto;
+  }
+  .osm-leaflet {
+    min-height: 320px;
+  }
+  .osm-layer-grid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -2071,6 +2274,45 @@ kbd {
 .paint-grid-ctl .switch-label { margin-left: 0; }
 .paint-job-actions { display: inline-flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
 .paint-job-actions button { white-space: nowrap; }
+
+/* Split button: a primary action with an attached dropdown for related actions. */
+.split-button { position: relative; display: inline-flex; }
+.split-button .split-main {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.split-button .split-toggle {
+  padding: 9px 9px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-left: 1px solid rgba(0, 0, 0, 0.25);
+  font-size: 10px;
+}
+.split-button .split-toggle[aria-expanded="true"] { background: var(--accent-hover); }
+.split-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  min-width: 100%;
+  padding: 6px;
+  background: rgba(28, 28, 30, 0.96);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(18px);
+}
+.split-menu button {
+  width: 100%;
+  justify-content: flex-start;
+  white-space: nowrap;
+  border-color: transparent;
+  background: transparent;
+  border-radius: 8px;
+}
+.split-menu button:hover:not(:disabled) { background: var(--panel-2); }
 .paint-profile { margin: -2px 0 8px; font-size: 12px; }
 .profile-banner {
   display: flex;
@@ -2177,10 +2419,56 @@ kbd {
   letter-spacing: 0.07em;
   text-transform: uppercase;
 }
-.paint-object-size-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.paint-object-size-head h4 { margin-bottom: 0; }
-.paint-object-size-head .active { border-color: var(--accent); color: var(--accent); }
-.paint-size-fields { display: grid; grid-template-columns: 1fr; gap: 6px; margin-top: -2px; }
+.paint-size-fields {
+  display: grid;
+  grid-template-columns: 1fr 38px;
+  column-gap: 12px;
+  row-gap: 6px;
+  margin-top: -2px;
+}
+.paint-size-fields .field { grid-column: 1; }
+.paint-size-fields .input-unit em { min-width: 22px; }
+
+/* Aspect-ratio lock: a single toggle visually tied to both size fields. */
+.size-link {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  position: relative;
+  align-self: center;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+.size-link:hover { color: var(--text); border-color: var(--muted); }
+.size-link.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(10, 132, 255, 0.12);
+}
+.size-link-ico { width: 16px; height: 16px; display: block; }
+.size-link-cut { stroke: currentColor; stroke-width: 2.4; }
+/* Ticks that reach toward the width/height rows, selling the "linked" idea. */
+.size-link::before,
+.size-link::after {
+  content: "";
+  position: absolute;
+  left: -12px;
+  width: 12px;
+  height: 1.5px;
+  background: var(--border);
+}
+.size-link::before { top: 11px; }
+.size-link::after { bottom: 11px; }
+.size-link.active::before,
+.size-link.active::after { background: var(--accent); }
 .paint-style-panel .field { gap: 4px; }
 .paint-style-panel input,
 .paint-style-panel select { width: 100%; padding: 7px 8px; }
