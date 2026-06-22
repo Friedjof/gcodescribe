@@ -293,6 +293,9 @@ export interface AiImageQuality {
   lineCount: number;
   pointCount: number;
   shortLineCount: number;
+  shortLineRatio: number;
+  medianLineLength: number;
+  boundsFillRatio: number | null;
   complexity: "good" | "medium" | "bad";
   warnings: string[];
   feedbackSuggestions: string[];
@@ -777,6 +780,12 @@ export const api = {
     if (opts?.detail != null) fd.append("detail", String(opts.detail));
     return req<AiImageResult>("/api/ai-images/generate", { method: "POST", body: fd });
   },
+  aiImageRerender: (itemId: string, renderMode: string, detail: number) =>
+    req<AiImageResult>(`/api/ai-images/${itemId}/rerender`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ render_mode: renderMode, detail }),
+    }),
 
   textPolylines: (text: string, font: string, size: number, connectSpaces = false) =>
     req<{ polylines: number[][][] }>("/api/paint/text-polylines", {

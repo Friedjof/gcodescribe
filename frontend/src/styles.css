@@ -3450,3 +3450,10 @@ input[type="checkbox"]:disabled {
   font-size: 0.8em;
 }
 .ai-chip:hover { color: var(--text); border-color: var(--accent); }
+
+/* AI Designer: recompute (re-trace) control on a result */
+.ai-recompute {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.ai-recompute > span { color: var(--muted); font-size: 0.9em; }

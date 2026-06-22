@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from pydantic import BaseModel
 
 from ...ai_images.config import load_config
 from ...ai_images.errors import AiImageError
@@ -53,4 +54,21 @@ async def ai_image_generate(
         title=title,
         render_mode=render_mode,
         detail=detail,
+    )
+
+
+class RerenderRequest(BaseModel):
+    render_mode: str = "edges"
+    detail: int = 2
+
+
+@router.post("/ai-images/{item_id}/rerender")
+def ai_image_rerender(item_id: str, req: RerenderRequest) -> dict:
+    """Re-trace an existing AI variant in a different mode/detail (no new
+    generation, no provider call)."""
+    config = load_config()
+    if not config.enabled:
+        raise AiImageError("not_configured", "AI Designer ist nicht konfiguriert.")
+    return AiImageService(config).rerender_variant(
+        item_id, render_mode=req.render_mode, detail=req.detail
     )

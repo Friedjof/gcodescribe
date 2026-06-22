@@ -28,6 +28,7 @@ export default function AiImageDesigner({
   const [detail, setDetail] = useState(2);
   const [busy, setBusy] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [rerendering, setRerendering] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [variants, setVariants] = useState<AiImageResult[]>([]);
@@ -105,6 +106,23 @@ export default function AiImageDesigner({
       .then(() => onOpenPaint())
       .catch((e) => setErr(String(e.message ?? e)))
       .finally(() => setImporting(false));
+  };
+
+  // Re-trace the selected variant in another mode/detail without a new
+  // generation (no provider call); replace it in place with the fresh result.
+  const recompute = (mode: RenderMode, lvl: number) => {
+    if (!selected || rerendering) return;
+    setRerendering(true);
+    setErr(null);
+    api
+      .aiImageRerender(selected.galleryItem.id, mode, lvl)
+      .then((updated) =>
+        setVariants((prev) =>
+          prev.map((v) => (v.variantId === updated.variantId ? updated : v))
+        )
+      )
+      .catch((e) => setErr(String(e.message ?? e)))
+      .finally(() => setRerendering(false));
   };
 
   const addSuggestion = (s: string) =>
@@ -257,6 +275,7 @@ export default function AiImageDesigner({
                       {t("ai.qualityStats", {
                         lines: quality?.lineCount ?? 0,
                         points: quality?.pointCount ?? 0,
+                        short: quality?.shortLineCount ?? 0,
                       })}
                     </span>
                   </div>
@@ -265,6 +284,33 @@ export default function AiImageDesigner({
                       {w}
                     </div>
                   ))}
+
+                  <div className="ai-field ai-recompute">
+                    <span>
+                      {t("ai.recompute")}
+                      {rerendering && <span className="muted small"> · {t("ai.generating")}</span>}
+                    </span>
+                    <Segmented<RenderMode>
+                      className="nav"
+                      value={(selected.galleryItem.mode as RenderMode) ?? "edges"}
+                      onChange={(m) => recompute(m, selected.galleryItem.detail ?? 2)}
+                      options={[
+                        { value: "edges", label: t("ai.mode.edges") },
+                        { value: "handwriting", label: t("ai.mode.handwriting") },
+                        { value: "trace", label: t("ai.mode.trace") },
+                      ]}
+                    />
+                    <Segmented<number>
+                      className="nav"
+                      value={selected.galleryItem.detail ?? 2}
+                      onChange={(d) => recompute((selected.galleryItem.mode as RenderMode) ?? "edges", d)}
+                      options={[
+                        { value: 1, label: "1" },
+                        { value: 2, label: "2" },
+                        { value: 3, label: "3" },
+                      ]}
+                    />
+                  </div>
 
                   <div className="ai-actions">
                     <button className="primary" disabled={importing} onClick={toDesigner}>

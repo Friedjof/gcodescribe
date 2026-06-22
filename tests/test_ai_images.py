@@ -45,6 +45,52 @@ def _status_error(cls, code: int, message: str):
     return cls(message, response=httpx.Response(code, request=req), body=None)
 
 
+# -- quality heuristic --------------------------------------------------------
+
+
+def test_quality_empty_is_bad():
+    from plotter.ai_images.quality import assess
+
+    q = assess({"polylines": [], "width": 100, "height": 100})
+    assert q["complexity"] == "bad"
+    assert q["lineCount"] == 0
+    assert q["warnings"] and q["feedbackSuggestions"]
+
+
+def test_quality_long_clean_lines_are_good():
+    from plotter.ai_images.quality import assess
+
+    preview = {"polylines": [[[0, 0], [50, 0]], [[0, 10], [50, 10]]], "width": 100, "height": 100}
+    q = assess(preview)
+    assert q["complexity"] == "good"
+    assert q["warnings"] == []
+    assert q["medianLineLength"] >= 5
+
+
+def test_quality_many_short_lines_warns_and_is_bad():
+    from plotter.ai_images.quality import assess
+
+    preview = {"polylines": [[[0, 0], [1, 0]] for _ in range(30)], "width": 100, "height": 100}
+    q = assess(preview)
+    assert q["complexity"] == "bad"
+    assert q["shortLineCount"] == 30
+    assert any("kurze" in w for w in q["warnings"])
+
+
+def test_quality_small_motif_warns_via_bounds():
+    from plotter.ai_images.quality import assess
+
+    preview = {
+        "polylines": [[[0, 0], [5, 0]]],
+        "bounds": [0, 0, 5, 1],
+        "width": 100,
+        "height": 100,
+    }
+    q = assess(preview)
+    assert q["boundsFillRatio"] is not None and q["boundsFillRatio"] < 0.15
+    assert any("Fläche" in w for w in q["warnings"])
+
+
 # -- config / gating ----------------------------------------------------------
 
 
@@ -144,6 +190,37 @@ def test_generate_without_image_or_parent_raises(workspace, monkeypatch):
     with pytest.raises(AiImageError) as exc:
         AiImageService(load_config()).generate(feedback="hi")
     assert exc.value.category == "unsupported_file"
+
+
+def test_rerender_variant_changes_mode_keeps_identity(workspace, monkeypatch):
+    monkeypatch.setenv("AI_IMAGE_FAKE", "true")
+    service = AiImageService(load_config())
+    v1 = service.generate(filename="photo.png", data=_png_bytes(), mime="image/png")
+
+    updated = service.rerender_variant(
+        v1["galleryItem"]["id"], render_mode="handwriting", detail=3
+    )
+    assert updated["variantId"] == v1["variantId"]
+    assert updated["galleryItem"]["mode"] == "handwriting"
+    assert updated["galleryItem"]["detail"] == 3
+    assert "complexity" in updated["quality"]
+
+
+def test_route_rerender(workspace, monkeypatch):
+    monkeypatch.setenv("AI_IMAGE_FAKE", "true")
+    client = TestClient(create_app())
+    gen = client.post(
+        "/api/ai-images/generate",
+        files={"file": ("photo.png", _png_bytes(), "image/png")},
+        data={"render_mode": "edges"},
+    )
+    item_id = gen.json()["galleryItem"]["id"]
+    resp = client.post(
+        f"/api/ai-images/{item_id}/rerender",
+        json={"render_mode": "trace", "detail": 2},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["galleryItem"]["mode"] == "trace"
 
 
 def test_generate_rejects_non_image(workspace, monkeypatch):

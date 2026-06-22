@@ -118,22 +118,42 @@ class AiImageService:
         }
         self._attach_ai_meta(item["id"], ai_meta)
         item["ai"] = ai_meta
+        return self._result_for(item)
 
+    def rerender_variant(self, item_id: str, *, render_mode: str, detail: int) -> dict:
+        """Re-trace an existing AI variant in a different mode/detail without a
+        new generation. Reuses the gallery's in-place rerender, then recomputes
+        the plottability assessment from the fresh preview."""
+        if not self.config.enabled:
+            raise AiImageError("not_configured", "AI Designer ist nicht konfiguriert.")
+        render_mode = render_mode if render_mode in ALLOWED_RENDER_MODES else DEFAULT_RENDER_MODE
+        detail = max(1, min(int(detail), 3))
+        item = self.gallery.get(item_id)
+        if not item.get("ai"):
+            raise AiImageError("bad_response", "Kein AI-Element.")
+        try:
+            updated = self.gallery.rerender(item_id, mode=render_mode, detail=detail)
+        except (PlotterError, UploadTooLarge) as exc:
+            raise AiImageError("vectorization_failed", str(exc)) from exc
+        return self._result_for(updated)
+
+    def _result_for(self, item: dict) -> dict:
+        """Assemble the AiImageResult from a persisted gallery item carrying an
+        ``ai`` block, recomputing preview + quality."""
+        ai = item.get("ai") or {}
         preview = self.gallery.preview(item["id"], 1)
-        quality = assess(preview)
-
         return {
-            "variantId": variant_id,
-            "parentVariantId": base_variant_id,
+            "variantId": ai.get("variantId"),
+            "parentVariantId": ai.get("parentVariantId"),
             "galleryItem": item,
             "preview": preview,
             "imageUrl": f"/api/gallery/{item['id']}/original",
             "prompt": {
-                "style": STYLE_PROMPT,
-                "instructions": instructions.strip(),
-                "feedback": feedback.strip(),
+                "style": ai.get("stylePrompt", STYLE_PROMPT),
+                "instructions": ai.get("userInstructions", ""),
+                "feedback": ai.get("feedback", ""),
             },
-            "quality": quality,
+            "quality": assess(preview),
         }
 
     def _resolve_parent(self, base_variant_id: str) -> dict | None:
