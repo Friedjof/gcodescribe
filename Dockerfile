@@ -15,17 +15,12 @@ ENV PYTHONUNBUFFERED=1 \
     PLOTTER_PORT=8000
 
 # poppler-utils: pdftocairo (PDF->SVG vector), pdftoppm/pdfinfo (raster trace).
-# libgl1 + libglib2.0-0: runtime libs for opencv (area-border tracing).
+# libglib2.0-0: runtime lib for opencv (area-border tracing).
 # Add libreoffice-core for Office support if needed.
-# curl: used by the container HEALTHCHECK below.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        poppler-utils libgl1 libglib2.0-0 curl \
+        poppler-utils libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
-
-# uv for fast, reproducible installs. Install from PyPI instead of copying from
-# GHCR so local builds don't depend on GitHub Container Registry auth/token fetches.
-RUN pip install --no-cache-dir uv
 
 # Run as an unprivileged user. The data volume is created and chowned here so
 # the non-root process can write to it (named volumes inherit this ownership).
@@ -40,7 +35,11 @@ COPY main.py ./
 # Built SPA from stage 1.
 COPY --from=frontend /build/plotter/web/static ./plotter/web/static
 
-RUN uv sync --frozen --no-dev \
+RUN pip install --no-cache-dir uv \
+    && uv sync --frozen --no-dev \
+    && rm -f /usr/local/bin/uv /usr/local/bin/uvx \
+    && rm -rf /usr/local/lib/python3.12/site-packages/uv \
+        /usr/local/lib/python3.12/site-packages/uv-*.dist-info \
     && chown -R app:app /app
 
 USER app
@@ -48,5 +47,5 @@ USER app
 VOLUME ["/data"]
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD curl -fsS http://localhost:8000/api/health || exit 1
-CMD ["uv", "run", "--no-dev", "gcodescribe-web"]
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=4).read()" || exit 1
+CMD ["/app/.venv/bin/gcodescribe-web"]
