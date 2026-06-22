@@ -11,6 +11,7 @@ import LiveView from "./LiveView";
 import Segmented from "./Segmented";
 import { useArrowKeys } from "../hooks";
 import { useI18n } from "../i18n";
+import { useToasts } from "./Toasts";
 
 const CORNERS: { id: string; labelKey: string }[] = [
   { id: "tl", labelKey: "paper.cornerTL" },
@@ -32,6 +33,7 @@ export default function Paper({
   visible?: boolean; // false while the tab is kept mounted but hidden
 }) {
   const { t } = useI18n();
+  const toast = useToasts();
   const [cal, setCal] = useState<Calibration | null>(null);
   const [rect, setRect] = useState<[number, number, number, number] | null>(null);
   const [pos, setPos] = useState<Position | null>(null);
@@ -93,6 +95,14 @@ export default function Paper({
     }
     api.jobPreview(previewJob).then(setPreview).catch((e) => setErr(String(e.message)));
   }, [previewJob]);
+
+  useEffect(() => {
+    if (msg) toast.success(msg);
+  }, [msg, toast]);
+
+  useEffect(() => {
+    if (err) toast.error(err);
+  }, [err, toast]);
 
   const flash = (m: string) => {
     setMsg(m);
@@ -553,8 +563,6 @@ export default function Paper({
           ))}
         </div>
 
-        {msg && <div className="banner ok">{msg}</div>}
-        {err && <div className="banner err">{err}</div>}
       </section>
     </div>
   );

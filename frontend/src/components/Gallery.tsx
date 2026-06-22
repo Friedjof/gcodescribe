@@ -6,6 +6,7 @@ import { useLiveRegistryState } from "../stream/liveRegistry";
 import PolylinePreview from "./PolylinePreview";
 import ScoreBadge from "./ScoreBadge";
 import Segmented from "./Segmented";
+import { useToasts } from "./Toasts";
 
 type UploaderFilter = "all" | GalleryUploader;
 const MAX_UPLOAD_MB = 15;
@@ -20,6 +21,7 @@ let listCache: GalleryItem[] = [];
 
 export default function Gallery({ visible = true, onOpenPaint }: { visible?: boolean; onOpenPaint: () => void }) {
   const { t, lang } = useI18n();
+  const toast = useToasts();
   const [items, setItems] = useState<GalleryItem[]>(listCache);
   const [showArchived, setShowArchived] = useState(false);
   const [uploaderFilter, setUploaderFilter] = useState<UploaderFilter>("all");
@@ -58,6 +60,10 @@ export default function Gallery({ visible = true, onOpenPaint }: { visible?: boo
     const id = setInterval(refresh, 15000); // pick up new event submissions
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (err) toast.error(err);
+  }, [err, toast]);
 
   const upload = (file: File | undefined | null) => {
     if (!file || uploading) return;
@@ -141,7 +147,6 @@ export default function Gallery({ visible = true, onOpenPaint }: { visible?: boo
           />
         </div>
 
-        {err && <div className="banner err">{err}</div>}
         {visibleItems.length === 0 && <p className="muted">{t("gallery.empty")}</p>}
 
         <div className="gallery-scroll">

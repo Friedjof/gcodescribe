@@ -9,6 +9,7 @@ import { useLiveStream } from "../stream/useLiveStream";
 import Modal from "./Modal";
 import Segmented from "./Segmented";
 import OsmMapEditor from "./OsmMapEditor";
+import { useToasts } from "./Toasts";
 import {
   type GameId,
   type DotsDensity,
@@ -44,6 +45,7 @@ const COLORING_PATTERN_OPTIONS: Array<{ value: ColoringPatternMode; icon: string
 
 export default function Games({ visible = true, onOpenPaint }: { visible?: boolean; onOpenPaint: () => void }) {
   const { t } = useI18n();
+  const toast = useToasts();
   const [selected, setSelected] = useState<GameId>(ALL_GAMES[0].id);
   const [cal, setCal] = useState<Calibration | null>(null);
   const [busy, setBusy] = useState(false);
@@ -164,6 +166,14 @@ export default function Games({ visible = true, onOpenPaint }: { visible?: boole
     if (!globalLive.active || globalLive.sourceId === "games") return;
     live.start();
   }, [preview, cal, globalLive.active, globalLive.sourceId]);
+
+  useEffect(() => {
+    if (err) toast.error(err);
+  }, [err, toast]);
+
+  useEffect(() => {
+    if (live.error) toast.error(live.error);
+  }, [live.error, toast]);
 
   const updateDotsDensity = (density: DotsDensity) => {
     setDotsDensity(density);
@@ -810,7 +820,6 @@ export default function Games({ visible = true, onOpenPaint }: { visible?: boole
 
           {supported && cal && autoError && <div className="banner err">{autoError}</div>}
           {supported && !cal && <p className="muted">{t("games.loadingPlotArea")}</p>}
-          {err && <div className="banner err">{err}</div>}
         </aside>
       </div>
 
@@ -877,7 +886,6 @@ export default function Games({ visible = true, onOpenPaint }: { visible?: boole
               }
               className="games-modal-preview"
             />
-            {live.error && <div className="banner err live-error-inline">{live.error}</div>}
           </div>
         </Modal>
       )}

@@ -3,6 +3,7 @@ import { api, type GcodePreview, type GcodePreview3D, type Job } from "../api";
 import { useI18n } from "../i18n";
 import Modal from "./Modal";
 import Gcode3D from "./Gcode3D";
+import { useToasts } from "./Toasts";
 import { usePrompt } from "./dialogs";
 
 const jobThumbCache = new Map<string, GcodePreview>();
@@ -33,9 +34,11 @@ export default function Convert({
   const [onlyActiveProfile, setOnlyActiveProfile] = useState(false);
   const [query, setQuery] = useState("");
   const { t } = useI18n();
+  const toast = useToasts();
   const { prompt, PromptNode } = usePrompt();
 
   const openPreview = (name: string) => {
+    setErr(null);
     setPreview({ name, data: null });
     api
       .jobPreview3D(name)
@@ -52,6 +55,14 @@ export default function Convert({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [fullscreen]);
+
+  useEffect(() => {
+    if (msg) toast.success(msg);
+  }, [msg, toast]);
+
+  useEffect(() => {
+    if (err) toast.error(err);
+  }, [err, toast]);
 
   const refresh = () => api.listJobs().then(setJobs).catch(() => {});
   // The tab is kept mounted across switches; refresh whenever it becomes
@@ -247,8 +258,6 @@ export default function Convert({
             );
           })}
         </ul>
-        {msg && <div className="banner ok">{msg}</div>}
-        {err && <div className="banner err">{err}</div>}
       </section>
 
       {preview && (() => {

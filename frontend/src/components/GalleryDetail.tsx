@@ -12,6 +12,7 @@ import Modal from "./Modal";
 import PolylinePreview from "./PolylinePreview";
 import ScoreBadge from "./ScoreBadge";
 import Segmented from "./Segmented";
+import { useToasts } from "./Toasts";
 import { useConfirm, usePrompt } from "./dialogs";
 
 type View = "2d" | "3d" | "original";
@@ -35,6 +36,7 @@ export default function GalleryDetail({
   onOpenPaint: () => void;
 }) {
   const { t } = useI18n();
+  const toast = useToasts();
   const [view, setView] = useState<View>("2d");
   const [svg, setSvg] = useState<GalleryPreview | null>(null);
   const [gcode, setGcode] = useState<GcodePreview3D | null>(null);
@@ -64,6 +66,10 @@ export default function GalleryDetail({
   useEffect(() => {
     if (view === "3d" && !gcode) api.galleryGcode3D(item.id).then(setGcode).catch(fail);
   }, [view, gcode, item.id]);
+
+  useEffect(() => {
+    if (err) toast.error(err);
+  }, [err, toast]);
 
   const toPaint = () => {
     if (!svg || busy) return;
@@ -170,6 +176,10 @@ export default function GalleryDetail({
     if (view === "2d" && svg) live.start();
     if (view === "3d" && gcode) live.start();
   }, [autoLive, view, svg, gcode, live.activeSourceId]);
+
+  useEffect(() => {
+    if (live.error) toast.error(live.error);
+  }, [live.error, toast]);
 
   useEffect(() => {
     if (live.state === "live") live.sendSnapshot("snapshot");
@@ -340,8 +350,6 @@ export default function GalleryDetail({
               </dd>
             </dl>
           )}
-          {err && <div className="banner err">{err}</div>}
-          {live.error && <div className="banner err">{live.error}</div>}
         </div>
       </Modal>
       {fullscreen && gcode && (

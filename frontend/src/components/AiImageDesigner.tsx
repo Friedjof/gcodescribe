@@ -5,6 +5,7 @@ import { galleryPageObject } from "../paint/insertAsset";
 import Modal from "./Modal";
 import PolylinePreview from "./PolylinePreview";
 import Segmented from "./Segmented";
+import { useToasts } from "./Toasts";
 
 type RenderMode = "edges" | "handwriting" | "trace";
 type AspectRatio = "auto" | "1:1" | "3:4" | "4:3" | "16:9" | "9:16";
@@ -87,6 +88,7 @@ export default function AiImageDesigner({
   onOpenPaint: () => void;
 }) {
   const { t } = useI18n();
+  const toast = useToasts();
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [instructions, setInstructions] = useState("");
@@ -244,6 +246,10 @@ export default function AiImageDesigner({
     feedback
   );
 
+  useEffect(() => {
+    if (err) toast.error(err);
+  }, [err, toast]);
+
   return (
     <section className={`ai-designer ${visible ? "" : "hidden"}`.trim()}>
       {/* Left: controls column, mirroring the designer's tools card. */}
@@ -387,7 +393,6 @@ export default function AiImageDesigner({
           {busy && !selected ? t("ai.generating") : t("ai.generate")}
         </button>
         <p className="muted small ai-cost">{t("ai.costHint")}</p>
-        {err && <div className="banner err">{err}</div>}
       </aside>
 
       {editingInstructions && (

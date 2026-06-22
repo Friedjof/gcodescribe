@@ -245,6 +245,7 @@ function AuthShell({ children }: { children: ReactNode }) {
 
 function SetupForm({ onDone }: { onDone: () => void }) {
   const { t } = useI18n();
+  const toast = useToasts();
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
@@ -264,6 +265,10 @@ function SetupForm({ onDone }: { onDone: () => void }) {
     setErr(null);
     api.authSetupFinish(setup.setupId, code).then((r) => setRecovery(r.recoveryCodes)).catch((e) => setErr(String(e.message ?? e))).finally(() => setBusy(false));
   };
+
+  useEffect(() => {
+    if (err) toast.error(err);
+  }, [err, toast]);
 
   if (recovery) {
     return (
@@ -295,13 +300,13 @@ function SetupForm({ onDone }: { onDone: () => void }) {
           <button className="primary" disabled={busy} onClick={finish}>{t("auth.finishSetup")}</button>
         </div>
       )}
-      {err && <div className="banner err">{err}</div>}
     </AuthShell>
   );
 }
 
 function LoginForm({ username: initialUsername, onDone }: { username: string; onDone: () => void }) {
   const { t } = useI18n();
+  const toast = useToasts();
   const [username, setUsername] = useState(initialUsername);
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
@@ -319,6 +324,10 @@ function LoginForm({ username: initialUsername, onDone }: { username: string; on
       .finally(() => setBusy(false));
   };
 
+  useEffect(() => {
+    if (err) toast.error(err);
+  }, [err, toast]);
+
   return (
     <AuthShell>
       <h2>{t("auth.loginTitle")}</h2>
@@ -329,7 +338,6 @@ function LoginForm({ username: initialUsername, onDone }: { username: string; on
         <label className="checkline"><input type="checkbox" checked={useRecovery} onChange={(e) => setUseRecovery(e.target.checked)} />{t("auth.useRecovery")}</label>
         <button className="primary" disabled={busy} onClick={submit}>{t("auth.login")}</button>
       </div>
-      {err && <div className="banner err">{err}</div>}
     </AuthShell>
   );
 }

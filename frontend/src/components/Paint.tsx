@@ -268,6 +268,10 @@ export default function Paint({
   }, [visible, live.state]);
 
   useEffect(() => {
+    if (live.error) toast.error(live.error);
+  }, [live.error, toast]);
+
+  useEffect(() => {
     if (!visible || !cal || !page) return;
     if (!globalLive.active || globalLive.sourceId === "designer") return;
     live.start();
@@ -1289,7 +1293,6 @@ export default function Paint({
               viewRotation={viewRotation}
               onViewRotationChange={setViewRotation}
             />
-            {live.error && <div className="banner err live-error">{live.error}</div>}
           </div>
 
           <aside className="paint-tools-card">

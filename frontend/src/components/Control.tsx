@@ -3,6 +3,7 @@ import { api, type SerialPortCandidate } from "../api";
 import { useArrowKeys } from "../hooks";
 import { useI18n } from "../i18n";
 import Segmented from "./Segmented";
+import { useToasts } from "./Toasts";
 
 type Backend = { id: string; configured: boolean; online: boolean; active: boolean };
 
@@ -127,6 +128,7 @@ export default function Control({
   onAction: () => void;
 }) {
   const { t } = useI18n();
+  const toast = useToasts();
   const [step, setStep] = useState(10);
   const [limitPlot, setLimitPlot] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -137,7 +139,14 @@ export default function Control({
   const printing = job?.state?.toLowerCase?.().includes("printing");
   const paused = job?.state?.toLowerCase?.().includes("paused");
 
-  const run = (fn: () => Promise<any>) => fn().then(onAction).catch((e) => setErr(String(e.message)));
+  const run = (fn: () => Promise<any>) => {
+    setErr(null);
+    return fn().then(onAction).catch((e) => setErr(String(e.message)));
+  };
+
+  useEffect(() => {
+    if (err) toast.error(err);
+  }, [err, toast]);
 
   const jog = (x: number, y: number, z: number) =>
     run(() =>
@@ -222,7 +231,6 @@ export default function Control({
           </button>
           <span className="muted">{t("control.limitPlot")}</span>
         </label>
-        {err && <div className="banner err">{err}</div>}
       </section>
 
       <section className="card">

@@ -8,6 +8,7 @@ import type { TemplateSpec } from "../games/types";
 import { buildOsmMapTemplate } from "../games/osmMap";
 import GamePreviewSvg from "../games/PreviewSvg";
 import Modal from "./Modal";
+import { useToasts } from "./Toasts";
 
 const LAYERS: Array<{ id: OsmLayer; labelKey: string }> = [
   { id: "streets", labelKey: "games.osm.layer.streets" },
@@ -33,6 +34,7 @@ export default function OsmMapEditor({
   onInsert: (template: TemplateSpec) => void;
 }) {
   const { t } = useI18n();
+  const toast = useToasts();
   const [bounds, setBounds] = useState<Bounds | null>(null);
   const [layers, setLayers] = useState<OsmLayer[]>(["streets"]);
   const [detail, setDetail] = useState(0.55);
@@ -69,6 +71,10 @@ export default function OsmMapEditor({
     setPreview(null);
     setErr(null);
   };
+
+  useEffect(() => {
+    if (err) toast.error(err);
+  }, [err, toast]);
 
   return (
     <Modal
@@ -161,7 +167,6 @@ export default function OsmMapEditor({
                 <span>{t("games.osm.emptyPreview")}</span>
               </div>
             )}
-            {err && <div className="banner err">{err}</div>}
           </div>
         </section>
       </div>

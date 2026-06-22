@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type Calibration, type CalibrationProfileSummary } from "../api";
 import { useI18n } from "../i18n";
 import { useConfirm } from "./dialogs";
+import { useToasts } from "./Toasts";
 
 const FIELDS: { key: keyof Calibration; labelKey: string; unit: string; groupKey: string }[] = [
   { key: "bed_width", labelKey: "calibrate.bedWidth", unit: "mm", groupKey: "calibrate.groupArea" },
@@ -20,22 +21,16 @@ const FIELDS: { key: keyof Calibration; labelKey: string; unit: string; groupKey
 
 export default function Calibrate() {
   const { t } = useI18n();
+  const toast = useToasts();
   const [profiles, setProfiles] = useState<CalibrationProfileSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [cal, setCal] = useState<Calibration | null>(null);
   const [name, setName] = useState("");
   const [dirty, setDirty] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
   const { confirm, ConfirmNode } = useConfirm();
 
-  const flash = (m: string) => {
-    setMsg(m);
-    setErr(null);
-    setTimeout(() => setMsg(null), 3000);
-  };
-  const fail = (e: Error) => setErr(String(e.message));
+  const fail = (e: Error) => toast.error(String(e.message));
 
   const loadProfiles = () =>
     api.listProfiles().then((list) => {
@@ -84,7 +79,7 @@ export default function Calibrate() {
         setName(p.name);
         setCal(p.calibration);
         setDirty(false);
-        flash(t("profiles.saved"));
+        toast.success(t("profiles.saved"));
         return loadProfiles();
       })
       .catch(fail);
@@ -94,7 +89,7 @@ export default function Calibrate() {
     api
       .activateProfile(id)
       .then((p) => {
-        flash(t("profiles.activated", { name: p.name }));
+        toast.success(t("profiles.activated", { name: p.name }));
         return loadProfiles();
       })
       .catch(fail);
@@ -127,7 +122,7 @@ export default function Calibrate() {
     api
       .importProfile(file)
       .then(async (p) => {
-        flash(t("profiles.imported", { name: p.name }));
+        toast.success(t("profiles.imported", { name: p.name }));
         await loadProfiles();
         if (await confirmDiscard()) openProfile(p.id);
       })
@@ -137,7 +132,7 @@ export default function Calibrate() {
     api
       .importAllProfiles(file)
       .then((r) => {
-        flash(t("profiles.importedAll", { count: String(r.imported.length + r.replaced.length) }));
+        toast.success(t("profiles.importedAll", { count: String(r.imported.length + r.replaced.length) }));
         return loadProfiles();
       })
       .catch(fail);
@@ -146,7 +141,7 @@ export default function Calibrate() {
     api
       .importCalibration(file)
       .then(() => {
-        flash(t("calibrate.imported", { name: file.name }));
+        toast.success(t("calibrate.imported", { name: file.name }));
         // The XML import updates the *active* profile's calibration.
         return loadProfiles().then((list) => {
           const active = list.find((p) => p.active);
@@ -339,8 +334,6 @@ export default function Calibrate() {
                 {filePicker(t("common.importXml"), ".xml,application/xml,text/xml", importCalibrationXml)}
               </div>
             </div>
-            {msg && <div className="banner ok">{msg}</div>}
-            {err && <div className="banner err">{err}</div>}
         </section>
       </div>
     </div>

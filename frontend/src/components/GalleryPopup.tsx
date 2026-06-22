@@ -15,6 +15,7 @@ import Modal from "./Modal";
 import Segmented from "./Segmented";
 import PolylinePreview from "./PolylinePreview";
 import ScoreBadge from "./ScoreBadge";
+import { useToasts } from "./Toasts";
 
 type UploaderFilter = "all" | GalleryUploader;
 type RenderMode = "auto" | "vector" | "trace" | "edges" | "hatch" | "lines" | "dots" | "handwriting";
@@ -44,6 +45,7 @@ export default function GalleryPopup({
   onPlotted?: () => void;
 }) {
   const { t } = useI18n();
+  const toast = useToasts();
   const [items, setItems] = useState<GalleryItem[]>([]);
   const [thumbs, setThumbs] = useState<Record<string, GallerySvg>>({});
   const [filter, setFilter] = useState<UploaderFilter>("all");
@@ -70,6 +72,14 @@ export default function GalleryPopup({
     load();
     loadThumbs();
   }, []);
+
+  useEffect(() => {
+    if (msg) toast.success(msg);
+  }, [msg, toast]);
+
+  useEffect(() => {
+    if (err) toast.error(err);
+  }, [err, toast]);
 
   const q = query.trim().toLowerCase();
   const visible = items.filter(
@@ -244,9 +254,6 @@ export default function GalleryPopup({
               </>
             )}
           </div>
-
-          {msg && <div className="banner ok">{msg}</div>}
-          {err && <div className="banner err">{err}</div>}
 
           <div
             className={`gallery-popup-grid ${dragOver ? "drag-over" : ""}`}

@@ -1,7 +1,8 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, type GalleryItem } from "../api";
 import { useI18n } from "../i18n";
 import ScoreBadge from "./ScoreBadge";
+import { useToasts } from "./Toasts";
 
 const MAX_UPLOAD_MB = 15;
 const ACCEPT = ".svg,.png,.jpg,.jpeg";
@@ -10,6 +11,7 @@ const ALLOWED = /\.(svg|png|jpe?g)$/i;
 /** Public submission page served at /upload during events. */
 export default function Upload() {
   const { t } = useI18n();
+  const toast = useToasts();
   const [title, setTitle] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -46,6 +48,10 @@ export default function Upload() {
       .catch((e) => setErr(String(e.message ?? e)))
       .finally(() => setBusy(false));
   };
+
+  useEffect(() => {
+    if (err) toast.error(err);
+  }, [err, toast]);
 
   return (
     <div className="upload-page">
@@ -127,8 +133,6 @@ export default function Upload() {
               </>
             )}
           </div>
-
-          {err && <div className="banner err">{err}</div>}
 
           <button className="primary upload-submit" disabled={!file || busy} onClick={submit}>
             {busy ? t("upload.uploading") : t("upload.submit")}
