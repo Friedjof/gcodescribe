@@ -23,7 +23,7 @@ import {
 } from "../paint/geometry";
 import { useI18n } from "../i18n";
 
-export type Tool = "select" | "pen" | "line" | "rect" | "circle" | "semicircle" | "text";
+export type Tool = "select" | "pen" | "line" | "rect" | "maskRect" | "circle" | "semicircle" | "text";
 
 /**
  * Clamp a transform so the object's world bounding box stays within [0,W]×[0,H].
@@ -63,7 +63,7 @@ function shapeWorld(tool: Tool, pts: Pt[]): Pt[][] {
   const [a, b] = pts;
   if (!b) return [];
   if (tool === "line") return [lineWorld(a, b)];
-  if (tool === "rect") return [rectWorld(a, b)];
+  if (tool === "rect" || tool === "maskRect") return [rectWorld(a, b)];
   if (tool === "circle") return [ellipseWorld(a, b)];
   if (tool === "semicircle") return [semicircleWorld(a, b)];
   return [];
@@ -161,8 +161,12 @@ export default function PaintCanvas({
   const [guides, setGuides] = useState<Guide[]>([]);
   const [view, setView] = useState<ViewBox>(baseView);
   const [spaceDown, setSpaceDown] = useState(false);
+  const [panning, setPanning] = useState(false);
   const drag = useRef<Drag | null>(null);
   const pan = useRef<{ pointerId: number; startClient: Pt; startView: ViewBox } | null>(null);
+  // Tracks whether the current right-drag actually moved — used to tell a pan
+  // apart from a plain right-click (which should still open the context menu).
+  const panMoved = useRef(false);
   const zoom = baseView.w / view.w;
   const STROKE = (S * 0.0045) / zoom;
   const HANDLE = (S * 0.016) / zoom;
@@ -215,8 +219,6 @@ export default function PaintCanvas({
       });
     });
   };
-
-  const resetZoom = () => setView(baseView);
 
   // Wrappers that enforce the hard plot-area boundary before every transform write.
   const updateSafe = (id: string, t: Transform) => {
@@ -293,17 +295,19 @@ export default function PaintCanvas({
   };
 
   const onWheel = (e: React.WheelEvent) => {
-    if (!(e.ctrlKey || e.metaKey)) return;
     e.preventDefault();
     const factor = Math.exp(-e.deltaY * 0.0015);
     zoomAt(factor, rotatePoint(clientToMM(e.clientX, e.clientY), W, H, viewRotation));
   };
 
   const onSvgDown = (e: React.PointerEvent) => {
-    if (e.button === 0 && spaceDown) {
+    // Right button (or space + left) pans the zoomed canvas.
+    if (e.button === 2 || (e.button === 0 && spaceDown)) {
       e.preventDefault();
+      panMoved.current = false;
       pan.current = { pointerId: e.pointerId, startClient: [e.clientX, e.clientY], startView: view };
       svgRef.current!.setPointerCapture(e.pointerId);
+      setPanning(true);
       return;
     }
     if (tool === "select") {
@@ -329,8 +333,11 @@ export default function PaintCanvas({
       const svg = svgRef.current;
       if (!svg) return;
       const rect = svg.getBoundingClientRect();
-      const dx = ((e.clientX - pan.current.startClient[0]) / rect.width) * pan.current.startView.w;
-      const dy = ((e.clientY - pan.current.startClient[1]) / rect.height) * pan.current.startView.h;
+      const dxPx = e.clientX - pan.current.startClient[0];
+      const dyPx = e.clientY - pan.current.startClient[1];
+      if (Math.hypot(dxPx, dyPx) > 3) panMoved.current = true;
+      const dx = (dxPx / rect.width) * pan.current.startView.w;
+      const dy = (dyPx / rect.height) * pan.current.startView.h;
       setView(clampView({ ...pan.current.startView, x: pan.current.startView.x - dx, y: pan.current.startView.y - dy }));
       return;
     }
@@ -486,6 +493,7 @@ export default function PaintCanvas({
     svgRef.current!.releasePointerCapture?.(e.pointerId);
     if (pan.current?.pointerId === e.pointerId) {
       pan.current = null;
+      setPanning(false);
       return;
     }
     if (marquee) {
@@ -520,7 +528,8 @@ export default function PaintCanvas({
           const { local, cx, cy } = localize(world);
           onAdd({
             id: crypto.randomUUID(),
-            type: draft.tool,
+            type: draft.tool === "maskRect" ? "mask-rect" : draft.tool,
+            data: draft.tool === "maskRect" ? { mask: "erase" } : undefined,
             cachedPolylines: local,
             transform: { x: cx, y: cy, rotation: 0, scale: 1 },
             plotted: false,
@@ -534,8 +543,8 @@ export default function PaintCanvas({
   };
 
   const startMove = (e: React.PointerEvent, obj: SceneObject) => {
-    e.stopPropagation();
     if (e.button !== 0) return;
+    e.stopPropagation();
     let ids = selectedIds;
     const targetIds = objectSelectionIds(obj);
     const additive = e.shiftKey || e.ctrlKey || e.metaKey;
@@ -584,6 +593,8 @@ export default function PaintCanvas({
   const openContextMenu = (e: React.MouseEvent, obj: SceneObject) => {
     e.preventDefault();
     e.stopPropagation();
+    // A right-drag pan also ends in a contextmenu event — don't open the menu then.
+    if (panMoved.current) { panMoved.current = false; return; }
     const targetIds = objectSelectionIds(obj);
     const ids = selectedIds.includes(obj.id) ? selectedIds : targetIds;
     if (!selectedIds.includes(obj.id)) onSelect(ids);
@@ -591,6 +602,7 @@ export default function PaintCanvas({
   };
 
   const startResize = (e: React.PointerEvent, obj: SceneObject, edge: ResizeEdge) => {
+    if (e.button !== 0) return;
     e.stopPropagation();
     onEditStart();
     svgRef.current!.setPointerCapture(e.pointerId);
@@ -606,6 +618,7 @@ export default function PaintCanvas({
   };
 
   const startGroupScale = (e: React.PointerEvent, ids: string[], center: Pt) => {
+    if (e.button !== 0) return;
     e.stopPropagation();
     onEditStart();
     svgRef.current!.setPointerCapture(e.pointerId);
@@ -624,6 +637,7 @@ export default function PaintCanvas({
   };
 
   const startRotate = (e: React.PointerEvent, obj: SceneObject, center: Pt) => {
+    if (e.button !== 0) return;
     e.stopPropagation();
     onEditStart();
     svgRef.current!.setPointerCapture(e.pointerId);
@@ -680,31 +694,31 @@ export default function PaintCanvas({
 
   return (
     <div className="paint-canvas">
-      <button
-        className="canvas-rotate-button"
-        type="button"
-        onClick={() => onViewRotationChange(((viewRotation + 90) % 360) as ViewRotation)}
-        title="Canvas-Ansicht drehen (Plot-Koordinaten bleiben unverändert)"
-      >
-        ↻ {viewRotation}°
-      </button>
       <div className="paint-zoom-controls">
         <button className="ghost tiny" type="button" title={t("paint.zoomOut")} onClick={() => zoomAt(1 / 1.2)}>−</button>
         <span>{t("paint.zoomLevel", { pct: String(Math.round(zoom * 100)) })}</span>
         <button className="ghost tiny" type="button" title={t("paint.zoomIn")} onClick={() => zoomAt(1.2)}>+</button>
-        <button className="ghost tiny" type="button" title={t("paint.zoomReset")} onClick={resetZoom}>↺</button>
+        <button
+          className="ghost tiny canvas-rotate-button"
+          type="button"
+          title={t("paint.rotateView")}
+          onClick={() => onViewRotationChange(((viewRotation + 90) % 360) as ViewRotation)}
+        >
+          ↻ {viewRotation}°
+        </button>
       </div>
       <svg
         ref={svgRef}
         viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
         preserveAspectRatio="xMidYMid meet"
-        style={{ cursor: spaceDown ? "grab" : tool === "select" ? "default" : "crosshair", touchAction: "none" }}
+        style={{ cursor: panning ? "grabbing" : spaceDown ? "grab" : tool === "select" ? "default" : "crosshair", touchAction: "none" }}
         onWheel={onWheel}
         onPointerDownCapture={emitClick}
         onPointerDown={onSvgDown}
         onPointerMove={onSvgMove}
         onPointerUp={onSvgUp}
         onPointerLeave={() => onCursorMove?.({ x: 0, y: 0, inside: false, tool })}
+        onContextMenu={(e) => e.preventDefault()}
         onDragOver={(e) => e.preventDefault()}
         onDrop={onDrop}
       >
@@ -726,13 +740,14 @@ export default function PaintCanvas({
         <rect x={0} y={0} width={W} height={H} fill="url(#pc-grid-major)" />
         <g className="canvas-orientation-marker">
           <path d={`M ${W / 2 - S * 0.055} ${-pad * 0.45} L ${W / 2} ${-pad * 0.7} L ${W / 2 + S * 0.055} ${-pad * 0.45}`} />
-          <text x={W / 2} y={-pad * 0.14} textAnchor="middle">OBEN</text>
+          <text x={W / 2} y={-pad * 0.14} textAnchor="middle">{t("paint.orientationTop")}</text>
         </g>
 
         {/* objects */}
         {objectsByZ.map((obj) => {
           const t = obj.transform ?? IDENTITY;
           const strokeScale = Math.max(t.scaleX ?? t.scale, t.scaleY ?? t.scale);
+          const isMask = obj.type === "mask-rect" || obj.data?.mask === "erase";
           return (
             <g
               key={obj.id}
@@ -740,10 +755,19 @@ export default function PaintCanvas({
               opacity={obj.plotted ? 0.25 : 1}
               style={{ pointerEvents: "none" }}
             >
-              {/* One merged path per object — all lines share the same stroke. */}
-              <path d={toMultiPath((obj.cachedPolylines ?? []) as Pt[][])} fill="none"
-                stroke={obj.plotted ? "var(--muted)" : "var(--busy)"}
-                strokeWidth={STROKE / strokeScale} strokeLinejoin="round" strokeLinecap="round" />
+              {isMask ? (
+                <path d={toMultiPath((obj.cachedPolylines ?? []) as Pt[][])}
+                  fill="#101013" fillOpacity={0.92}
+                  stroke={selectedIds.includes(obj.id) ? "var(--accent)" : "rgba(255,255,255,0.45)"}
+                  strokeWidth={STROKE / strokeScale}
+                  strokeDasharray={`${(STROKE * 2) / strokeScale} ${STROKE / strokeScale}`}
+                  strokeLinejoin="round" strokeLinecap="round" />
+              ) : (
+                // One merged path per object — all lines share the same stroke.
+                <path d={toMultiPath((obj.cachedPolylines ?? []) as Pt[][])} fill="none"
+                  stroke={obj.plotted ? "var(--muted)" : "var(--busy)"}
+                  strokeWidth={STROKE / strokeScale} strokeLinejoin="round" strokeLinecap="round" />
+              )}
             </g>
           );
         })}
