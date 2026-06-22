@@ -85,7 +85,8 @@ class AiImageService:
             ref_bytes, ref_name, ref_mime = None, "prompt", ""
         else:
             raise AiImageError(
-                "unsupported_file", "Kein Referenzbild oder Prompt — Bild hochladen oder Text eingeben."
+                "unsupported_file",
+                "Kein Referenzbild oder Prompt — Bild hochladen oder Text eingeben.",
             )
 
         prompt = compose_prompt(

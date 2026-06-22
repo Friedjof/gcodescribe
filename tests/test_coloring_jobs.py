@@ -200,7 +200,10 @@ class TestColorGcode:
 
     def test_coloring_session_persists_on_page(self, client):
         page_id = _page(client)
-        coloring = {"assignments": {"3_abc": ["black", None]}, "order": ["red", "black", "blue", "green"]}
+        coloring = {
+            "assignments": {"3_abc": ["black", None]},
+            "order": ["red", "black", "blue", "green"],
+        }
         r = client.put(f"/api/pages/{page_id}", json={"coloring": coloring})
         assert r.status_code == 200
         got = client.get(f"/api/pages/{page_id}").json()

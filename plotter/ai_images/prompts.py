@@ -89,7 +89,8 @@ EFFECT_PROMPTS = {
     "comic": (
         "Effect direction: clean comic-book line art. Use bold readable silhouettes, crisp contour "
         "lines, simplified facial/features shapes, and slightly emphasized expressions or poses. "
-        "Make the drawing graphic and immediately legible, like inked comic panels before coloring. "
+        "Make the drawing graphic and immediately legible, like inked comic panels before "
+        "coloring. "
         "Do not add color, gray screentones, halftone dots, speech bubbles, background effects, or "
         "filled shadow masses unless the selected render mode explicitly asks for solid shapes."
     ),
@@ -97,7 +98,8 @@ EFFECT_PROMPTS = {
         "Effect direction: recognizable caricature. Identify the subject's most characteristic "
         "visual traits — for example face shape, hairstyle, glasses, nose, posture, or distinctive "
         "objects — and exaggerate those selectively while keeping the overall identity clear. Keep "
-        "the exaggeration friendly and readable, not grotesque. Use simple confident black outlines "
+        "the exaggeration friendly and readable, not grotesque. Use simple confident black "
+        "outlines "
         "with minimal interior detail so the caricature remains easy to trace with a pen plotter."
     ),
     "childlike": (
@@ -121,22 +123,27 @@ TEXT_PROMPTS = {
     "none": "",
     "handwriting": (
         "Lettering direction: natural handwritten text. If the image contains words or the user "
-        "asks for lettering, draw the letters as casual human handwriting made from clean black pen "
-        "strokes. Keep each letter large enough to survive vectorization, with clear spacing between "
-        "letters and words. Avoid tiny text, gray anti-aliasing, filled calligraphy blobs, or overly "
+        "asks for lettering, draw the letters as casual human handwriting made from clean black "
+        "pen strokes. Keep each letter large enough to survive vectorization, with clear spacing "
+        "between letters and words. Avoid tiny text, gray anti-aliasing, filled calligraphy "
+        "blobs, or overly "
         "decorative flourishes that would become noisy plotter paths."
     ),
     "cursive": (
         "Lettering direction: neat cursive script. Render any requested text as elegant connected "
-        "handwriting with smooth flowing joins, consistent slant, and generous spacing. Keep strokes "
-        "simple and plotter-friendly: mostly single continuous black lines, readable at small scale, "
-        "with no shaded downstrokes, no textured ink, and no excessive loops that clutter the design."
+        "handwriting with smooth flowing joins, consistent slant, and generous spacing. Keep "
+        "strokes simple and plotter-friendly: mostly single continuous black lines, readable at "
+        "small scale, "
+        "with no shaded downstrokes, no textured ink, and no excessive loops that clutter the "
+        "design."
     ),
     "messy": (
         "Lettering direction: messy handwritten text. Make the text look rushed, irregular, and "
-        "human: uneven baseline, variable letter sizes, slightly inconsistent spacing, and imperfect "
+        "human: uneven baseline, variable letter sizes, slightly inconsistent spacing, and "
+        "imperfect "
         "forms. It should still remain decipherable and suitable for plotting. Do not turn it into "
-        "dense scribbles, overlapping black masses, or unreadable micro-text; use clean black strokes "
+        "dense scribbles, overlapping black masses, or unreadable micro-text; use clean black "
+        "strokes "
         "only."
     ),
     "child": (
@@ -148,13 +155,15 @@ TEXT_PROMPTS = {
     "serif": (
         "Lettering direction: classic serif typography. Render any text in a readable Times-like "
         "serif style with clear letterforms, moderate contrast, and small but simple serifs. Adapt "
-        "the type so it remains plotter-friendly: avoid very thin hairlines, dense filled text, tiny "
+        "the type so it remains plotter-friendly: avoid very thin hairlines, dense filled text, "
+        "tiny "
         "captions, drop shadows, outlines-within-outlines, or ornamental type effects."
     ),
     "sans": (
         "Lettering direction: clean modern sans-serif typography. Render any text with simple, "
         "geometric, highly legible letterforms similar to Helvetica or Arial. Keep stroke widths "
-        "consistent, spacing generous, and forms uncluttered. Avoid tiny text, filled heavy blocks, "
+        "consistent, spacing generous, and forms uncluttered. Avoid tiny text, filled heavy "
+        "blocks, "
         "shadows, gradients, decorative cuts, and anti-aliased gray edges; preserve clean black-on-"
         "white plotter readability."
     ),
