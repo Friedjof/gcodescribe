@@ -277,6 +277,38 @@ export interface GalleryPreview {
   height: number;
 }
 
+// --- AI image designer ---
+/** Feature-gating + capabilities. Disabled responses carry only `enabled`. */
+export interface AiImageStatus {
+  enabled: boolean;
+  model?: string;
+  apiMode?: string;
+  maxInputMb?: number;
+  size?: string;
+  supportsFeedback?: boolean;
+  supportsStreaming?: boolean;
+}
+
+export interface AiImageQuality {
+  lineCount: number;
+  pointCount: number;
+  shortLineCount: number;
+  complexity: "good" | "medium" | "bad";
+  warnings: string[];
+}
+
+/** One generated variant: the persisted gallery item plus its traced preview,
+ * the source image URL, the prompt used and a plottability assessment. */
+export interface AiImageResult {
+  variantId: string;
+  parentVariantId: string | null;
+  galleryItem: GalleryItem;
+  preview: GalleryPreview;
+  imageUrl: string;
+  prompt: { style: string; instructions: string; feedback: string };
+  quality: AiImageQuality;
+}
+
 /** Live plottability rating of a paint page (same scale as the gallery). */
 export interface PageScore {
   score: GalleryScore | null;
@@ -719,6 +751,30 @@ export const api = {
       method: "POST",
     }),
   galleryDelete: (id: string) => req(`/api/gallery/${id}`, { method: "DELETE" }),
+
+  // --- AI image designer ---
+  aiImageStatus: () => req<AiImageStatus>("/api/ai-images/status"),
+  aiImageGenerate: (
+    file: File,
+    opts?: {
+      instructions?: string;
+      feedback?: string;
+      baseVariantId?: string;
+      title?: string;
+      renderMode?: string;
+      detail?: number;
+    }
+  ) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    if (opts?.instructions) fd.append("instructions", opts.instructions);
+    if (opts?.feedback) fd.append("feedback", opts.feedback);
+    if (opts?.baseVariantId) fd.append("base_variant_id", opts.baseVariantId);
+    if (opts?.title) fd.append("title", opts.title);
+    if (opts?.renderMode) fd.append("render_mode", opts.renderMode);
+    if (opts?.detail != null) fd.append("detail", String(opts.detail));
+    return req<AiImageResult>("/api/ai-images/generate", { method: "POST", body: fd });
+  },
 
   textPolylines: (text: string, font: string, size: number, connectSpaces = false) =>
     req<{ polylines: number[][][] }>("/api/paint/text-polylines", {

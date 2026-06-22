@@ -12,6 +12,7 @@ from ..printer import PrinterError, get_printer_client, use_serial
 from ..services import ServiceError
 from .auth import require_admin
 from .routes import (
+    ai_images,
     auth,
     calibration,
     coloring_pages,
@@ -52,6 +53,7 @@ def create_app() -> FastAPI:
     app.include_router(gallery.router, prefix="/api")
     app.include_router(stream.router, prefix="/api")
     protected_modules = (
+        ai_images,
         calibration,
         coloring_pages,
         jobs,

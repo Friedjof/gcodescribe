@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { api, type AuthSession, type AuthSetupStart } from "./api";
+import { api, type AiImageStatus, type AuthSession, type AuthSetupStart } from "./api";
+import AiImageDesigner from "./components/AiImageDesigner";
 import Convert from "./components/Convert";
 import Paint from "./components/Paint";
 import Games from "./components/Games";
@@ -11,7 +12,7 @@ import Segmented from "./components/Segmented";
 import { useToasts } from "./components/Toasts";
 import { useI18n } from "./i18n";
 
-type Tab = "paint" | "games" | "gallery" | "convert" | "paper" | "calibrate" | "control";
+type Tab = "paint" | "games" | "gallery" | "ai" | "convert" | "paper" | "calibrate" | "control";
 
 export default function App() {
   return (
@@ -24,7 +25,7 @@ export default function App() {
 // Heavy, stateful tabs: mount once on first visit and keep them alive (hidden)
 // so switching back is instant instead of refetching + rebuilding the canvas.
 // The lighter list/state tabs stay unmount-on-switch so they reflect fresh data.
-const KEEP_ALIVE: Tab[] = ["paint", "games", "gallery", "convert", "paper", "calibrate"];
+const KEEP_ALIVE: Tab[] = ["paint", "games", "gallery", "ai", "convert", "paper", "calibrate"];
 const PLOT_PROGRESS_THRESHOLDS = [25, 50, 90, 100];
 
 function AdminApp() {
@@ -33,6 +34,7 @@ function AdminApp() {
   const [tab, setTab] = useState<Tab>("paint");
   const [visited, setVisited] = useState<Set<Tab>>(() => new Set<Tab>(["paint"]));
   const [status, setStatus] = useState<any>(null);
+  const [aiStatus, setAiStatus] = useState<AiImageStatus | null>(null);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">(() =>
     typeof Notification === "undefined" ? "unsupported" : Notification.permission
   );
@@ -46,6 +48,12 @@ function AdminApp() {
   useEffect(() => {
     setVisited((prev) => (prev.has(tab) ? prev : new Set(prev).add(tab)));
   }, [tab]);
+
+  // The AI Designer tab is server-gated: only shown when the backend reports a
+  // configured OpenAI key (or fake mode). Checked once after login.
+  useEffect(() => {
+    api.aiImageStatus().then(setAiStatus).catch(() => setAiStatus(null));
+  }, []);
 
   const notificationsActive = notificationPermission === "granted";
   const refreshStatus = () => api.octoStatus().then(setStatus).catch(() => setStatus(null));
@@ -133,6 +141,7 @@ function AdminApp() {
     { value: "paint", label: t("tabs.paint") },
     { value: "games", label: t("tabs.games") },
     { value: "gallery", label: t("tabs.gallery") },
+    ...(aiStatus?.enabled ? [{ value: "ai" as Tab, label: t("tabs.ai") }] : []),
     { value: "convert", label: t("tabs.jobs") },
     { value: "paper", label: t("tabs.paper") },
     { value: "calibrate", label: t("tabs.calibrate") },
@@ -175,6 +184,9 @@ function AdminApp() {
               {value === "paint" && <Paint visible={tab === "paint"} status={status} onAction={refreshStatus} />}
               {value === "games" && <Games visible={tab === "games"} onOpenPaint={() => setTab("paint")} />}
               {value === "gallery" && <Gallery visible={tab === "gallery"} onOpenPaint={() => setTab("paint")} />}
+              {value === "ai" && (
+                <AiImageDesigner status={aiStatus} visible={tab === "ai"} onOpenPaint={() => setTab("paint")} />
+              )}
               {value === "paper" && (
                 <Paper status={status} onAction={refreshStatus} visible={tab === "paper"} />
               )}
