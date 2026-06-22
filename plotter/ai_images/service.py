@@ -11,7 +11,15 @@ from ..services.upload_validation import UnsupportedUpload, UploadTooLarge
 from .client import AiImageRequest, make_client
 from .config import ALLOWED_RENDER_MODES, DEFAULT_RENDER_MODE, AiImageConfig
 from .errors import AiImageError
-from .prompts import compose_prompt, style_prompt_for, style_prompt_hash
+from .prompts import (
+    DEFAULT_EFFECT,
+    DEFAULT_TEXT,
+    compose_prompt,
+    normalize_effect,
+    normalize_text,
+    style_prompt_for,
+    style_prompt_hash,
+)
 from .quality import assess
 
 # Input image types accepted as a reference. PDFs/Office docs are out for the
@@ -44,12 +52,16 @@ class AiImageService:
         title: str = "",
         render_mode: str = DEFAULT_RENDER_MODE,
         detail: int = 2,
+        effect: str = DEFAULT_EFFECT,
+        text_style: str = DEFAULT_TEXT,
     ) -> dict:
         if not self.config.enabled:
             raise AiImageError("not_configured", "AI Designer ist nicht konfiguriert.")
 
         render_mode = render_mode if render_mode in ALLOWED_RENDER_MODES else DEFAULT_RENDER_MODE
         detail = max(1, min(int(detail), 3))
+        effect = normalize_effect(effect)
+        text_style = normalize_text(text_style)
 
         # Pick the reference image: an explicit upload wins; otherwise a feedback
         # request iterates on the parent variant's own AI output.
@@ -66,7 +78,7 @@ class AiImageService:
                 "unsupported_file", "Kein Referenzbild — Bild hochladen oder Variante wählen."
             )
 
-        prompt = compose_prompt(instructions, feedback, render_mode)
+        prompt = compose_prompt(instructions, feedback, render_mode, effect, text_style)
         client = make_client(self.config)
         output = client.generate_plotter_image(
             AiImageRequest(
@@ -114,6 +126,8 @@ class AiImageService:
             "feedback": feedback.strip(),
             "renderMode": render_mode,
             "detail": detail,
+            "effect": effect,
+            "textStyle": text_style,
             "created": time.time(),
         }
         self._attach_ai_meta(item["id"], ai_meta)
@@ -155,6 +169,8 @@ class AiImageService:
         instructions = ai.get("userInstructions", "")
         feedback = ai.get("feedback", "")
         mode = ai.get("renderMode", DEFAULT_RENDER_MODE)
+        effect = ai.get("effect", DEFAULT_EFFECT)
+        text_style = ai.get("textStyle", DEFAULT_TEXT)
         return {
             "variantId": ai.get("variantId"),
             "parentVariantId": ai.get("parentVariantId"),
@@ -167,7 +183,7 @@ class AiImageService:
                 "instructions": instructions,
                 "feedback": feedback,
                 # The exact, full prompt string that was sent to the model.
-                "text": compose_prompt(instructions, feedback, mode),
+                "text": compose_prompt(instructions, feedback, mode, effect, text_style),
             },
             "quality": assess(preview),
         }

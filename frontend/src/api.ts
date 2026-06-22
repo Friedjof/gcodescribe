@@ -288,6 +288,8 @@ export interface AiImageStatus {
   supportsFeedback?: boolean;
   supportsStreaming?: boolean;
   stylePrompts?: Record<string, string>;
+  effectPrompts?: Record<string, string>;
+  textPrompts?: Record<string, string>;
 }
 
 export interface AiImageQuality {
@@ -769,6 +771,8 @@ export const api = {
       title?: string;
       renderMode?: string;
       detail?: number;
+      effect?: string;
+      textStyle?: string;
     }
   ) => {
     const fd = new FormData();
@@ -780,6 +784,8 @@ export const api = {
     if (opts?.title) fd.append("title", opts.title);
     if (opts?.renderMode) fd.append("render_mode", opts.renderMode);
     if (opts?.detail != null) fd.append("detail", String(opts.detail));
+    if (opts?.effect) fd.append("effect", opts.effect);
+    if (opts?.textStyle) fd.append("text_style", opts.textStyle);
     return req<AiImageResult>("/api/ai-images/generate", { method: "POST", body: fd });
   },
   aiImageRerender: (itemId: string, renderMode: string, detail: number) =>

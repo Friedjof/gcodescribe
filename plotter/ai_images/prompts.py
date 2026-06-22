@@ -69,9 +69,45 @@ STYLE_PROMPTS = {
 
 DEFAULT_RENDER_MODE = "edges"
 
+# Optional effect/look fragments, combined into the prompt. "none" adds nothing.
+EFFECT_PROMPTS = {
+    "none": "",
+    "realistic": "Keep the proportions and features realistic and true to the reference.",
+    "artistic": "Give it an expressive, artistic interpretation with confident, stylized strokes.",
+    "comic": "Render it in a bold comic-book style with clear, slightly exaggerated outlines.",
+    "caricature": (
+        "Exaggerate the most characteristic features like a caricature, "
+        "while keeping the subject clearly recognizable."
+    ),
+    "childlike": "Draw it in a naive, childlike hand-drawn style with simple, playful shapes.",
+    "minimalist": "Reduce it to a minimalist drawing using only the few most essential lines.",
+}
+
+# Optional lettering/typography fragments for any text in the image.
+TEXT_PROMPTS = {
+    "none": "",
+    "handwriting": "Render any text or lettering as natural human handwriting.",
+    "cursive": "Render any text or lettering as neat, elegant cursive handwriting.",
+    "messy": "Render any text or lettering as messy, barely legible handwriting.",
+    "child": "Render any text or lettering as clumsy childlike handwriting.",
+    "serif": "Render any text or lettering in a classic serif typeface like Times New Roman.",
+    "sans": "Render any text or lettering in a clean, modern sans-serif typeface.",
+}
+
+DEFAULT_EFFECT = "none"
+DEFAULT_TEXT = "none"
+
 
 def style_prompt_for(render_mode: str) -> str:
     return STYLE_PROMPTS.get(render_mode, STYLE_PROMPTS[DEFAULT_RENDER_MODE])
+
+
+def normalize_effect(effect: str) -> str:
+    return effect if effect in EFFECT_PROMPTS else DEFAULT_EFFECT
+
+
+def normalize_text(text_style: str) -> str:
+    return text_style if text_style in TEXT_PROMPTS else DEFAULT_TEXT
 
 
 def style_prompt_hash(render_mode: str = DEFAULT_RENDER_MODE) -> str:
@@ -88,16 +124,26 @@ def _clip(text: str, limit: int, label: str) -> str:
 
 
 def compose_prompt(
-    instructions: str = "", feedback: str = "", render_mode: str = DEFAULT_RENDER_MODE
+    instructions: str = "",
+    feedback: str = "",
+    render_mode: str = DEFAULT_RENDER_MODE,
+    effect: str = DEFAULT_EFFECT,
+    text_style: str = DEFAULT_TEXT,
 ) -> str:
-    """Final model prompt: the mode's style + optional user additions.
+    """Final model prompt: the mode's style + optional effect/text/look fragments
+    + user additions.
 
-    The mode-specific style is always kept; user instructions and feedback are
-    appended so the user can refine without losing the plotter constraints.
+    The mode-specific style is always kept; the effect and text fragments (each
+    "none" by default adds nothing), user instructions and feedback are appended
+    so the user can refine without losing the plotter constraints.
     """
     instructions = _clip(instructions, MAX_INSTRUCTIONS_LEN, "Zusatzanweisungen")
     feedback = _clip(feedback, MAX_FEEDBACK_LEN, "Feedback")
     parts = [style_prompt_for(render_mode)]
+    if EFFECT_PROMPTS.get(effect):
+        parts.append(EFFECT_PROMPTS[effect])
+    if TEXT_PROMPTS.get(text_style):
+        parts.append(TEXT_PROMPTS[text_style])
     if instructions:
         parts.append(f"User instructions: {instructions}")
     if feedback:

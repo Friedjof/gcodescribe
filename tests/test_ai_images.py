@@ -14,7 +14,12 @@ from plotter.ai_images import client as ai_client
 from plotter.ai_images.client import OpenAiImageApiClient
 from plotter.ai_images.config import load_config
 from plotter.ai_images.errors import AiImageError
-from plotter.ai_images.prompts import STYLE_PROMPTS, compose_prompt
+from plotter.ai_images.prompts import (
+    EFFECT_PROMPTS,
+    STYLE_PROMPTS,
+    TEXT_PROMPTS,
+    compose_prompt,
+)
 from plotter.ai_images.service import AiImageService
 from plotter.services.gallery import GalleryService
 from plotter.web.app import create_app
@@ -140,6 +145,18 @@ def test_compose_prompt_rejects_overlong_instructions():
         compose_prompt("x" * 5000)
 
 
+def test_compose_prompt_combines_effect_and_text():
+    out = compose_prompt(render_mode="edges", effect="comic", text_style="serif")
+    assert STYLE_PROMPTS["edges"] in out
+    assert EFFECT_PROMPTS["comic"] in out
+    assert TEXT_PROMPTS["serif"] in out
+
+
+def test_compose_prompt_none_adds_no_fragment():
+    out = compose_prompt(render_mode="edges", effect="none", text_style="none")
+    assert out == STYLE_PROMPTS["edges"]
+
+
 # -- service end-to-end (fake) ------------------------------------------------
 
 
@@ -199,6 +216,30 @@ def test_generate_uses_mode_specific_prompt(workspace, monkeypatch):
     assert STYLE_PROMPTS["trace"] in result["prompt"]["text"]
     stored = GalleryService().get(result["galleryItem"]["id"])
     assert stored["ai"]["stylePrompt"] == STYLE_PROMPTS["trace"]
+
+
+def test_generate_stores_effect_and_text_in_prompt(workspace, monkeypatch):
+    monkeypatch.setenv("AI_IMAGE_FAKE", "true")
+    result = AiImageService(load_config()).generate(
+        filename="p.png", data=_png_bytes(), mime="image/png",
+        effect="comic", text_style="serif",
+    )
+    text = result["prompt"]["text"]
+    assert EFFECT_PROMPTS["comic"] in text and TEXT_PROMPTS["serif"] in text
+    stored = GalleryService().get(result["galleryItem"]["id"])
+    assert stored["ai"]["effect"] == "comic"
+    assert stored["ai"]["textStyle"] == "serif"
+
+
+def test_generate_normalizes_unknown_effect_and_text(workspace, monkeypatch):
+    monkeypatch.setenv("AI_IMAGE_FAKE", "true")
+    result = AiImageService(load_config()).generate(
+        filename="p.png", data=_png_bytes(), mime="image/png",
+        effect="bogus", text_style="bogus",
+    )
+    stored = GalleryService().get(result["galleryItem"]["id"])
+    assert stored["ai"]["effect"] == "none"
+    assert stored["ai"]["textStyle"] == "none"
 
 
 def test_feedback_variant_chains_to_parent_without_reupload(workspace, monkeypatch):

@@ -28,6 +28,8 @@ async def ai_image_generate(
     title: str = Form(""),
     render_mode: str = Form("edges"),
     detail: int = Form(2),
+    effect: str = Form("none"),
+    text_style: str = Form("none"),
 ) -> dict:
     config = load_config()
     if not config.enabled:
@@ -54,6 +56,8 @@ async def ai_image_generate(
         title=title,
         render_mode=render_mode,
         detail=detail,
+        effect=effect,
+        text_style=text_style,
     )
 
 

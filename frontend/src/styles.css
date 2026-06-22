@@ -3369,7 +3369,8 @@ input[type="checkbox"]:disabled {
 .ai-style p { margin: 4px 0 0; }
 
 .ai-field { display: flex; flex-direction: column; gap: 6px; font-size: 0.9em; color: var(--muted); }
-.ai-field textarea {
+.ai-field textarea,
+.ai-field select {
   width: 100%;
   resize: vertical;
   color: var(--text);
@@ -3379,6 +3380,7 @@ input[type="checkbox"]:disabled {
   padding: 8px 10px;
   font: inherit;
 }
+.ai-field select { resize: none; cursor: pointer; }
 .ai-cost { margin: 0; }
 
 /* Right: editor card — toolbar header, stage, side panel (mirrors Paint). */

@@ -7,6 +7,10 @@ import Segmented from "./Segmented";
 
 type RenderMode = "edges" | "handwriting" | "trace";
 
+// Option keys — labels come from i18n, prompt fragments from the status maps.
+const EFFECTS = ["none", "realistic", "artistic", "comic", "caricature", "childlike", "minimalist"];
+const TEXT_STYLES = ["none", "handwriting", "cursive", "messy", "child", "serif", "sans"];
+
 /** The AI Designer tab: upload a reference image, generate a plotter-ready
  * line drawing (persisted as a gallery asset), then refine it with feedback
  * into further variants. Each variant can be opened straight in the designer. */
@@ -26,6 +30,8 @@ export default function AiImageDesigner({
   const [feedback, setFeedback] = useState("");
   const [renderMode, setRenderMode] = useState<RenderMode>("edges");
   const [detail, setDetail] = useState(2);
+  const [effect, setEffect] = useState("none");
+  const [textStyle, setTextStyle] = useState("none");
   const [busy, setBusy] = useState(false);
   const [importing, setImporting] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -78,6 +84,8 @@ export default function AiImageDesigner({
         baseVariantId,
         renderMode,
         detail,
+        effect,
+        textStyle,
       })
       .then((result) => {
         setVariants((prev) => [...prev, result]);
@@ -153,8 +161,14 @@ export default function AiImageDesigner({
   const promptPreview = (() => {
     const base = status?.stylePrompts?.[renderMode];
     if (!base) return null;
+    const parts = [base];
+    const eff = status?.effectPrompts?.[effect];
+    if (effect !== "none" && eff) parts.push(eff);
+    const txt = status?.textPrompts?.[textStyle];
+    if (textStyle !== "none" && txt) parts.push(txt);
     const extra = instructions.trim();
-    return extra ? `${base}\n\nUser instructions: ${extra}` : base;
+    if (extra) parts.push(`User instructions: ${extra}`);
+    return parts.join("\n\n");
   })();
 
   return (
@@ -238,6 +252,28 @@ export default function AiImageDesigner({
               { value: 3, label: "3" },
             ]}
           />
+        </label>
+
+        <label className="ai-field">
+          {t("ai.effectLabel")}
+          <select value={effect} onChange={(e) => setEffect(e.target.value)}>
+            {EFFECTS.map((k) => (
+              <option key={k} value={k}>
+                {t(`ai.effect.${k}`)}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="ai-field">
+          {t("ai.textLabel")}
+          <select value={textStyle} onChange={(e) => setTextStyle(e.target.value)}>
+            {TEXT_STYLES.map((k) => (
+              <option key={k} value={k}>
+                {t(`ai.text.${k}`)}
+              </option>
+            ))}
+          </select>
         </label>
 
         {promptPreview && (
