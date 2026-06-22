@@ -7,6 +7,11 @@ import { usePrompt } from "./dialogs";
 
 const jobThumbCache = new Map<string, GcodePreview>();
 
+// Pen-colour palette for coloring jobs (matches the coloring editor).
+const COLOR_HEX: Record<string, string> = {
+  black: "#111111", red: "#ff453a", blue: "#0a84ff", green: "#30d158",
+};
+
 function fmtSize(n: number) {
   return n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`;
 }
@@ -181,6 +186,13 @@ export default function Convert({
                 >
                   <span className="name" title={j.filename}>{j.filename}</span>
                   <span className="job-badges">
+                    {j.source?.kind === "paint_coloring" && j.source.color && (
+                      <span className="job-color-badge" title={t("convert.colorJob")}>
+                        <span className="dot" style={{ background: COLOR_HEX[j.source.color] ?? "#888" }} />
+                        {j.source.color_order ? `${String(j.source.color_order).padStart(2, "0")} ` : ""}
+                        {j.source.color_label ?? j.source.color}
+                      </span>
+                    )}
                     {profileBadge(j)}
                     {unfit ? (
                       <span className="job-warn" title={j.issue ?? ""}>

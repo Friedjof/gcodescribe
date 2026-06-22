@@ -6,6 +6,7 @@ import PagePanel from "./PagePanel";
 import GalleryPopup from "./GalleryPopup";
 import PlotScore from "./PlotScore";
 import Gcode3DOverlay from "./Gcode3DOverlay";
+import ColoringEditor from "./ColoringEditor";
 import type { Gcode3DView } from "./Gcode3D";
 import Segmented from "./Segmented";
 import LiveButton from "../stream/LiveButton";
@@ -130,6 +131,7 @@ export default function Paint({
   const [clipboardCount, setClipboardCount] = useState(0);
   const [plotMenuOpen, setPlotMenuOpen] = useState(false);
   const plotMenuRef = useRef<HTMLDivElement>(null);
+  const [coloringOpen, setColoringOpen] = useState(false);
   const globalLive = useLiveRegistryState();
   const { confirm, ConfirmNode } = useConfirm();
   const { prompt, PromptNode } = usePrompt();
@@ -1219,6 +1221,14 @@ export default function Paint({
                     >
                       {t("paint.plotSelection")}
                     </button>
+                    <button
+                      role="menuitem"
+                      disabled={busy || sending || pageBlocked || page.objects.length === 0}
+                      title={page.objects.length === 0 ? t("paint.emptyHint") : pageBlocked ? t("paint.gcodeBlocked") : t("paint.coloringHint")}
+                      onClick={() => { setPlotMenuOpen(false); setColoringOpen(true); }}
+                    >
+                      {t("paint.coloring")}
+                    </button>
                   </div>
                 )}
               </div>
@@ -1595,6 +1605,16 @@ export default function Paint({
         </p>
       </section>
       {fullscreen && <Gcode3DOverlay data={fullscreen} viewState={gcode3dView} onViewChange={setGcode3dView} onClose={() => setFullscreen(null)} />}
+      {coloringOpen && cal && (
+        <ColoringEditor
+          cal={cal}
+          page={page}
+          activeProfile={index?.activeProfile}
+          onClose={() => setColoringOpen(false)}
+          onCreated={(jobs) => toast.success(t("paint.coloringJobsCreated", { count: jobs.length }))}
+          onColoringChange={(coloring) => setPage((p) => (p ? { ...p, coloring } : p))}
+        />
+      )}
       {mdOpen && (
         <MarkdownEditor
           cal={cal}

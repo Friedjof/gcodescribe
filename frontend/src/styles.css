@@ -657,6 +657,16 @@ input:focus, select:focus, textarea:focus {
 .job-thumb-placeholder { color: var(--muted); font-size: 18px; }
 .job-meta { display: flex; flex-direction: column; min-width: 0; }
 .job-badges { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
+.job-color-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 1px 7px 1px 5px; border-radius: 999px;
+  background: var(--panel-2); border: 1px solid var(--border);
+  font-size: 11px; font-variant-numeric: tabular-nums;
+}
+.job-color-badge .dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
 /* Clickable job row opening the 3D preview */
 .job-open {
   background: none;
@@ -774,6 +784,13 @@ input:focus, select:focus, textarea:focus {
     width 0.45s cubic-bezier(0.34, 1.32, 0.46, 1);
 }
 .seg em { flex: 0 0 auto; font-style: normal; font-size: 12px; padding: 0 8px; }
+/* Vertical stack (e.g. the coloring editor's tool picker). */
+.seg.vertical { flex-direction: column; align-items: stretch; }
+.seg.vertical button { width: 100%; }
+.seg.vertical .seg-indicator {
+  transition: transform 0.45s cubic-bezier(0.34, 1.32, 0.46, 1),
+    height 0.45s cubic-bezier(0.34, 1.32, 0.46, 1);
+}
 /* Page picker: many short numeric buttons keep their natural size and use a
    static highlight (no sliding indicator across wrapped rows). */
 .seg.wrap button { flex: 0 0 auto; min-width: 38px; }
@@ -3657,4 +3674,160 @@ input[type="checkbox"]:disabled {
   .ai-editor-body { grid-template-columns: 1fr; }
   .ai-stage { min-height: 360px; }
   .ai-controls, .ai-side { overflow: visible; }
+}
+
+/* --- Coloring editor --- */
+.coloring-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: min(3vw, 28px);
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.coloring-modal {
+  width: min(1600px, 97vw);
+  height: 95vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.coloring-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.coloring-head h2 { margin: 0; font-size: 1.05rem; }
+.coloring-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 187px minmax(0, 1fr) 260px;
+  gap: 12px;
+  padding: 12px 16px;
+}
+.coloring-tools { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.coloring-tools .seg { margin-bottom: 0; }
+.coloring-history { display: flex; gap: 4px; }
+.coloring-history button { flex: 1; font-size: 1.1rem; line-height: 1; }
+.coloring-tool-actions { display: flex; flex-direction: column; gap: 4px; }
+.coloring-tool-actions button { width: 100%; }
+/* Everything view-related is pinned to the bottom-left of the tool column. */
+.coloring-view-block { margin-top: auto; display: flex; flex-direction: column; gap: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+.coloring-field { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 0.78rem; color: var(--muted); }
+.coloring-field select { flex: 1; max-width: 110px; }
+.coloring-check { display: flex; align-items: center; gap: 6px; font-size: 0.78rem; color: var(--muted); }
+.coloring-view-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.coloring-view-controls > span { width: 100%; color: var(--muted); font-size: 0.78rem; }
+.coloring-view-controls button { flex: 1; min-width: 0; }
+.coloring-paper { display: flex; flex-direction: column; gap: 4px; }
+.coloring-paper > span { color: var(--muted); font-size: 0.78rem; }
+.coloring-paper input { width: 100%; }
+.coloring-pan-hint { margin: 0; color: var(--muted); font-size: 0.72rem; line-height: 1.35; }
+
+.coloring-canvas { position: relative; min-width: 0; min-height: 0; display: flex; }
+.coloring-svg {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  touch-action: none;
+}
+.coloring-svg.tool-brush, .coloring-svg.tool-eraser { cursor: crosshair; }
+/* Fill is set inline from the background slider; default kept as a fallback. */
+.coloring-plotarea { fill: hsl(0, 0%, 92%); stroke: rgba(0, 0, 0, 0.18); stroke-width: 0.5; }
+.coloring-brush-hint {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.coloring-side { display: flex; flex-direction: column; gap: 14px; overflow-y: auto; }
+.coloring-section h3 { margin: 0 0 6px; font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.coloring-swatches { display: flex; flex-direction: column; gap: 4px; }
+.coloring-swatch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  width: 100%;
+}
+.coloring-swatch.active { border-color: var(--accent); }
+.coloring-swatch .dot, .coloring-order .dot {
+  width: 14px; height: 14px; border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  flex: 0 0 auto;
+}
+/* "Reset" swatch: an empty ring with a diagonal slash. */
+.coloring-swatch .dot.none {
+  background:
+    linear-gradient(45deg, transparent 44%, var(--err) 44%, var(--err) 56%, transparent 56%),
+    var(--panel-2);
+}
+.coloring-swatch .count { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+.coloring-order { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.coloring-order li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.coloring-order li.muted { opacity: 0.5; }
+.coloring-order li.isolated { border-color: var(--accent); background: rgba(10, 132, 255, 0.1); }
+.coloring-order .handle { cursor: grab; color: var(--muted); font-size: 0.85rem; line-height: 1; touch-action: none; }
+.coloring-order .label { flex: 1; min-width: 0; text-align: left; padding: 2px 4px; font-size: 0.85rem; background: none; border: none; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.coloring-order .label:hover:not(:disabled) { background: none; color: var(--accent); }
+.coloring-order .clear, .coloring-order .print { padding: 2px 5px; flex: 0 0 auto; }
+.coloring-order .score-badge { flex: 0 0 auto; }
+
+.coloring-insights .coloring-total { margin: 0 0 8px; color: var(--muted); font-size: 0.8rem; }
+.coloring-insight-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; font-size: 0.8rem; }
+.coloring-insight-row .label { flex: 0 0 54px; }
+.coloring-insight-row .bar { flex: 1; height: 6px; border-radius: 3px; background: var(--panel-2); overflow: hidden; }
+.coloring-insight-row .bar i { display: block; height: 100%; }
+.coloring-insight-row em { font-style: normal; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.coloring-jobs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.coloring-jobs li { font-size: 0.74rem; color: var(--muted); word-break: break-all; }
+.coloring-dirty { margin: 6px 0 0; color: var(--warn); font-size: 0.8rem; }
+
+.coloring-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+}
+.coloring-status { color: var(--muted); font-size: 0.85rem; }
+.coloring-inspect { color: var(--accent); font-size: 0.82rem; }
+.coloring-dur { color: var(--muted); font-size: 0.72rem; font-variant-numeric: tabular-nums; }
+.coloring-masknote { color: var(--muted); font-size: 0.78rem; opacity: 0.8; }
+.coloring-error { color: var(--err); font-size: 0.85rem; }
+.coloring-slicing { color: var(--accent); font-size: 0.85rem; }
+.coloring-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.coloring-replace-hint { color: var(--muted); font-size: 0.78rem; max-width: 220px; }
+
+@media (max-width: 860px) {
+  .coloring-modal { height: 92vh; }
+  .coloring-body { grid-template-columns: 1fr; grid-auto-rows: min-content 1fr min-content; }
+  .coloring-tools { flex-direction: row; flex-wrap: wrap; }
 }

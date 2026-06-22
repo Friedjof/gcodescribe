@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -7,11 +10,13 @@ from ...calibration import Calibration
 from ...document import get_document_store
 from ...gallery_metrics import evaluate_gcode
 from ...gcode_preview import parse_gcode_3d_text
+from ...jobmeta import delete_job_meta, read_job_meta
 from ...pipeline import PlotterError
 from ...scene import page_polylines, save_scene_job, scene_gcode
 from ...services.profiles import ProfileService, profile_meta
 from ...services.upload_validation import MAX_GCODE_BYTES
 from ...singleline import text_polylines
+from ...storage import jobs_dir
 from .jobs import _job_info
 
 router = APIRouter(tags=["pages"])
@@ -106,6 +111,9 @@ class SaveRequest(BaseModel):
     grid: dict | None = None
     name: str | None = None
     markdown: str | None = None
+    # Per-page coloring session (assignments keyed by line geometry hash +
+    # colour order), so the coloring editor restores its state per page.
+    coloring: dict | None = None
 
 
 class TextPreviewRequest(BaseModel):
@@ -157,14 +165,16 @@ class PageGcodeRequest(ExpectedProfileRequest):
     objects: list | None = None
 
 
-@router.post("/pages/{page_id}/gcode")
-def page_gcode(page_id: str, req: PageGcodeRequest | None = None) -> dict:
-    page = store().get_page(page_id)
-    if not page:
-        raise HTTPException(404, "Seite nicht gefunden")
-    # Page and active profile must match exactly: same id, same fingerprint.
-    # A page laid out for another plot area would silently draw at the wrong
-    # bed position; the user has to activate or adopt the profile explicitly.
+def _require_active_page_profile(
+    page: dict, req: ExpectedProfileRequest | None
+) -> tuple[dict, dict, Calibration]:
+    """Guard a plot of ``page`` against the active profile.
+
+    Page and active profile must match exactly: same id, same fingerprint. A
+    page laid out for another plot area would silently draw at the wrong bed
+    position; the user has to activate or adopt the profile explicitly. Returns
+    ``(active_meta, profile, calibration)`` or raises the matching 409.
+    """
     service = ProfileService()
     profile = service.active()
     active = profile_meta(profile)
@@ -202,6 +212,15 @@ def page_gcode(page_id: str, req: PageGcodeRequest | None = None) -> dict:
             "geändert. Bitte die Seite prüfen und das Profil neu übernehmen.",
         )
     cal = Calibration().merged(profile["calibration"])
+    return active, profile, cal
+
+
+@router.post("/pages/{page_id}/gcode")
+def page_gcode(page_id: str, req: PageGcodeRequest | None = None) -> dict:
+    page = store().get_page(page_id)
+    if not page:
+        raise HTTPException(404, "Seite nicht gefunden")
+    active, _profile, cal = _require_active_page_profile(page, req)
     # A selection plot overrides the page's objects with just the chosen subset;
     # the profile check above still runs against the full stored page.
     to_plot = {**page, "objects": req.objects} if req and req.objects is not None else page
@@ -210,6 +229,123 @@ def page_gcode(page_id: str, req: PageGcodeRequest | None = None) -> dict:
     except PlotterError as exc:
         raise HTTPException(400, str(exc)) from exc
     return _job_info(path, active_profile=active).model_dump()
+
+
+COLORING_COLORS = ("black", "red", "blue", "green")
+_GROUP_ID_RE = re.compile(r"^[A-Za-z0-9-]{1,64}$")
+
+
+class ColorGcodeItem(BaseModel):
+    color: str
+    label: str = ""
+    order: int
+    objects: list
+
+
+class PageColorGcodeRequest(ExpectedProfileRequest):
+    color_group_id: str
+    replace_existing: bool = False
+    colors: list[ColorGcodeItem]
+
+
+def _coloring_group_jobs(color_group_id: str) -> list[Path]:
+    """All existing coloring job files belonging to ``color_group_id``."""
+    matches: list[Path] = []
+    for path in jobs_dir().glob("*.gcode"):
+        meta = read_job_meta(path)
+        source = (meta or {}).get("source") or {}
+        if (
+            source.get("kind") == "paint_coloring"
+            and source.get("color_group_id") == color_group_id
+        ):
+            matches.append(path)
+    return matches
+
+
+@router.post("/pages/{page_id}/color-gcode")
+def page_color_gcode(page_id: str, req: PageColorGcodeRequest) -> dict:
+    """Generate one G-code job per pen colour from a coloring session.
+
+    Each colour carries its own subset of scene objects (one polyline each in
+    practice). Jobs are tagged with the shared ``color_group_id`` so a later
+    re-slice of the same editor session replaces them instead of piling up
+    duplicates in the job list. Masks are not applied — coloring works on raw
+    object polylines (see docs/planing/coloring).
+    """
+    page = store().get_page(page_id)
+    if not page:
+        raise HTTPException(404, "Seite nicht gefunden")
+    if not _GROUP_ID_RE.match(req.color_group_id):
+        raise HTTPException(422, "Ungültige color_group_id.")
+    # Drop colours with no assigned objects; they would produce empty jobs.
+    items = [item for item in req.colors if item.objects]
+    if not items:
+        raise HTTPException(422, "Bitte mindestens eine Linie einer Farbe zuweisen.")
+    if len(items) > len(COLORING_COLORS):
+        raise HTTPException(422, "Zu viele Farbgruppen.")
+    for item in items:
+        if item.color not in COLORING_COLORS:
+            raise HTTPException(422, f"Unbekannte Farbe: {item.color}")
+        if item.order < 1:
+            raise HTTPException(422, "Reihenfolge muss positiv sein.")
+
+    active, _profile, cal = _require_active_page_profile(page, req)
+
+    existing = _coloring_group_jobs(req.color_group_id)
+    if existing and not req.replace_existing:
+        raise HTTPException(
+            409,
+            "Für diese Coloring-Sitzung existieren bereits Farb-Jobs. "
+            "Bitte „Jobs ersetzen“ verwenden.",
+        )
+
+    # Write the new jobs first; only once all of them succeed do we remove the
+    # old group. New files carry a fresh timestamp, so they never overwrite the
+    # old ones — a crash mid-way leaves stale jobs, never lost ones.
+    created: list[Path] = []
+    try:
+        for item in sorted(items, key=lambda it: it.order):
+            safe_label = "".join(
+                c if c.isalnum() else "-" for c in (item.label or item.color).lower()
+            ).strip("-") or item.color
+            color_page = {**page, "objects": item.objects}
+            created.append(
+                save_scene_job(
+                    color_page,
+                    cal,
+                    profile=active,
+                    filename_tag=f"color-{item.order:02d}-{safe_label}",
+                    source_kind="paint_coloring",
+                    source_extra={
+                        "color": item.color,
+                        "color_label": item.label or item.color,
+                        "color_order": item.order,
+                        "color_group_id": req.color_group_id,
+                    },
+                )
+            )
+    except PlotterError as exc:
+        for path in created:
+            path.unlink(missing_ok=True)
+            delete_job_meta(path)
+        raise HTTPException(400, str(exc)) from exc
+    except Exception:
+        for path in created:
+            path.unlink(missing_ok=True)
+            delete_job_meta(path)
+        raise
+
+    # Remove the previous group, but never a file we just (re)wrote: a re-slice
+    # within the same second reuses the same name, so a new job can land on an
+    # old path — deleting it would throw away the fresh job.
+    created_paths = {p.resolve() for p in created}
+    for path in existing:
+        if path.resolve() in created_paths:
+            continue
+        path.unlink(missing_ok=True)
+        delete_job_meta(path)
+
+    return {"files": [_job_info(p, active_profile=active).model_dump() for p in created]}
 
 
 class AdoptRequest(ExpectedProfileRequest):

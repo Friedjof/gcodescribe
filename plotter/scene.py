@@ -258,8 +258,22 @@ def scene_gcode(page: dict, cal: Calibration) -> str:
 
 
 def save_scene_job(
-    page: dict, cal: Calibration | None = None, profile: dict | None = None
+    page: dict,
+    cal: Calibration | None = None,
+    profile: dict | None = None,
+    *,
+    filename_tag: str | None = None,
+    source_kind: str = "paint_page",
+    source_extra: dict | None = None,
 ) -> Path:
+    """Write a G-code job for ``page`` into ``jobs_dir()`` and return its path.
+
+    ``filename_tag`` inserts a stable segment before the timestamp, e.g.
+    ``color-01-schwarz`` -> ``paint-{stem}-color-01-schwarz-{ts}.gcode``; this
+    is how coloring jobs stay recognisable in the job list. ``source_kind`` and
+    ``source_extra`` are merged into the sidecar ``source`` block so callers can
+    tag a job (e.g. as a coloring job carrying its colour and group id).
+    """
     cal = cal or Calibration.load()
     gcode = scene_gcode(page, cal)
     if profile is None:
@@ -268,15 +282,15 @@ def save_scene_job(
         profile = ProfileService().active_profile_meta()
     raw_stem = str(page.get("name") or page.get("id") or "paint")
     stem = "".join(c if c.isalnum() or c in "-_" else "-" for c in raw_stem)
-    path = jobs_dir() / f"paint-{stem[:40]}-{int(time.time())}.gcode"
+    tag = f"-{filename_tag}" if filename_tag else ""
+    path = jobs_dir() / f"paint-{stem[:40]}{tag}-{int(time.time())}.gcode"
     path.write_text(profile_comment(profile) + gcode)
-    write_job_meta(
-        path,
-        source={
-            "kind": "paint_page",
-            "page_id": page.get("id"),
-            "page_name": page.get("name"),
-        },
-        profile=profile,
-    )
+    source = {
+        "kind": source_kind,
+        "page_id": page.get("id"),
+        "page_name": page.get("name"),
+    }
+    if source_extra:
+        source.update(source_extra)
+    write_job_meta(path, source=source, profile=profile)
     return path

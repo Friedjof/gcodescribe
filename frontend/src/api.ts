@@ -79,6 +79,17 @@ export interface ProfileImportResult {
   profiles: CalibrationProfileSummary[];
 }
 
+export interface JobSource {
+  kind?: string;
+  // Coloring jobs carry the pen colour, its order and the editor session id so
+  // the job list can badge and group them.
+  color?: ColoringColor;
+  color_label?: string;
+  color_order?: number;
+  color_group_id?: string;
+  [k: string]: unknown;
+}
+
 export interface Job {
   filename: string;
   size: number;
@@ -86,6 +97,25 @@ export interface Job {
   fits?: boolean | null; // does the job still fit the current plot area?
   issue?: string | null; // why it does not fit
   profile?: JobProfileStatus | null; // evaluated against the active profile
+  source?: JobSource | null; // sidecar source block (coloring colour, group, …)
+}
+
+// Coloring: split a page's lines onto a few pen colours and slice one job per
+// colour. The catalogue is shared with the backend (plotter/web/routes/pages).
+export type ColoringColor = "black" | "red" | "blue" | "green";
+
+export interface ColoringApiItem {
+  color: ColoringColor;
+  label: string;
+  order: number;
+  objects: SceneObject[];
+}
+
+// Persisted per-page coloring session: segment colours keyed by line geometry
+// hash (see paint/coloring lineKey) plus the colour plot order.
+export interface PageColoring {
+  assignments: Record<string, (ColoringColor | null)[]>;
+  order: ColoringColor[];
 }
 
 export interface Position {
@@ -357,6 +387,7 @@ export interface Page {
   profileName?: string | null;
   profileFingerprint?: string | null;
   profileStatus?: PageProfileStatus;
+  coloring?: PageColoring | null;
 }
 
 export interface PageThumb {
@@ -524,7 +555,7 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
     }),
-  savePage: (id: string, updates: Partial<Pick<Page, "objects" | "grid" | "name" | "markdown">>) =>
+  savePage: (id: string, updates: Partial<Pick<Page, "objects" | "grid" | "name" | "markdown" | "coloring">>) =>
     req<Page>(`/api/pages/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -550,6 +581,24 @@ export const api = {
         expected_profile_id: expected?.id,
         expected_profile_fingerprint: expected?.fingerprint,
         objects,
+      }),
+    }),
+  colorPageGcode: (
+    id: string,
+    expected: ProfileRef | null | undefined,
+    colorGroupId: string,
+    replaceExisting: boolean,
+    colors: ColoringApiItem[],
+  ) =>
+    req<{ files: Job[] }>(`/api/pages/${id}/color-gcode`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        expected_profile_id: expected?.id,
+        expected_profile_fingerprint: expected?.fingerprint,
+        color_group_id: colorGroupId,
+        replace_existing: replaceExisting,
+        colors,
       }),
     }),
   adoptPageProfile: (id: string, force = false, expected?: ProfileRef | null) =>

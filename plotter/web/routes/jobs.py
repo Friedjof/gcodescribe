@@ -50,6 +50,9 @@ class JobInfo(BaseModel):
     # Profile the job was generated with, evaluated against the active
     # profile at list time. None when not checked.
     profile: JobProfileStatus | None = None
+    # Sidecar source block (e.g. coloring jobs carry colour + color_group_id),
+    # so the job list can badge and group them. None when not checked.
+    source: dict | None = None
 
 
 def _job_info(
@@ -72,6 +75,7 @@ def _job_info(
         info.profile = JobProfileStatus(
             **job_profile_status(meta, active_profile, profiles)
         )
+        info.source = (meta or {}).get("source")
         if meta_issue:
             info.fits = False
             info.issue = meta_issue
