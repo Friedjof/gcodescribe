@@ -25,6 +25,7 @@ PRINTER_SERIAL_ENABLED="${PRINTER_SERIAL_ENABLED:-false}"
 PRINTER_DEFAULT_BACKEND="${PRINTER_DEFAULT_BACKEND:-}"
 PRINTER_SERIAL_PORT="${PRINTER_SERIAL_PORT:-/dev/ttyUSB0}"
 PRINTER_SERIAL_BAUD="${PRINTER_SERIAL_BAUD:-115200}"
+PLOTTER_PORT="${PLOTTER_PORT:-8010}"
 
 onoff() { truthy "$1" && printf on || printf off; }
 bool_to_status() { truthy "$1" && printf ON || printf OFF; }
@@ -36,13 +37,13 @@ print_header() {
 }
 
 show_summary() {
-  say "${dim}Services:${reset} Redis $(bool_to_status "$DEV_REDIS") · Backend $(bool_to_status "$DEV_START_BACKEND") · Frontend $(bool_to_status "$DEV_START_FRONTEND")"
+  say "${dim}Services:${reset} Redis $(bool_to_status "$DEV_REDIS") · Backend $(bool_to_status "$DEV_START_BACKEND") :${PLOTTER_PORT} · Frontend $(bool_to_status "$DEV_START_FRONTEND")"
   say "${dim}Serial:${reset} enabled=${PRINTER_SERIAL_ENABLED} · default=${PRINTER_DEFAULT_BACKEND:-auto} · port=${PRINTER_SERIAL_PORT} · baud=${PRINTER_SERIAL_BAUD}"
   say "${dim}Checks:${reset} tests $(bool_to_status "$DEV_RUN_TESTS") · ruff $(bool_to_status "$DEV_RUN_RUFF") · frontend build $(bool_to_status "$DEV_BUILD_FRONTEND")"
 }
 
 plain_summary() {
-  printf 'Services: Redis %s · Backend %s · Frontend %s\n' "$(bool_to_status "$DEV_REDIS")" "$(bool_to_status "$DEV_START_BACKEND")" "$(bool_to_status "$DEV_START_FRONTEND")"
+  printf 'Services: Redis %s · Backend %s :%s · Frontend %s\n' "$(bool_to_status "$DEV_REDIS")" "$(bool_to_status "$DEV_START_BACKEND")" "$PLOTTER_PORT" "$(bool_to_status "$DEV_START_FRONTEND")"
   printf 'Serial: enabled=%s · default=%s · port=%s · baud=%s\n' "$PRINTER_SERIAL_ENABLED" "${PRINTER_DEFAULT_BACKEND:-auto}" "$PRINTER_SERIAL_PORT" "$PRINTER_SERIAL_BAUD"
   printf 'Checks: tests %s · ruff %s · frontend build %s\n' "$(bool_to_status "$DEV_RUN_TESTS")" "$(bool_to_status "$DEV_RUN_RUFF")" "$(bool_to_status "$DEV_BUILD_FRONTEND")"
 }
@@ -105,6 +106,7 @@ start_dev() {
     return 1
   fi
   export DEV_START_BACKEND DEV_START_FRONTEND
+  export PLOTTER_PORT
   export PRINTER_SERIAL_ENABLED PRINTER_DEFAULT_BACKEND PRINTER_SERIAL_PORT PRINTER_SERIAL_BAUD
   run_preflight
   if truthy "$DEV_REDIS"; then

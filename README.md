@@ -141,7 +141,9 @@ memory limits.
 
 `make dev` opens an interactive dev cockpit. From there you can toggle Redis,
 backend, frontend, Serial settings and optional preflight checks (pytest, ruff,
-frontend build) before starting the stack.
+frontend build) before starting the stack. The local dev backend defaults to
+<http://localhost:8010> so it does not collide with a Docker/production service
+already using port 8000.
 
 For automation or a direct start without the menu, use `make dev-plain`.
 
@@ -152,7 +154,8 @@ uv sync
 OCTOPRINT_URL=... OCTOPRINT_API_KEY=... uv run gcodescribe-web
 ```
 
-Frontend (Vite dev server, proxies `/api` to the backend on :8000):
+Frontend (Vite dev server, proxies `/api` to the backend on `PLOTTER_PORT`,
+default `8010` for local dev):
 
 ```bash
 cd frontend

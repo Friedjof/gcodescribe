@@ -15,7 +15,7 @@ cd "$ROOT"
 # Load .env for direct runs (when not invoked through the Makefile's export).
 set -a; [ -f .env ] && . ./.env; set +a
 
-BACKEND_PORT="${PLOTTER_PORT:-8000}"
+BACKEND_PORT="${PLOTTER_PORT:-8010}"
 FRONTEND_PORT="${VITE_PORT:-5173}"
 ASSUME_YES="${DEV_YES:-0}"
 [ "${1:-}" = "--yes" ] && ASSUME_YES=1
@@ -110,6 +110,7 @@ fi
 
 # --- start services ---------------------------------------------------------
 export PLOTTER_AUTH_DEV_BYPASS=1
+export PLOTTER_PORT="$BACKEND_PORT"
 if [ "$DEV_START_BACKEND" = 1 ]; then
   say "${cyan}▶ Backend  → http://localhost:${BACKEND_PORT}${reset}"
 else
