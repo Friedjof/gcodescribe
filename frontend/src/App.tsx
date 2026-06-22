@@ -160,10 +160,10 @@ function AdminApp() {
               {t("notify.enable")}
             </button>
           )}
-          <select className="lang-select" value={lang} onChange={(e) => setLang(e.target.value as "de" | "en" | "ba" | "fr" | "es")}>
+          <select className="lang-select" value={lang} onChange={(e) => setLang(e.target.value as "de" | "ba" | "en" | "fr" | "es")}>
             <option value="de">{t("lang.de")}</option>
-            <option value="en">{t("lang.en")}</option>
             <option value="ba">{t("lang.ba")}</option>
+            <option value="en">{t("lang.en")}</option>
             <option value="fr">{t("lang.fr")}</option>
             <option value="es">{t("lang.es")}</option>
           </select>
