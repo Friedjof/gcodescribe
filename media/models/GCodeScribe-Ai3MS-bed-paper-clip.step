@@ -9,7 +9,7 @@ FILE_DESCRIPTION(
 /* implementation_level */ '2;1');
 
 FILE_NAME(
-/* name */ 'GCodeScribe-paper.step',
+/* name */ 'GCodeScribe-Ai3MS-bed-paper-clip.step',
 /* time_stamp */ '2026-06-17T12:17:52+02:00',
 /* author */ (''),
 /* organization */ (''),
