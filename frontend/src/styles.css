@@ -3484,3 +3484,27 @@ input[type="checkbox"]:disabled {
   animation: spin 0.8s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* AI Designer: collapsible prompt view */
+.ai-prompt-view { margin-top: 6px; }
+.ai-prompt-view > summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 0.82em;
+  list-style-position: inside;
+}
+.ai-prompt-view > summary:hover { color: var(--accent-hover); }
+.ai-prompt-view pre {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.8em;
+  line-height: 1.4;
+  color: var(--muted);
+  background: var(--panel-2, rgba(255,255,255,0.04));
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}

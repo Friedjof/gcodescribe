@@ -105,6 +105,7 @@ def test_status_enabled_with_fake(workspace, monkeypatch):
     status = load_config().status()
     assert status["enabled"] is True
     assert status["model"]
+    assert STYLE_PROMPT in status["stylePrompt"]
     assert "OPENAI_API_KEY" not in status and "api_key" not in status
 
 
@@ -142,6 +143,9 @@ def test_generate_persists_gallery_item_with_ai_meta(workspace, monkeypatch):
     assert result["imageUrl"].startswith("/api/gallery/")
     assert result["preview"]["polylines"]  # fake motif traced to real lines
     assert result["quality"]["lineCount"] >= 1
+    # The composed prompt sent to the model is surfaced for display.
+    assert STYLE_PROMPT in result["prompt"]["text"]
+    assert "My fox" not in result["prompt"]["text"]  # title is not part of the prompt
 
     item = result["galleryItem"]
     stored = GalleryService().get(item["id"])
@@ -171,6 +175,7 @@ def test_feedback_variant_chains_to_parent_without_reupload(workspace, monkeypat
     )
     assert v2["parentVariantId"] == v1["variantId"]
     assert v2["variantId"] != v1["variantId"]
+    assert "less detail" in v2["prompt"]["text"]  # feedback folded into the prompt
     stored = GalleryService().get(v2["galleryItem"]["id"])
     assert stored["ai"]["feedback"] == "less detail"
     assert stored["ai"]["parentVariantId"] == v1["variantId"]

@@ -287,6 +287,7 @@ export interface AiImageStatus {
   size?: string;
   supportsFeedback?: boolean;
   supportsStreaming?: boolean;
+  stylePrompt?: string;
 }
 
 export interface AiImageQuality {
@@ -309,7 +310,7 @@ export interface AiImageResult {
   galleryItem: GalleryItem;
   preview: GalleryPreview;
   imageUrl: string;
-  prompt: { style: string; instructions: string; feedback: string };
+  prompt: { style: string; instructions: string; feedback: string; text: string };
   quality: AiImageQuality;
 }
 

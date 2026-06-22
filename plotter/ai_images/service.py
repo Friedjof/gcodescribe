@@ -142,6 +142,8 @@ class AiImageService:
         ``ai`` block, recomputing preview + quality."""
         ai = item.get("ai") or {}
         preview = self.gallery.preview(item["id"], 1)
+        instructions = ai.get("userInstructions", "")
+        feedback = ai.get("feedback", "")
         return {
             "variantId": ai.get("variantId"),
             "parentVariantId": ai.get("parentVariantId"),
@@ -150,8 +152,10 @@ class AiImageService:
             "imageUrl": f"/api/gallery/{item['id']}/original",
             "prompt": {
                 "style": ai.get("stylePrompt", STYLE_PROMPT),
-                "instructions": ai.get("userInstructions", ""),
-                "feedback": ai.get("feedback", ""),
+                "instructions": instructions,
+                "feedback": feedback,
+                # The exact, full prompt string that was sent to the model.
+                "text": compose_prompt(instructions, feedback),
             },
             "quality": assess(preview),
         }

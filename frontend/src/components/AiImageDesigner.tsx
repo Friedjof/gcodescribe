@@ -179,6 +179,12 @@ export default function AiImageDesigner({
           <div className="ai-style">
             <strong>{t("ai.styleTitle")}</strong>
             <p className="muted small">{t("ai.styleHint")}</p>
+            {status?.stylePrompt && (
+              <details className="ai-prompt-view">
+                <summary>{t("ai.showStylePrompt")}</summary>
+                <pre>{status.stylePrompt}</pre>
+              </details>
+            )}
           </div>
 
           <label className="ai-field">
@@ -291,6 +297,11 @@ export default function AiImageDesigner({
                       {w}
                     </div>
                   ))}
+
+                  <details className="ai-prompt-view">
+                    <summary>{t("ai.showPrompt")}</summary>
+                    <pre>{selected.prompt.text}</pre>
+                  </details>
 
                   <div className="ai-field ai-recompute">
                     <span>
