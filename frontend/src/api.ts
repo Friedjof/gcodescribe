@@ -307,6 +307,7 @@ export interface AiImageQuality {
 export interface AiImageResult {
   variantId: string;
   parentVariantId: string | null;
+  saved: boolean;
   galleryItem: GalleryItem;
   preview: GalleryPreview;
   imageUrl: string;
@@ -787,6 +788,8 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ render_mode: renderMode, detail }),
     }),
+  aiImageSave: (itemId: string) =>
+    req<AiImageResult>(`/api/ai-images/${itemId}/save`, { method: "POST" }),
 
   textPolylines: (text: string, font: string, size: number, connectSpaces = false) =>
     req<{ polylines: number[][][] }>("/api/paint/text-polylines", {

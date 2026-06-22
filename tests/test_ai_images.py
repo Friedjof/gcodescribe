@@ -164,6 +164,23 @@ def test_generate_persists_gallery_item_with_ai_meta(workspace, monkeypatch):
     assert stored["ai"]["variantId"] == result["variantId"]
     assert stored["ai"]["renderMode"] == "edges"
 
+    # AI results are drafts: not saved, and hidden from the gallery list.
+    assert result["saved"] is False
+    assert stored["status"] == "draft"
+    assert item["id"] not in {m["id"] for m in GalleryService().list()}
+
+
+def test_save_variant_promotes_draft_into_gallery(workspace, monkeypatch):
+    monkeypatch.setenv("AI_IMAGE_FAKE", "true")
+    service = AiImageService(load_config())
+    result = service.generate(filename="photo.png", data=_png_bytes(), mime="image/png")
+    item_id = result["galleryItem"]["id"]
+
+    saved = service.save_variant(item_id)
+    assert saved["saved"] is True
+    assert GalleryService().get(item_id)["status"] == "active"
+    assert item_id in {m["id"] for m in GalleryService().list()}
+
 
 def test_generate_includes_feedback_suggestions(workspace, monkeypatch):
     monkeypatch.setenv("AI_IMAGE_FAKE", "true")
@@ -246,6 +263,21 @@ def test_route_rerender(workspace, monkeypatch):
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["galleryItem"]["mode"] == "trace"
+
+
+def test_route_save(workspace, monkeypatch):
+    monkeypatch.setenv("AI_IMAGE_FAKE", "true")
+    client = TestClient(create_app())
+    gen = client.post(
+        "/api/ai-images/generate",
+        files={"file": ("photo.png", _png_bytes(), "image/png")},
+        data={"render_mode": "edges"},
+    )
+    assert gen.json()["saved"] is False
+    item_id = gen.json()["galleryItem"]["id"]
+    saved = client.post(f"/api/ai-images/{item_id}/save")
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["saved"] is True
 
 
 def test_generate_rejects_non_image(workspace, monkeypatch):

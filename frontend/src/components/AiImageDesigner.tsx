@@ -28,6 +28,7 @@ export default function AiImageDesigner({
   const [detail, setDetail] = useState(2);
   const [busy, setBusy] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [rerendering, setRerendering] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -123,6 +124,22 @@ export default function AiImageDesigner({
       )
       .catch((e) => setErr(String(e.message ?? e)))
       .finally(() => setRerendering(false));
+  };
+
+  // AI results are drafts (hidden from the gallery) until explicitly saved.
+  const saveToGallery = () => {
+    if (!selected || saving || selected.saved) return;
+    setSaving(true);
+    setErr(null);
+    api
+      .aiImageSave(selected.galleryItem.id)
+      .then((updated) =>
+        setVariants((prev) =>
+          prev.map((v) => (v.variantId === updated.variantId ? updated : v))
+        )
+      )
+      .catch((e) => setErr(String(e.message ?? e)))
+      .finally(() => setSaving(false));
   };
 
   const addSuggestion = (s: string) =>
@@ -259,6 +276,11 @@ export default function AiImageDesigner({
                 ))}
               </div>
             )}
+            {selected && !selected.saved && (
+              <button disabled={saving} onClick={saveToGallery}>
+                {saving ? t("common.loading") : t("ai.saveToGallery")}
+              </button>
+            )}
             {selected && (
               <button className="primary" disabled={importing} onClick={toDesigner}>
                 {importing ? t("common.loading") : t("ai.openDesigner")}
@@ -381,7 +403,7 @@ export default function AiImageDesigner({
                 <summary>{t("ai.showPrompt")}</summary>
                 <pre>{selected.prompt.text}</pre>
               </details>
-              <span className="muted small">{t("ai.savedHint")}</span>
+              {selected.saved && <span className="muted small">{t("ai.savedHint")}</span>}
             </aside>
           )}
         </div>

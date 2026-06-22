@@ -118,6 +118,7 @@ class AiImageService:
         }
         self._attach_ai_meta(item["id"], ai_meta)
         item["ai"] = ai_meta
+        item["status"] = "draft"
         return self._result_for(item)
 
     def rerender_variant(self, item_id: str, *, render_mode: str, detail: int) -> dict:
@@ -137,6 +138,15 @@ class AiImageService:
             raise AiImageError("vectorization_failed", str(exc)) from exc
         return self._result_for(updated)
 
+    def save_variant(self, item_id: str) -> dict:
+        """Promote a draft AI variant to a normal, listed gallery item."""
+        if not self.config.enabled:
+            raise AiImageError("not_configured", "AI Designer ist nicht konfiguriert.")
+        item = self.gallery.get(item_id)
+        if not item.get("ai"):
+            raise AiImageError("bad_response", "Kein AI-Element.")
+        return self._result_for(self.gallery.set_status(item_id, "active"))
+
     def _result_for(self, item: dict) -> dict:
         """Assemble the AiImageResult from a persisted gallery item carrying an
         ``ai`` block, recomputing preview + quality."""
@@ -148,6 +158,7 @@ class AiImageService:
         return {
             "variantId": ai.get("variantId"),
             "parentVariantId": ai.get("parentVariantId"),
+            "saved": item.get("status") == "active",
             "galleryItem": item,
             "preview": preview,
             "imageUrl": f"/api/gallery/{item['id']}/original",
@@ -163,15 +174,20 @@ class AiImageService:
 
     def _resolve_parent(self, base_variant_id: str) -> dict | None:
         """Find the gallery item for a variant id and return its AI output as a
-        reference image. A plain gallery scan (Option A): no extra index file,
-        fine for the expected small gallery sizes.
+        reference image. Scans meta files directly (Option A, no index file) so
+        it also finds unsaved drafts, which the gallery list hides.
         """
-        for meta in self.gallery.list(include_archived=True):
+        for meta_file in self.gallery.root.glob("*/meta.json"):
+            try:
+                meta = json.loads(meta_file.read_text())
+            except (OSError, json.JSONDecodeError):
+                continue
             ai = meta.get("ai") or {}
             if ai.get("variantId") != base_variant_id:
                 continue
+            item_id = meta.get("id") or meta_file.parent.name
             try:
-                path, info = self.gallery.original_path(meta["id"])
+                path, info = self.gallery.original_path(item_id)
             except ServiceError:
                 return None
             return {
@@ -202,9 +218,11 @@ class AiImageService:
             )
 
     def _attach_ai_meta(self, item_id: str, ai_meta: dict) -> None:
-        """Add the ``ai`` provenance block to the gallery item's meta.json,
-        leaving every existing field untouched."""
+        """Add the ``ai`` provenance block to the gallery item's meta.json and
+        mark it a ``draft`` — AI results are not shown in the gallery until the
+        user explicitly saves them. Every other field is left untouched."""
         meta_path = self.gallery.root / item_id / "meta.json"
         meta = json.loads(meta_path.read_text())
         meta["ai"] = ai_meta
+        meta["status"] = "draft"
         meta_path.write_text(json.dumps(meta, indent=2))

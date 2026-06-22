@@ -368,6 +368,9 @@ class GalleryService:
                 continue
             self._normalize(meta)
             self._attach_existing_original(meta, meta_file.parent)
+            # Drafts (e.g. unsaved AI results) are never listed in the gallery.
+            if meta.get("status") == "draft":
+                continue
             if not include_archived and meta.get("status") == "archived":
                 continue
             if uploader and meta.get("uploader") != uploader:

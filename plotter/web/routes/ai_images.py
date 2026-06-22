@@ -72,3 +72,12 @@ def ai_image_rerender(item_id: str, req: RerenderRequest) -> dict:
     return AiImageService(config).rerender_variant(
         item_id, render_mode=req.render_mode, detail=req.detail
     )
+
+
+@router.post("/ai-images/{item_id}/save")
+def ai_image_save(item_id: str) -> dict:
+    """Promote a draft AI variant into a normal, listed gallery item."""
+    config = load_config()
+    if not config.enabled:
+        raise AiImageError("not_configured", "AI Designer ist nicht konfiguriert.")
+    return AiImageService(config).save_variant(item_id)
