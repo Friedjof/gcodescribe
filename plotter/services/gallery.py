@@ -298,7 +298,9 @@ class GalleryService:
             {
                 "mode": mode,
                 "detail": detail,
-                "pages": [{"n": 1, "file": _SVG_FILE, "width": width, "height": height, "lines": lines}],
+                "pages": [
+                    {"n": 1, "file": _SVG_FILE, "width": width, "height": height, "lines": lines}
+                ],
                 "width": width,
                 "height": height,
                 "lines": lines,
@@ -330,7 +332,11 @@ class GalleryService:
 
     @staticmethod
     def _original_meta(filename: str, stored: str, kind: str, size: int) -> dict:
-        mime = _ORIGINAL_MIME.get(kind) or mimetypes.guess_type(filename)[0] or "application/octet-stream"
+        mime = (
+            _ORIGINAL_MIME.get(kind)
+            or mimetypes.guess_type(filename)[0]
+            or "application/octet-stream"
+        )
         return {
             "filename": filename,
             "stored": stored,
