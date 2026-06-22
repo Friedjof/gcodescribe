@@ -17,13 +17,14 @@ import {
   toMultiPath,
   alignmentCandidates,
   snapToGuides,
+  transformPolylines,
   type Bounds,
   type GuideCandidate,
   type Guide,
 } from "../paint/geometry";
 import { useI18n } from "../i18n";
 
-export type Tool = "select" | "pen" | "line" | "rect" | "maskRect" | "circle" | "semicircle" | "text";
+export type Tool = "select" | "pen" | "line" | "rect" | "maskRect" | "maskCircle" | "circle" | "semicircle" | "text" | "erase" | "eraseLine";
 
 /**
  * Clamp a transform so the object's world bounding box stays within [0,W]×[0,H].
@@ -64,7 +65,7 @@ function shapeWorld(tool: Tool, pts: Pt[]): Pt[][] {
   if (!b) return [];
   if (tool === "line") return [lineWorld(a, b)];
   if (tool === "rect" || tool === "maskRect") return [rectWorld(a, b)];
-  if (tool === "circle") return [ellipseWorld(a, b)];
+  if (tool === "circle" || tool === "maskCircle") return [ellipseWorld(a, b)];
   if (tool === "semicircle") return [semicircleWorld(a, b)];
   return [];
 }
@@ -74,14 +75,18 @@ type Marquee = { start: Pt; current: Pt; additive: boolean };
 type ViewBox = { x: number; y: number; w: number; h: number };
 type Drag =
   | { mode: "move"; ids: string[]; primaryId: string; startMouse: Pt; startTs: Map<string, Transform>; startBoundsAll: [number, number, number, number]; vGuides: GuideCandidate[]; hGuides: GuideCandidate[] }
-  | { mode: "resize"; id: string; edge: ResizeEdge; startBounds: [number, number, number, number]; startLocalBounds: [number, number, number, number] }
+  | { mode: "resize"; id: string; edge: ResizeEdge; startTransform: Transform; startLocalBounds: [number, number, number, number]; anchorLocal: Pt; handleLocal: Pt; anchorWorld: Pt }
   | { mode: "groupScale"; ids: string[]; center: Pt; startDist: number; startTs: Map<string, Transform> }
   | { mode: "rotate"; id: string; center: Pt; startAngle: number; startRotation: number };
 
 const cl = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const zValue = (obj: SceneObject, index: number) => obj.zOrder ?? index;
 const MIN_ZOOM = 0.5;
-const MAX_ZOOM = 12;
+const MAX_ZOOM = 48;
+const PEN_SIMPLIFY_EPS = 0.4;
+const PEN_MIN_LENGTH = 0.08;
+const ROTATION_SNAP_DEG = 4;
+const ERASER_RADIUS = 2.5;
 
 function rotatePoint([x, y]: Pt, W: number, H: number, deg: ViewRotation): Pt {
   const cx = W / 2;
@@ -104,6 +109,91 @@ function rotatedBounds(W: number, H: number, deg: ViewRotation): [number, number
   ];
 }
 
+function normalizeDeg(deg: number) {
+  return ((deg % 360) + 360) % 360;
+}
+
+function signedDeg(rad: number) {
+  const deg = (rad * 180) / Math.PI;
+  return ((deg + 180) % 360 + 360) % 360 - 180;
+}
+
+function displayDeg(rad: number) {
+  const raw = (rad * 180) / Math.PI;
+  const normalized = normalizeDeg(raw);
+  return normalized === 0 && raw > 0.0001 ? 360 : normalized;
+}
+
+function snapRotation(rad: number) {
+  const deg = normalizeDeg((rad * 180) / Math.PI);
+  const snapTargets = [0, 90, 180, 270, 360];
+  const target = snapTargets.find((a) => Math.abs(deg - a) <= ROTATION_SNAP_DEG);
+  return target == null ? rad : (target * Math.PI) / 180;
+}
+
+function worldPoint(local: Pt, t: Transform): Pt {
+  const cos = Math.cos(t.rotation), sin = Math.sin(t.rotation);
+  const sx = t.scaleX ?? t.scale;
+  const sy = t.scaleY ?? t.scale;
+  const x = local[0] * sx;
+  const y = local[1] * sy;
+  return [t.x + x * cos - y * sin, t.y + x * sin + y * cos];
+}
+
+function screenVectorToRotatedLocal(delta: Pt, rotation: number): Pt {
+  const cos = Math.cos(rotation), sin = Math.sin(rotation);
+  return [delta[0] * cos + delta[1] * sin, -delta[0] * sin + delta[1] * cos];
+}
+
+function resizeLocals(edge: ResizeEdge, b: [number, number, number, number]): { anchor: Pt; handle: Pt } {
+  const [x0, y0, x1, y1] = b;
+  const cx = (x0 + x1) / 2;
+  const cy = (y0 + y1) / 2;
+  const map: Record<ResizeEdge, { anchor: Pt; handle: Pt }> = {
+    tl: { anchor: [x1, y1], handle: [x0, y0] },
+    tc: { anchor: [cx, y1], handle: [cx, y0] },
+    tr: { anchor: [x0, y1], handle: [x1, y0] },
+    ml: { anchor: [x1, cy], handle: [x0, cy] },
+    mr: { anchor: [x0, cy], handle: [x1, cy] },
+    bl: { anchor: [x1, y0], handle: [x0, y1] },
+    bc: { anchor: [cx, y0], handle: [cx, y1] },
+    br: { anchor: [x0, y0], handle: [x1, y1] },
+  };
+  return map[edge];
+}
+
+function pointSegmentDistance(p: Pt, a: Pt, b: Pt) {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const len2 = dx * dx + dy * dy;
+  if (len2 === 0) return Math.hypot(p[0] - a[0], p[1] - a[1]);
+  const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2));
+  return Math.hypot(p[0] - (a[0] + dx * t), p[1] - (a[1] + dy * t));
+}
+
+function segmentsDistance(a0: Pt, a1: Pt, b0: Pt, b1: Pt) {
+  const cross = (a: Pt, b: Pt, c: Pt) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  const intersects =
+    Math.sign(cross(a0, a1, b0)) !== Math.sign(cross(a0, a1, b1)) &&
+    Math.sign(cross(b0, b1, a0)) !== Math.sign(cross(b0, b1, a1));
+  if (intersects) return 0;
+  return Math.min(
+    pointSegmentDistance(a0, b0, b1),
+    pointSegmentDistance(a1, b0, b1),
+    pointSegmentDistance(b0, a0, a1),
+    pointSegmentDistance(b1, a0, a1)
+  );
+}
+
+function lineNearPath(line: Pt[], path: Pt[], radius: number) {
+  for (let i = 1; i < line.length; i++) {
+    for (let j = 1; j < path.length; j++) {
+      if (segmentsDistance(line[i - 1], line[i], path[j - 1], path[j]) <= radius) return true;
+    }
+  }
+  return false;
+}
+
 export default function PaintCanvas({
   cal,
   page,
@@ -117,6 +207,7 @@ export default function PaintCanvas({
   onContextMenuSelection,
   onImageDrop,
   onTextAdd,
+  onErase,
   onCursorMove,
   onCursorClick,
   viewRotation,
@@ -134,6 +225,7 @@ export default function PaintCanvas({
   onContextMenuSelection: (ids: string[], x: number, y: number) => void;
   onImageDrop: (file: File, at: Pt) => void;
   onTextAdd: (at: Pt) => void;
+  onErase: (points: Pt[], mode: "free" | "line", radius: number) => void;
   onCursorMove?: (cursor: { x: number; y: number; inside: boolean; tool: Tool }) => void;
   onCursorClick?: (click: { x: number; y: number; tool: Tool }) => void;
   viewRotation: ViewRotation;
@@ -159,6 +251,7 @@ export default function PaintCanvas({
   const [draft, setDraft] = useState<Draft | null>(null);
   const [marquee, setMarquee] = useState<Marquee | null>(null);
   const [guides, setGuides] = useState<Guide[]>([]);
+  const [rotationHint, setRotationHint] = useState<{ at: Pt; currentDeg: number; deltaDeg: number; snapped: boolean } | null>(null);
   const [view, setView] = useState<ViewBox>(baseView);
   const [spaceDown, setSpaceDown] = useState(false);
   const [panning, setPanning] = useState(false);
@@ -323,7 +416,7 @@ export default function PaintCanvas({
       return;
     }
     svgRef.current!.setPointerCapture(e.pointerId);
-    const p = tool === "pen" ? toMM(e) : snapPt(toMM(e), step, snapOn);
+    const p = tool === "pen" || tool === "erase" || tool === "eraseLine" ? toMM(e) : snapPt(toMM(e), step, snapOn);
     setDraft({ tool, points: [p, p] });
   };
 
@@ -346,7 +439,7 @@ export default function PaintCanvas({
       return;
     }
     if (draft) {
-      if (draft.tool === "pen") {
+      if (draft.tool === "pen" || draft.tool === "erase" || draft.tool === "eraseLine") {
         const pts = draft.points.slice();
         const coalesced = (e.nativeEvent as any).getCoalescedEvents?.() ?? [e.nativeEvent];
         for (const ce of coalesced) {
@@ -400,68 +493,40 @@ export default function PaintCanvas({
     } else if (d.mode === "resize") {
       const obj = page.objects.find((o) => o.id === d.id);
       if (!obj) return;
-      const [sbx0, sby0, sbx1, sby1] = d.startBounds;
       const [slx0, sly0, slx1, sly1] = d.startLocalBounds;
       const localW = Math.max(slx1 - slx0, 0.001);
       const localH = Math.max(sly1 - sly0, 0.001);
-      const minPx = 2; // mm
+      const start = d.startTransform;
+      const startSx = start.scaleX ?? start.scale;
+      const startSy = start.scaleY ?? start.scale;
+      const localDelta = screenVectorToRotatedLocal([m[0] - d.anchorWorld[0], m[1] - d.anchorWorld[1]], start.rotation);
+      const handleDx = d.handleLocal[0] - d.anchorLocal[0];
+      const handleDy = d.handleLocal[1] - d.anchorLocal[1];
+      const movesX = Math.abs(handleDx) > 0.0001;
+      const movesY = Math.abs(handleDy) > 0.0001;
+      let newScaleX = movesX ? localDelta[0] / handleDx : startSx;
+      let newScaleY = movesY ? localDelta[1] / handleDy : startSy;
+      const minScaleX = 2 / localW;
+      const minScaleY = 2 / localH;
+      newScaleX = Math.max(minScaleX, Math.abs(newScaleX)) * Math.sign(startSx || 1);
+      newScaleY = Math.max(minScaleY, Math.abs(newScaleY)) * Math.sign(startSy || 1);
 
-      const movesLeft  = d.edge === "tl" || d.edge === "ml" || d.edge === "bl";
-      const movesRight = d.edge === "tr" || d.edge === "mr" || d.edge === "br";
-      const movesTop   = d.edge === "tl" || d.edge === "tc" || d.edge === "tr";
-      const movesBot   = d.edge === "bl" || d.edge === "bc" || d.edge === "br";
-      const isCorner   = (movesLeft || movesRight) && (movesTop || movesBot);
-
-      let wx0 = sbx0, wy0 = sby0, wx1 = sbx1, wy1 = sby1;
-      if (movesLeft)  wx0 = cl(m[0], 0,            sbx1 - minPx);
-      if (movesRight) wx1 = cl(m[0], sbx0 + minPx, W);
-      if (movesTop)   wy0 = cl(m[1], 0,            sby1 - minPx);
-      if (movesBot)   wy1 = cl(m[1], sby0 + minPx, H);
-
-      // Ctrl: lock aspect ratio (corners only)
-      if ((e.ctrlKey || e.metaKey) && isCorner) {
-        const origW = Math.max(sbx1 - sbx0, 0.001);
-        const origH = Math.max(sby1 - sby0, 0.001);
-        const ar = origW / origH;
-        let nw = wx1 - wx0;
-        let nh = wy1 - wy0;
-        // Drive by whichever axis changed proportionally more
-        if (nw / origW >= nh / origH) {
-          nh = nw / ar;
-        } else {
-          nw = nh * ar;
-        }
-        // Anchor to the fixed corner of this handle
-        if      (d.edge === "br") { wx1 = sbx0 + nw; wy1 = sby0 + nh; }
-        else if (d.edge === "tl") { wx0 = sbx1 - nw; wy0 = sby1 - nh; }
-        else if (d.edge === "tr") { wx1 = sbx0 + nw; wy0 = sby1 - nh; }
-        else                      { wx0 = sbx1 - nw; wy1 = sby0 + nh; } // bl
-        // Re-clamp to hard border
-        wx0 = cl(wx0, 0, W - minPx);
-        wy0 = cl(wy0, 0, H - minPx);
-        wx1 = cl(wx1, minPx, W);
-        wy1 = cl(wy1, minPx, H);
+      if ((e.ctrlKey || e.metaKey) && movesX && movesY) {
+        const factor = Math.max(Math.abs(newScaleX / startSx), Math.abs(newScaleY / startSy));
+        newScaleX = Math.sign(startSx || 1) * Math.max(minScaleX, Math.abs(startSx) * factor);
+        newScaleY = Math.sign(startSy || 1) * Math.max(minScaleY, Math.abs(startSy) * factor);
       }
 
-      // Hard-clamp all four edges to the plot area — catches floating-point drift
-      // and any case where fixed edges were already outside the boundary.
-      wx0 = Math.max(0, wx0);
-      wy0 = Math.max(0, wy0);
-      wx1 = Math.min(W, wx1);
-      wy1 = Math.min(H, wy1);
-      if (wx1 - wx0 < minPx) { if (movesLeft) wx0 = wx1 - minPx; else wx1 = Math.min(wx0 + minPx, W); }
-      if (wy1 - wy0 < minPx) { if (movesTop)  wy0 = wy1 - minPx; else wy1 = Math.min(wy0 + minPx, H); }
-
-      const newScaleX = (wx1 - wx0) / localW;
-      const newScaleY = (wy1 - wy0) / localH;
-      const t = obj.transform ?? IDENTITY;
+      const cos = Math.cos(start.rotation), sin = Math.sin(start.rotation);
+      const ax = d.anchorLocal[0] * newScaleX;
+      const ay = d.anchorLocal[1] * newScaleY;
       updateSafe(d.id, {
-        ...t,
-        x: (wx0 + wx1) / 2,
-        y: (wy0 + wy1) / 2,
+        ...start,
+        x: d.anchorWorld[0] - (ax * cos - ay * sin),
+        y: d.anchorWorld[1] - (ax * sin + ay * cos),
         scaleX: newScaleX,
         scaleY: newScaleY,
-        scale: Math.max(newScaleX, newScaleY),
+        scale: Math.max(Math.abs(newScaleX), Math.abs(newScaleY)),
       });
 
     } else if (d.mode === "groupScale") {
@@ -485,7 +550,16 @@ export default function PaintCanvas({
     } else {
       const angle = Math.atan2(m[1] - d.center[1], m[0] - d.center[0]);
       const obj = page.objects.find((o) => o.id === d.id);
-      if (obj) updateSafe(d.id, { ...(obj.transform ?? IDENTITY), rotation: d.startRotation + angle - d.startAngle });
+      const rawRotation = d.startRotation + angle - d.startAngle;
+      const rotation = snapRotation(rawRotation);
+      const snapped = Math.abs(rotation - rawRotation) > 0.0001;
+      setRotationHint({
+        at: [d.center[0], d.center[1] - HANDLE * 2.2],
+        currentDeg: displayDeg(rotation),
+        deltaDeg: signedDeg(rotation - d.startRotation),
+        snapped,
+      });
+      if (obj) updateSafe(d.id, { ...(obj.transform ?? IDENTITY), rotation });
     }
   };
 
@@ -514,8 +588,14 @@ export default function PaintCanvas({
       return;
     }
     if (draft) {
+      if (draft.tool === "erase" || draft.tool === "eraseLine") {
+        const pts = simplify(draft.points, ERASER_RADIUS / Math.max(zoom, 1));
+        if (pts.length >= 2) onErase(pts, draft.tool === "erase" ? "free" : "line", ERASER_RADIUS);
+        setDraft(null);
+        return;
+      }
       const world =
-        draft.tool === "pen" ? [simplify(draft.points, 0.4)] : shapeWorld(draft.tool, draft.points);
+        draft.tool === "pen" ? [simplify(draft.points, PEN_SIMPLIFY_EPS / zoom)] : shapeWorld(draft.tool, draft.points);
       const flat = world.flat();
       if (flat.length >= 2) {
         const [x0, y0, x1, y1] = [
@@ -524,12 +604,13 @@ export default function PaintCanvas({
           Math.max(...flat.map((p) => p[0])),
           Math.max(...flat.map((p) => p[1])),
         ];
-        if (Math.hypot(x1 - x0, y1 - y0) > 1) {
+        const minLength = draft.tool === "pen" ? PEN_MIN_LENGTH : 1;
+        if (Math.hypot(x1 - x0, y1 - y0) > minLength) {
           const { local, cx, cy } = localize(world);
           onAdd({
             id: crypto.randomUUID(),
-            type: draft.tool === "maskRect" ? "mask-rect" : draft.tool,
-            data: draft.tool === "maskRect" ? { mask: "erase" } : undefined,
+            type: draft.tool === "maskRect" || draft.tool === "maskCircle" ? "mask" : draft.tool,
+            data: draft.tool === "maskRect" || draft.tool === "maskCircle" ? { mask: "erase" } : undefined,
             cachedPolylines: local,
             transform: { x: cx, y: cy, rotation: 0, scale: 1 },
             plotted: false,
@@ -539,6 +620,7 @@ export default function PaintCanvas({
       setDraft(null);
     }
     drag.current = null;
+    setRotationHint(null);
     if (guides.length) setGuides([]);
   };
 
@@ -608,12 +690,17 @@ export default function PaintCanvas({
     svgRef.current!.setPointerCapture(e.pointerId);
     const t = obj.transform ?? IDENTITY;
     const localLines = (obj.cachedPolylines ?? []) as Pt[][];
+    const startLocalBounds = bounds(localLines.flat());
+    const { anchor, handle } = resizeLocals(edge, startLocalBounds);
     drag.current = {
       mode: "resize",
       id: obj.id,
       edge,
-      startBounds: objectWorldBounds(localLines, t),
-      startLocalBounds: bounds(localLines.flat()),
+      startTransform: { ...t },
+      startLocalBounds,
+      anchorLocal: anchor,
+      handleLocal: handle,
+      anchorWorld: worldPoint(anchor, t),
     };
   };
 
@@ -650,6 +737,7 @@ export default function PaintCanvas({
       startAngle: Math.atan2(m[1] - center[1], m[0] - center[0]),
       startRotation: t.rotation,
     };
+    setRotationHint({ at: [center[0], center[1] - HANDLE * 2.2], currentDeg: displayDeg(t.rotation), deltaDeg: 0, snapped: false });
   };
 
   const objTransform = (t: Transform) => {
@@ -661,9 +749,21 @@ export default function PaintCanvas({
   const canvasRotationTransform = `rotate(${viewRotation} ${W / 2} ${H / 2})`;
 
   const draftWorld = draft
-    ? draft.tool === "pen"
+    ? draft.tool === "pen" || draft.tool === "erase" || draft.tool === "eraseLine"
       ? [draft.points]
       : shapeWorld(draft.tool, draft.points)
+    : [];
+
+  const lineErasePreview = draft?.tool === "eraseLine" && draft.points.length >= 2
+    ? page.objects.flatMap((obj) => {
+        if (obj.plotted) return [];
+        const localLines = ((obj.cachedPolylines ?? []) as Pt[][]).filter((line) => line.length >= 2);
+        if (!localLines.length) return [];
+        const worldLines = transformPolylines(localLines, obj.transform ?? IDENTITY);
+        return worldLines.flatMap((line, index) =>
+          lineNearPath(line, draft.points, ERASER_RADIUS) ? [{ id: `${obj.id}:${index}`, line }] : []
+        );
+      })
     : [];
 
   const objectsByZ = page.objects
@@ -772,10 +872,26 @@ export default function PaintCanvas({
           );
         })}
 
+        {lineErasePreview.map(({ id, line }) => (
+          <path
+            key={`erase-preview-${id}`}
+            d={toPath(line)}
+            fill="none"
+            stroke="var(--err)"
+            strokeWidth={Math.max(STROKE * 2.8, ERASER_RADIUS * 0.55)}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            opacity={0.95}
+            pointerEvents="none"
+          />
+        ))}
+
         {/* live draft preview */}
         {draftWorld.map((line, i) => (
           <path key={`d${i}`} d={toPath(line as Pt[])} fill="none"
-            stroke="var(--busy)" strokeWidth={STROKE} strokeDasharray={`${STROKE * 2} ${STROKE}`}
+            stroke={draft?.tool === "erase" || draft?.tool === "eraseLine" ? "var(--err)" : "var(--busy)"}
+            strokeWidth={draft?.tool === "erase" || draft?.tool === "eraseLine" ? ERASER_RADIUS * 2 : STROKE}
+            strokeDasharray={draft?.tool === "eraseLine" ? `${STROKE * 2} ${STROKE}` : undefined}
             strokeLinejoin="round" strokeLinecap="round" />
         ))}
 
@@ -793,9 +909,19 @@ export default function PaintCanvas({
           objectsByZ.map((obj) => {
             if (obj.plotted) return null;
             const t = obj.transform ?? IDENTITY;
-            const [bx0, by0, bx1, by1] = objectWorldBounds(
-              (obj.cachedPolylines ?? []) as Pt[][], t
-            );
+            const localLines = (obj.cachedPolylines ?? []) as Pt[][];
+            const localBounds = bounds(localLines.flat());
+            const [lx0, ly0, lx1, ly1] = localBounds;
+            const boxCorners = [
+              worldPoint([lx0, ly0], t),
+              worldPoint([lx1, ly0], t),
+              worldPoint([lx1, ly1], t),
+              worldPoint([lx0, ly1], t),
+            ];
+            const bx0 = Math.min(...boxCorners.map((p) => p[0]));
+            const by0 = Math.min(...boxCorners.map((p) => p[1]));
+            const bx1 = Math.max(...boxCorners.map((p) => p[0]));
+            const by1 = Math.max(...boxCorners.map((p) => p[1]));
             const m = STROKE * 2;
             const sel = selectedIds.includes(obj.id);
             const singleSel = selectedIds.length === 1 && sel;
@@ -803,36 +929,44 @@ export default function PaintCanvas({
             const cy = t.y;
             const bw = bx1 - bx0;
             const bh = by1 - by0;
-            const rcx = (bx0 + bx1) / 2;
-            const rcy = by0 - HANDLE * 1.2;
+            const topMid: Pt = [(boxCorners[0][0] + boxCorners[1][0]) / 2, (boxCorners[0][1] + boxCorners[1][1]) / 2];
+            const rotateOffset = screenVectorToRotatedLocal([0, -HANDLE * 1.2], -t.rotation);
+            const rotateHandle: Pt = [topMid[0] + rotateOffset[0], topMid[1] + rotateOffset[1]];
+            const outline = boxCorners.map((p) => p.join(",")).join(" ");
             return (
               <g key={`s${obj.id}`}>
                 {/* hit + selection outline */}
                 <rect
                   x={bx0 - m} y={by0 - m} width={bw + 2 * m} height={bh + 2 * m}
                   fill="transparent"
-                  stroke={sel ? "var(--accent)" : "transparent"}
-                  strokeWidth={STROKE} strokeDasharray={`${STROKE * 2} ${STROKE}`}
                   style={{ cursor: "move" }}
                   onPointerDown={(e) => startMove(e, obj)}
                   onContextMenu={(e) => openContextMenu(e, obj)}
                 />
+                <polygon
+                  points={outline}
+                  fill="none"
+                  stroke={sel ? "var(--accent)" : "transparent"}
+                  strokeWidth={STROKE}
+                  strokeDasharray={`${STROKE * 2} ${STROKE}`}
+                  pointerEvents="none"
+                />
                 {singleSel && (
                   <>
                     {/* rotate tether + handle */}
-                    <line x1={rcx} y1={by0} x2={rcx} y2={rcy}
+                    <line x1={topMid[0]} y1={topMid[1]} x2={rotateHandle[0]} y2={rotateHandle[1]}
                       stroke="var(--accent)" strokeWidth={STROKE} strokeDasharray={`${STROKE} ${STROKE}`}
                       pointerEvents="none" />
                     <circle
-                      cx={rcx} cy={rcy} r={HANDLE / 2}
+                      cx={rotateHandle[0]} cy={rotateHandle[1]} r={HANDLE / 2}
                       fill="var(--panel)" stroke="var(--accent)" strokeWidth={STROKE}
                       style={{ cursor: "grab" }}
                       onPointerDown={(e) => startRotate(e, obj, [cx, cy])}
                     />
                     {/* 8 resize handles */}
-                    {resizeHandles.map(({ edge, cursor, dx, dy }) => {
-                      const hx = bx0 + bw * dx;
-                      const hy = by0 + bh * dy;
+                    {resizeHandles.map(({ edge, cursor }) => {
+                      const { handle } = resizeLocals(edge, localBounds);
+                      const [hx, hy] = worldPoint(handle, t);
                       const hs = HANDLE * 0.85;
                       return (
                         <rect
@@ -890,6 +1024,38 @@ export default function PaintCanvas({
               pointerEvents="none" />
           )
         )}
+
+        {rotationHint && (() => {
+          const label = `${rotationHint.currentDeg.toFixed(1)}° (${rotationHint.deltaDeg >= 0 ? "+" : ""}${rotationHint.deltaDeg.toFixed(1)}°)`;
+          const width = Math.max(28, label.length * HANDLE * 0.34);
+          const height = HANDLE * 0.92;
+          const x = rotationHint.at[0] - width / 2;
+          const y = rotationHint.at[1] - height / 2;
+          return (
+            <g pointerEvents="none">
+              <rect
+                x={x}
+                y={y}
+                width={width}
+                height={height}
+                rx={height * 0.25}
+                fill="rgba(13, 13, 15, 0.88)"
+                stroke={rotationHint.snapped ? "var(--ok)" : "var(--accent)"}
+                strokeWidth={STROKE}
+              />
+              <text
+                x={rotationHint.at[0]}
+                y={rotationHint.at[1] + height * 0.17}
+                textAnchor="middle"
+                fontSize={height * 0.46}
+                fill={rotationHint.snapped ? "var(--ok)" : "var(--text)"}
+                fontWeight={700}
+              >
+                {label}
+              </text>
+            </g>
+          );
+        })()}
 
         <text x={W / 2} y={H + pad * 0.7} fontSize={S * 0.022}
           fill="var(--muted)" textAnchor="middle">

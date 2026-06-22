@@ -4,11 +4,32 @@ import math
 import re
 from dataclasses import asdict, dataclass
 
-_WORD = re.compile(r"([GXYZF])(-?\d+(?:\.\d+)?)", re.IGNORECASE)
+_WORD = re.compile(r"([GXYZFPS])(-?\d+(?:\.\d+)?)", re.IGNORECASE)
 
 # Fallback feeds (mm/min) when a move carries no F word; match typical profiles.
 _DEFAULT_TRAVEL_FEED = 3000.0
 _DEFAULT_DRAW_FEED = 1500.0
+
+# Feed-rate-only estimates are far too optimistic on plotter jobs with many
+# tiny strokes: the planner has to accelerate/decelerate for nearly every short
+# move, and pen up/down cycles have real mechanical latency beyond the Z travel.
+# These conservative defaults keep the metric closer to observed wall time while
+# still deriving the bulk of the estimate from the actual generated G-code.
+_XY_ACCEL_MM_S2 = 500.0
+_Z_ACCEL_MM_S2 = 100.0
+_MOVE_OVERHEAD_S = 0.025
+_PEN_Z_SETTLE_S = 0.15
+
+
+def _move_seconds(dist_mm: float, feed_mm_min: float, accel_mm_s2: float) -> float:
+    if dist_mm <= 0:
+        return 0.0
+    v = max(feed_mm_min / 60.0, 1e-6)
+    a = max(accel_mm_s2, 1e-6)
+    accel_dist = (v * v) / (2 * a)
+    if dist_mm <= 2 * accel_dist:
+        return 2 * math.sqrt(dist_mm / a)
+    return (dist_mm / v) + (v / a)
 
 
 @dataclass(frozen=True)
@@ -49,6 +70,11 @@ def analyze_gcode(text: str) -> GcodeMetrics:
         if g is None:
             continue
         commands += 1
+        if g == 4:
+            # Marlin-style dwell: P is milliseconds, S is seconds.
+            duration_s += max(words.get("S", 0.0), 0.0) + max(words.get("P", 0.0), 0.0) / 1000.0
+            drawing = False
+            continue
         if g == 28:
             x = y = z = 0.0
             drawing = False
@@ -59,9 +85,17 @@ def analyze_gcode(text: str) -> GcodeMetrics:
         if "F" in words and words["F"] > 0:
             feed = words["F"]
         dist = math.dist((x, y, z), (nx, ny, nz))
-        duration_s += dist / max(feed, 1.0) * 60.0
-
         moves_xy = "X" in words or "Y" in words
+        moves_z = "Z" in words and nz != z
+        if dist > 0:
+            duration_s += _move_seconds(
+                dist,
+                feed,
+                _XY_ACCEL_MM_S2 if moves_xy else _Z_ACCEL_MM_S2,
+            ) + _MOVE_OVERHEAD_S
+            if moves_z and not moves_xy:
+                duration_s += _PEN_Z_SETTLE_S
+
         if g == 1 and moves_xy:
             if not drawing:
                 drawing = True

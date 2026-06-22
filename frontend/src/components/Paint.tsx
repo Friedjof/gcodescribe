@@ -12,7 +12,7 @@ import LiveButton from "../stream/LiveButton";
 import { defaultSceneViewBox } from "../paint/SceneView";
 import { useLiveRegistryState } from "../stream/liveRegistry";
 import { useLiveStream } from "../stream/useLiveStream";
-import { IDENTITY, bounds, localize, objectWorldBounds, type Pt, type Transform } from "../paint/geometry";
+import { IDENTITY, bounds, localize, objectWorldBounds, transformPolylines, type Pt, type Transform } from "../paint/geometry";
 import { TEXT_FONTS, type TextFont } from "../paint/text";
 import {
   basePolylines,
@@ -30,6 +30,73 @@ import { useConfirm, usePrompt } from "./dialogs";
 const GRID_STEPS = [1, 5, 10, 25, 50];
 
 type ImageMode = "edges" | "hatch" | "lines" | "dots" | "handwriting";
+
+function pointSegmentDistance(p: Pt, a: Pt, b: Pt) {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const len2 = dx * dx + dy * dy;
+  if (len2 === 0) return Math.hypot(p[0] - a[0], p[1] - a[1]);
+  const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2));
+  return Math.hypot(p[0] - (a[0] + dx * t), p[1] - (a[1] + dy * t));
+}
+
+function segmentsDistance(a0: Pt, a1: Pt, b0: Pt, b1: Pt) {
+  const cross = (a: Pt, b: Pt, c: Pt) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  const intersects =
+    Math.sign(cross(a0, a1, b0)) !== Math.sign(cross(a0, a1, b1)) &&
+    Math.sign(cross(b0, b1, a0)) !== Math.sign(cross(b0, b1, a1));
+  if (intersects) return 0;
+  return Math.min(
+    pointSegmentDistance(a0, b0, b1),
+    pointSegmentDistance(a1, b0, b1),
+    pointSegmentDistance(b0, a0, a1),
+    pointSegmentDistance(b1, a0, a1)
+  );
+}
+
+function lineNearPath(line: Pt[], path: Pt[], radius: number) {
+  for (let i = 1; i < line.length; i++) {
+    for (let j = 1; j < path.length; j++) {
+      if (segmentsDistance(line[i - 1], line[i], path[j - 1], path[j]) <= radius) return true;
+    }
+  }
+  return false;
+}
+
+function segmentNearPath(a: Pt, b: Pt, path: Pt[], radius: number) {
+  for (let i = 1; i < path.length; i++) {
+    if (segmentsDistance(a, b, path[i - 1], path[i]) <= radius) return true;
+  }
+  return false;
+}
+
+function eraseLinePieces(line: Pt[], path: Pt[], radius: number) {
+  const out: Pt[][] = [];
+  let current: Pt[] = [line[0]];
+  for (let i = 1; i < line.length; i++) {
+    const a = line[i - 1];
+    const b = line[i];
+    if (segmentNearPath(a, b, path, radius)) {
+      if (current.length >= 2) out.push(current);
+      current = [b];
+    } else {
+      current.push(b);
+    }
+  }
+  if (current.length >= 2) out.push(current);
+  return out;
+}
+
+function eraseWorldPolylines(lines: Pt[][], path: Pt[], mode: "free" | "line", radius: number) {
+  if (mode === "line") return lines.filter((line) => !lineNearPath(line, path, radius));
+  return lines.flatMap((line) => eraseLinePieces(line, path, radius));
+}
+
+function samePolylines(a: Pt[][], b: Pt[][]) {
+  return a.length === b.length && a.every((line, i) =>
+    line.length === b[i].length && line.every((pt, j) => pt[0] === b[i][j][0] && pt[1] === b[i][j][1])
+  );
+}
 
 export default function Paint({
   visible = true,
@@ -104,13 +171,19 @@ export default function Paint({
   const tools: { value: Tool; label: string; icon: string }[] = [
     { value: "select", label: t("paint.tool.select"), icon: "⬚" },
     { value: "pen", label: t("paint.tool.pen"), icon: "✎" },
+    { value: "erase", label: t("paint.tool.erase"), icon: "⌫" },
+    { value: "eraseLine", label: t("paint.tool.eraseLine"), icon: "✂" },
     { value: "line", label: t("paint.tool.line"), icon: "╱" },
     { value: "rect", label: t("paint.tool.rect"), icon: "▭" },
     { value: "maskRect", label: t("paint.tool.maskRect"), icon: "▰" },
+    { value: "maskCircle", label: t("paint.tool.maskCircle"), icon: "●" },
     { value: "circle", label: t("paint.tool.circle"), icon: "◯" },
     { value: "semicircle", label: t("paint.tool.semicircle"), icon: "◗" },
     { value: "text", label: t("paint.tool.text"), icon: "T" },
   ];
+  const selectTools = tools.filter((o) => o.value === "select");
+  const drawTools = tools.filter((o) => ["pen", "line", "rect", "maskRect", "maskCircle", "circle", "semicircle", "text"].includes(o.value));
+  const eraseTools = tools.filter((o) => o.value === "erase" || o.value === "eraseLine");
   const imageModes: { value: ImageMode; label: string; description: string }[] = [
     { value: "handwriting", label: t("paint.image.handwriting"), description: t("paint.image.handwritingDesc") },
     { value: "edges", label: t("paint.image.edges"), description: t("paint.image.edgesDesc") },
@@ -539,6 +612,34 @@ export default function Paint({
     persist(page.id, objects);
   };
 
+  const eraseAcrossObjects = (path: Pt[], mode: "free" | "line", radius: number) => {
+    if (!page || path.length < 2) return;
+    let changed = false;
+    const objects = page.objects.flatMap((obj) => {
+      if (obj.plotted) return [obj];
+      const local = ((obj.cachedPolylines as Pt[][] | undefined) ?? basePolylines(obj)).filter((line) => line.length >= 2);
+      if (!local.length) return [obj];
+      const transform = obj.transform ?? IDENTITY;
+      const world = transformPolylines(local, transform);
+      const erased = eraseWorldPolylines(world, path, mode, radius).filter((line) => line.length >= 2);
+      if (samePolylines(erased, world)) return [obj];
+      changed = true;
+      if (!erased.length) return [];
+      const { local: nextLocal, cx, cy } = localize(erased);
+      return [{
+        ...obj,
+        data: { ...(obj.data ?? {}), basePolylines: nextLocal },
+        cachedPolylines: nextLocal,
+        transform: { x: cx, y: cy, rotation: 0, scale: 1 },
+      }];
+    });
+    if (!changed) return;
+    remember();
+    setPage({ ...page, objects });
+    setSelectedIds((ids) => ids.filter((id) => objects.some((obj) => obj.id === id)));
+    persist(page.id, objects);
+  };
+
   const updateTextObject = (id: string, patch: Partial<{ text: string; size: number; font: TextFont }>) => {
     if (!page) return;
     remember();
@@ -625,6 +726,39 @@ export default function Paint({
     const objects = page.objects.map((obj) => groupIds.has(obj.groupId) ? { ...obj, groupId: undefined } : obj);
     setPage({ ...page, objects });
     setSelectedIds(page.objects.filter((obj) => groupIds.has(obj.groupId)).map((obj) => obj.id));
+    setMenu(null);
+    persist(page.id, objects);
+  };
+
+  const convertSelectedToLines = () => {
+    if (!page || selectedIds.length === 0) return;
+    const selected = new Set(selectedIds);
+    const targets = page.objects.filter((obj) => selected.has(obj.id) && !obj.plotted);
+    const targetIds = new Set(targets.map((obj) => obj.id));
+    const converted: SceneObject[] = [];
+    let nextZ = page.objects.reduce((max, o, i) => Math.max(max, zValue(o, i)), -1) + 1;
+    for (const obj of targets) {
+      const local = ((obj.cachedPolylines as Pt[][] | undefined) ?? basePolylines(obj)).filter((line) => line.length >= 2);
+      if (!local.length) continue;
+      const world = transformPolylines(local, obj.transform ?? IDENTITY);
+      for (const line of world) {
+        const { local: nextLocal, cx, cy } = localize([line]);
+        converted.push({
+          id: crypto.randomUUID(),
+          type: "pen",
+          data: { basePolylines: nextLocal, style: DEFAULT_VECTOR_STYLE },
+          cachedPolylines: nextLocal,
+          transform: { x: cx, y: cy, rotation: 0, scale: 1 },
+          zOrder: nextZ++,
+          plotted: false,
+        });
+      }
+    }
+    if (!converted.length) return;
+    remember();
+    const objects = [...page.objects.filter((obj) => !targetIds.has(obj.id)), ...converted];
+    setPage({ ...page, objects });
+    setSelectedIds(converted.map((obj) => obj.id));
     setMenu(null);
     persist(page.id, objects);
   };
@@ -779,6 +913,19 @@ export default function Paint({
     persist(page.id, objects);
   };
 
+  const setSelectedObjectRotation = (degrees: number) => {
+    if (!page || selectedIds.length !== 1 || !Number.isFinite(degrees)) return;
+    remember();
+    const radians = (degrees * Math.PI) / 180;
+    const objects = page.objects.map((o) =>
+      o.id === selectedIds[0]
+        ? { ...o, transform: { ...(o.transform ?? IDENTITY), rotation: radians } }
+        : o
+    );
+    setPage({ ...page, objects });
+    persist(page.id, objects);
+  };
+
   const mapSelected = (fn: (t: Transform) => Transform) => {
     if (!page || selectedIds.length === 0) return;
     remember();
@@ -865,7 +1012,13 @@ export default function Paint({
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
       if (e.key === "Escape") {
+        e.preventDefault();
         setMenu(null);
+        if (tool !== "select") {
+          setTool("select");
+          return;
+        }
+        if (selectedIds.length > 0) setSelectedIds([]);
         return;
       }
       if (tool === "text" && selectedIds.length === 1 && !(e.ctrlKey || e.metaKey || e.altKey)) {
@@ -941,6 +1094,13 @@ export default function Paint({
     ? selectedObjects[0]
     : null;
   const selectedObjectSize = selectedObjects.length === 1 ? objectLocalSize(selectedObjects[0]) : null;
+  const selectedObjectRotation = selectedObjects.length === 1
+    ? (() => {
+        const raw = ((selectedObjects[0].transform?.rotation ?? 0) * 180) / Math.PI;
+        const normalized = ((raw % 360) + 360) % 360;
+        return normalized === 0 && raw > 0.0001 ? 360 : normalized;
+      })()
+    : null;
   const selectedStyle = selectedObjects.length > 0 ? objectStyle(selectedObjects[0]) : DEFAULT_VECTOR_STYLE;
   const canUngroupMenu = !!menu && page.objects.some((obj) => menu.ids.includes(obj.id) && obj.groupId);
 
@@ -1113,6 +1273,7 @@ export default function Paint({
               onContextMenuSelection={(ids, x, y) => { setSelectedIds(ids); setMenu({ ids, x, y }); }}
               onImageDrop={(file, at) => setImageImport({ file, at, mode: "edges", detail: 2 })}
               onTextAdd={addTextObject}
+              onErase={eraseAcrossObjects}
               onCursorMove={live.state === "live" ? live.sendCursor : undefined}
               onCursorClick={live.state === "live" ? live.sendClick : undefined}
               viewRotation={viewRotation}
@@ -1122,13 +1283,64 @@ export default function Paint({
           </div>
 
           <aside className="paint-tools-card">
-            <Segmented<Tool>
-              value={tool}
-              onChange={(t) => { setTool(t); if (t !== "select") setSelectedIds([]); }}
-              options={tools.map((o) => ({ value: o.value, label: o.icon, title: o.label }))}
-              wrap
-              className="paint-tool-grid"
-            />
+            <div className="paint-tool-section">
+              <h4>{t("paint.section.arrange")}</h4>
+              <Segmented<Tool>
+                value={tool}
+                onChange={(t) => { setTool(t); if (t !== "select") setSelectedIds([]); }}
+                options={selectTools.map((o) => ({ value: o.value, label: o.icon, title: o.label }))}
+                className="paint-tool-grid single"
+              />
+              <div className="paint-tools-actions compact">
+                <button className="ghost" disabled={!hasSelection} onClick={fitSelected}
+                  title={hasSelection ? t("paint.fitSelection") : t("paint.noSelection")} aria-label={t("paint.fit")}>
+                  ⛶
+                </button>
+                <button className="ghost" disabled={!hasSelection} onClick={centerSelected}
+                  title={hasSelection ? t("paint.centerSelection") : t("paint.noSelection")} aria-label={t("paint.center")}>
+                  ⌖
+                </button>
+                <button className="ghost" disabled={!hasSelection} onClick={() => moveSelected(-1)}
+                  title={hasSelection ? t("paint.moveBack") : t("paint.noSelection")} aria-label={t("paint.toBack")}>
+                  ⤓
+                </button>
+                <button className="ghost" disabled={!hasSelection} onClick={() => moveSelected(1)}
+                  title={hasSelection ? t("paint.moveFront") : t("paint.noSelection")} aria-label={t("paint.toFront")}>
+                  ⤒
+                </button>
+              </div>
+            </div>
+
+            <div className="paint-tool-section">
+              <h4>{t("paint.section.create")}</h4>
+              <Segmented<Tool>
+                value={tool}
+                onChange={(t) => { setTool(t); if (t !== "select") setSelectedIds([]); }}
+                options={drawTools.map((o) => ({ value: o.value, label: o.icon, title: o.label }))}
+                className="paint-tool-grid"
+              />
+            </div>
+
+            <div className="paint-tool-section">
+              <h4>{t("paint.section.erase")}</h4>
+              <Segmented<Tool>
+                value={tool}
+                onChange={(t) => { setTool(t); if (t !== "select") setSelectedIds([]); }}
+                options={eraseTools.map((o) => ({ value: o.value, label: o.icon, title: o.label }))}
+                className="paint-tool-grid erase"
+              />
+              <div className="paint-tools-actions compact">
+                <button className="ghost" disabled={!hasSelection} onClick={deleteSelected}
+                  title={hasSelection ? t("paint.deleteSelection") : t("paint.noSelection")} aria-label={t("paint.delete")}>
+                  🗑{selectedObjects.length > 1 ? <span className="act-count">{selectedObjects.length}</span> : ""}
+                </button>
+                <button className="ghost" disabled={!hasSelection} onClick={convertSelectedToLines}
+                  title={hasSelection ? t("paint.convertToLines") : t("paint.noSelection")} aria-label={t("paint.convertToLines")}>
+                  ⇄
+                </button>
+              </div>
+            </div>
+
             <input
               ref={imageInputRef}
               type="file"
@@ -1136,27 +1348,17 @@ export default function Paint({
               style={{ display: "none" }}
               onChange={(e) => { pickImage(e.target.files?.[0]); e.target.value = ""; }}
             />
-            <div className="paint-asset-row">
-              <button className="ghost" title={t("gallery.button")} aria-label={t("gallery.button")}
-                onClick={() => setGalleryOpen(true)}>▦</button>
-              <button className="ghost" title={t("paint.imageImport")} aria-label={t("paint.imageImport")}
-                onClick={() => imageInputRef.current?.click()}>🖼</button>
-              <button className="ghost" title={t("paint.md.button")} aria-label={t("paint.md.button")}
-                onClick={() => setMdOpen(true)}>⌶</button>
-            </div>
-            <div className="paint-tools-actions">
-              <button className="ghost" disabled={history.undo === 0} onClick={undo}
-                title={t("paint.undo")} aria-label={t("paint.undo")}>
-                ↶
-              </button>
-              <button className="ghost" disabled={history.redo === 0} onClick={redo}
-                title={t("paint.redo")} aria-label={t("paint.redo")}>
-                ↷
-              </button>
-              <button className="ghost" disabled={!hasSelection} onClick={deleteSelected}
-                title={hasSelection ? t("paint.deleteSelection") : t("paint.noSelection")} aria-label={t("paint.delete")}>
-                🗑{selectedObjects.length > 1 ? <span className="act-count">{selectedObjects.length}</span> : ""}
-              </button>
+            <div className="paint-tool-section">
+              <h4>{t("paint.section.clipboard")}</h4>
+              <div className="paint-tools-actions">
+                <button className="ghost" disabled={history.undo === 0} onClick={undo}
+                  title={t("paint.undo")} aria-label={t("paint.undo")}>
+                  ↶
+                </button>
+                <button className="ghost" disabled={history.redo === 0} onClick={redo}
+                  title={t("paint.redo")} aria-label={t("paint.redo")}>
+                  ↷
+                </button>
               <button className="ghost" disabled={!hasSelection} onClick={copySelected}
                 title={hasSelection ? t("paint.copySelection") : t("paint.noSelection")} aria-label={t("paint.copy")}>
                 ⧉
@@ -1181,22 +1383,15 @@ export default function Paint({
                 title={selectedObjects.some((obj) => obj.groupId) ? t("paint.ungroupSelection") : t("paint.noGroupSelected")} aria-label={t("paint.ungroup")}>
                 ⊟
               </button>
-              <button className="ghost" disabled={!hasSelection} onClick={fitSelected}
-                title={hasSelection ? t("paint.fitSelection") : t("paint.noSelection")} aria-label={t("paint.fit")}>
-                ⛶
-              </button>
-              <button className="ghost" disabled={!hasSelection} onClick={centerSelected}
-                title={hasSelection ? t("paint.centerSelection") : t("paint.noSelection")} aria-label={t("paint.center")}>
-                ⌖
-              </button>
-              <button className="ghost" disabled={!hasSelection} onClick={() => moveSelected(-1)}
-                title={hasSelection ? t("paint.moveBack") : t("paint.noSelection")} aria-label={t("paint.toBack")}>
-                ⤓
-              </button>
-              <button className="ghost" disabled={!hasSelection} onClick={() => moveSelected(1)}
-                title={hasSelection ? t("paint.moveFront") : t("paint.noSelection")} aria-label={t("paint.toFront")}>
-                ⤒
-              </button>
+              </div>
+              <div className="paint-asset-row">
+                <button className="ghost" title={t("gallery.button")} aria-label={t("gallery.button")}
+                  onClick={() => setGalleryOpen(true)}>▦</button>
+                <button className="ghost" title={t("paint.imageImport")} aria-label={t("paint.imageImport")}
+                  onClick={() => imageInputRef.current?.click()}>🖼</button>
+                <button className="ghost" title={t("paint.md.button")} aria-label={t("paint.md.button")}
+                  onClick={() => setMdOpen(true)}>⌶</button>
+              </div>
             </div>
 
             <div className="paint-style-panel">
@@ -1230,6 +1425,22 @@ export default function Paint({
                       }}
                     />
                     <em>mm</em>
+                  </div>
+                </label>
+                <label className="field">{t("common.rotation")}
+                  <div className="input-unit">
+                    <input
+                      type="number"
+                      min={0}
+                      max={360}
+                      step={1}
+                      disabled={selectedObjectRotation == null}
+                      value={selectedObjectRotation == null ? "" : Number(selectedObjectRotation.toFixed(1))}
+                      onChange={(e) => {
+                        if (e.target.value !== "") setSelectedObjectRotation(Number(e.target.value));
+                      }}
+                    />
+                    <em>°</em>
                   </div>
                 </label>
                 <button
@@ -1301,32 +1512,36 @@ export default function Paint({
                 />
                 {t("paint.style.active")}
               </label>
-              <label className="field">
-                {t("paint.style.pattern")}
-                <select
-                  disabled={!hasSelection || !selectedStyle.fill.enabled}
-                  value={selectedStyle.fill.mode}
-                  onChange={(e) => updateSelectedStyle({ fill: { mode: e.target.value as FillMode } as any })}
-                >
-                  <option value="hatch">{t("paint.image.hatch")}</option>
-                  <option value="dashed-hatch">{t("paint.style.dashedHatch")}</option>
-                  <option value="dotted-fill">{t("paint.image.dots")}</option>
-                </select>
-              </label>
-              {selectedStyle.fill.mode !== "dotted-fill" && (
-                <label className="field">{t("paint.style.angle")}
-                  <input type="number" step={5} disabled={!hasSelection || !selectedStyle.fill.enabled}
-                    value={selectedStyle.fill.angle}
-                    onChange={(e) => updateSelectedStyle({ fill: { angle: Number(e.target.value) || 0 } as any })} />
-                </label>
+              {selectedStyle.fill.enabled && (
+                <div className="fields compact">
+                  <label className="field">
+                    {t("paint.style.pattern")}
+                    <select
+                      disabled={!hasSelection}
+                      value={selectedStyle.fill.mode}
+                      onChange={(e) => updateSelectedStyle({ fill: { mode: e.target.value as FillMode } as any })}
+                    >
+                      <option value="hatch">{t("paint.image.hatch")}</option>
+                      <option value="dashed-hatch">{t("paint.style.dashedHatch")}</option>
+                      <option value="dotted-fill">{t("paint.image.dots")}</option>
+                    </select>
+                  </label>
+                  {selectedStyle.fill.mode !== "dotted-fill" && (
+                    <label className="field">{t("paint.style.angle")}
+                      <input type="number" step={5} disabled={!hasSelection}
+                        value={selectedStyle.fill.angle}
+                        onChange={(e) => updateSelectedStyle({ fill: { angle: Number(e.target.value) || 0 } as any })} />
+                    </label>
+                  )}
+                  <label className="field">{t("paint.style.spacing")}
+                    <input type="number" min={0.5} step={0.5} disabled={!hasSelection}
+                      value={selectedStyle.fill.mode === "dotted-fill" ? selectedStyle.fill.dotSpacing : selectedStyle.fill.spacing}
+                      onChange={(e) => updateSelectedStyle({ fill: selectedStyle.fill.mode === "dotted-fill"
+                        ? { dotSpacing: Number(e.target.value) || 1 } as any
+                        : { spacing: Number(e.target.value) || 1 } as any })} />
+                  </label>
+                </div>
               )}
-              <label className="field">{t("paint.style.spacing")}
-                <input type="number" min={0.5} step={0.5} disabled={!hasSelection || !selectedStyle.fill.enabled}
-                  value={selectedStyle.fill.mode === "dotted-fill" ? selectedStyle.fill.dotSpacing : selectedStyle.fill.spacing}
-                  onChange={(e) => updateSelectedStyle({ fill: selectedStyle.fill.mode === "dotted-fill"
-                    ? { dotSpacing: Number(e.target.value) || 1 } as any
-                    : { spacing: Number(e.target.value) || 1 } as any })} />
-              </label>
             </div>
           </aside>
         </div>

@@ -71,6 +71,12 @@ class TestMetrics:
         assert m.duration_s > 0
         assert m.size_bytes == len(GCODE.encode())
 
+    def test_analyze_includes_dwell_and_motion_overhead(self):
+        base = analyze_gcode("G0 Z5 F1000\n")
+        with_dwell = analyze_gcode("G0 Z5 F1000\nG4 P500\nG4 S1\n")
+        assert with_dwell.duration_s == pytest.approx(base.duration_s + 1.5, abs=0.01)
+        assert base.duration_s > 5 / 1000 * 60
+
     def test_score_range_and_breakdown(self):
         s = score_metrics(analyze_gcode(GCODE), MAX_GCODE_BYTES)
         assert set(s) == {"total", "time", "lifts", "size", "detail"}

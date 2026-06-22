@@ -2328,7 +2328,7 @@ kbd {
   flex: 1 1 auto;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 260px;
+  grid-template-columns: minmax(0, 1fr) 330px;
   gap: 10px;
 }
 .paint-tools-card {
@@ -2339,9 +2339,24 @@ kbd {
   background: rgba(255, 255, 255, 0.03);
   overflow: auto;
 }
+.paint-tool-section {
+  padding: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+  margin-bottom: 8px;
+}
+.paint-tool-section h4 {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
 .paint-tools-card .seg {
   width: 100%;
-  margin-bottom: 10px;
+  margin-bottom: 0;
   flex-direction: column;
   align-items: stretch;
 }
@@ -2361,6 +2376,13 @@ kbd {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 3px;
+  padding: 4px;
+  background: var(--panel-2);
+  border-color: rgba(10, 132, 255, 0.22);
+}
+.paint-tools-card .seg.paint-tool-grid.single,
+.paint-tools-card .seg.paint-tool-grid.erase {
+  grid-template-columns: repeat(2, 1fr);
 }
 .paint-tools-card .seg.paint-tool-grid button {
   width: auto;
@@ -2369,13 +2391,30 @@ kbd {
   padding: 9px 0;
   font-size: 17px;
   line-height: 1;
+  min-width: 0;
+  border-radius: 8px;
+  color: rgba(245, 245, 247, 0.62);
+}
+.paint-tools-card .seg.paint-tool-grid button:hover:not(.active) {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+}
+.paint-tools-card .seg.paint-tool-grid button.active {
+  background: none;
+  color: #fff;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.45);
+}
+.paint-tools-card .seg.paint-tool-grid .seg-indicator {
+  border-radius: 8px;
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.5), 0 0 20px rgba(10, 132, 255, 0.62),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 /* Gallery / image / markdown side by side as icon buttons. */
 .paint-asset-row {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 4px;
-  margin-bottom: 10px;
+  margin-top: 6px;
 }
 .paint-asset-row button {
   padding: 9px 0;
@@ -2386,6 +2425,10 @@ kbd {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 4px;
+}
+.paint-tools-actions.compact {
+  grid-template-columns: repeat(2, 1fr);
+  margin-top: 5px;
 }
 .paint-tools-actions button {
   position: relative;
@@ -2405,12 +2448,12 @@ kbd {
   color: var(--accent);
 }
 .paint-style-panel {
-  margin-top: 12px;
-  padding-top: 12px;
+  margin-top: 8px;
+  padding-top: 8px;
   border-top: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 .paint-style-panel h4 {
   margin: 4px 0 0;
@@ -2422,17 +2465,18 @@ kbd {
 }
 .paint-size-fields {
   display: grid;
-  grid-template-columns: 1fr 38px;
-  column-gap: 12px;
-  row-gap: 6px;
+  grid-template-columns: 1fr 1fr 34px;
+  column-gap: 6px;
+  row-gap: 5px;
   margin-top: -2px;
 }
-.paint-size-fields .field { grid-column: 1; }
+.paint-size-fields .field { grid-column: auto; }
+.paint-size-fields .field:nth-of-type(3) { grid-column: 1 / span 2; }
 .paint-size-fields .input-unit em { min-width: 22px; }
 
 /* Aspect-ratio lock: a single toggle visually tied to both size fields. */
 .size-link {
-  grid-column: 2;
+  grid-column: 3;
   grid-row: 1 / span 2;
   position: relative;
   align-self: center;
@@ -2472,9 +2516,23 @@ kbd {
 .size-link.active::after { background: var(--accent); }
 .paint-style-panel .field { gap: 4px; }
 .paint-style-panel input,
-.paint-style-panel select { width: 100%; padding: 7px 8px; }
+.paint-style-panel select { width: 100%; padding: 5px 7px; min-height: 30px; }
 .paint-style-panel .fields.compact { grid-template-columns: 1fr 1fr; gap: 6px; }
-.style-check { margin: 0; font-size: 13px; }
+.style-check {
+  margin: -2px 0 0;
+  padding: 5px 7px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+  font-size: 13px;
+}
+.style-check input {
+  width: 14px;
+  height: 14px;
+  min-height: 0;
+  margin: 0;
+  accent-color: var(--accent);
+}
 
 .paint-canvas-wrap {
   position: relative;
