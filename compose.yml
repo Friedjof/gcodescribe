@@ -43,8 +43,8 @@ services:
     # survives reboots better than ttyUSB0. If group name `dialout` is not valid
     # for your host/container combination, set PRINTER_SERIAL_GROUP to the numeric
     # GID from: stat -c '%g' /dev/ttyUSB0
-    devices:
-      - "${PRINTER_SERIAL_PORT:-/dev/ttyUSB0}:${PRINTER_SERIAL_PORT:-/dev/ttyUSB0}"
+    #devices:
+    #  - "${PRINTER_SERIAL_PORT:-/dev/ttyUSB0}:${PRINTER_SERIAL_PORT:-/dev/ttyUSB0}"
     group_add:
       - "${PRINTER_SERIAL_GROUP:-dialout}"
     volumes:
