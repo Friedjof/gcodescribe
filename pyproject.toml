@@ -25,6 +25,7 @@ dependencies = [
     "dokusan>=0.1.0",
     "scikit-image>=0.26.0",
     "pyserial>=3.5",
+    "openai>=1.50.0",
 ]
 
 [project.scripts]

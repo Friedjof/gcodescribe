@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+import base64
+import types
+
 import cv2
+import httpx
 import numpy as np
+import openai
 import pytest
 from fastapi.testclient import TestClient
 
+from plotter.ai_images import client as ai_client
+from plotter.ai_images.client import OpenAiImageApiClient
 from plotter.ai_images.config import load_config
 from plotter.ai_images.errors import AiImageError
 from plotter.ai_images.prompts import STYLE_PROMPT, compose_prompt
@@ -19,6 +26,23 @@ def _png_bytes(w=320, h=240) -> bytes:
     ok, buf = cv2.imencode(".png", img)
     assert ok
     return buf.tobytes()
+
+
+def _stub_sdk(edit):
+    """A minimal stand-in for the OpenAI SDK client exposing images.edit."""
+    return types.SimpleNamespace(images=types.SimpleNamespace(edit=edit))
+
+
+def _ok_edit(**_kwargs):
+    b64 = base64.b64encode(_png_bytes()).decode()
+    return types.SimpleNamespace(
+        id="img_resp_1", data=[types.SimpleNamespace(b64_json=b64)]
+    )
+
+
+def _status_error(cls, code: int, message: str):
+    req = httpx.Request("POST", "https://api.openai.com/v1/images/edits")
+    return cls(message, response=httpx.Response(code, request=req), body=None)
 
 
 # -- config / gating ----------------------------------------------------------
@@ -125,3 +149,89 @@ def test_route_status_disabled(workspace, monkeypatch):
     monkeypatch.delenv("AI_IMAGE_FAKE", raising=False)
     client = TestClient(create_app())
     assert client.get("/api/ai-images/status").json() == {"enabled": False}
+
+
+# -- real OpenAI client (mocked SDK) ------------------------------------------
+
+
+def _real_config(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.delenv("AI_IMAGE_FAKE", raising=False)
+    return load_config()
+
+
+def test_make_client_picks_openai_with_real_key(workspace, monkeypatch):
+    cfg = _real_config(monkeypatch)
+    assert isinstance(ai_client.make_client(cfg), OpenAiImageApiClient)
+
+
+def test_openai_client_decodes_b64(workspace, monkeypatch):
+    cfg = _real_config(monkeypatch)
+    client = OpenAiImageApiClient(cfg)
+    monkeypatch.setattr(client, "_client", lambda: _stub_sdk(_ok_edit))
+
+    out = client.generate_plotter_image(
+        ai_client.AiImageRequest(
+            image_bytes=_png_bytes(), filename="p.png", mime="image/png", prompt="draw"
+        )
+    )
+    assert out.image_bytes.startswith(b"\x89PNG")
+    assert out.model == cfg.model
+    assert out.provider_response_id == "img_resp_1"
+
+
+def _raiser(exc):
+    def _edit(**_kwargs):
+        raise exc
+
+    return _edit
+
+
+@pytest.mark.parametrize(
+    "error, category",
+    [
+        (_status_error(openai.AuthenticationError, 401, "bad"), "auth_failed"),
+        (_status_error(openai.RateLimitError, 429, "slow down"), "rate_limited"),
+        (_status_error(openai.BadRequestError, 400, "safety system rejected"), "policy_rejected"),
+        (_status_error(openai.BadRequestError, 400, "bad size"), "bad_response"),
+    ],
+)
+def test_openai_client_error_translation(workspace, monkeypatch, error, category):
+    cfg = _real_config(monkeypatch)
+    client = OpenAiImageApiClient(cfg)
+    monkeypatch.setattr(client, "_client", lambda: _stub_sdk(_raiser(error)))
+    with pytest.raises(AiImageError) as exc:
+        client.generate_plotter_image(
+            ai_client.AiImageRequest(
+                image_bytes=_png_bytes(), filename="p.png", mime="image/png", prompt="draw"
+            )
+        )
+    assert exc.value.category == category
+
+
+def test_openai_client_empty_response_is_bad(workspace, monkeypatch):
+    cfg = _real_config(monkeypatch)
+    client = OpenAiImageApiClient(cfg)
+    monkeypatch.setattr(
+        client, "_client", lambda: _stub_sdk(lambda **k: types.SimpleNamespace(id="x", data=[]))
+    )
+    with pytest.raises(AiImageError) as exc:
+        client.generate_plotter_image(
+            ai_client.AiImageRequest(
+                image_bytes=_png_bytes(), filename="p.png", mime="image/png", prompt="draw"
+            )
+        )
+    assert exc.value.category == "bad_response"
+
+
+def test_service_real_path_persists_openai_provenance(workspace, monkeypatch):
+    cfg = _real_config(monkeypatch)
+    monkeypatch.setattr(OpenAiImageApiClient, "_client", lambda self: _stub_sdk(_ok_edit))
+
+    result = AiImageService(cfg).generate(
+        filename="cat.png", data=_png_bytes(), mime="image/png", render_mode="edges"
+    )
+    stored = GalleryService().get(result["galleryItem"]["id"])
+    assert stored["ai"]["provider"] == "openai"
+    assert stored["ai"]["model"] == cfg.model
+    assert stored["ai"]["providerResponseId"] == "img_resp_1"

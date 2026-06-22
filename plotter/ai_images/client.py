@@ -117,16 +117,94 @@ class _Lcg:
         return self._next() % max(1, n)
 
 
-def make_client(config: AiImageConfig) -> AiImageClient:
-    """Pick the client for the active configuration.
+class OpenAiImageApiClient:
+    """Real client backed by the OpenAI Image API ``edit`` endpoint.
 
-    The real OpenAI Image API client arrives in a later phase; until then a
-    real key without fake mode reports a clear, machine-readable error.
+    The reference image plus the composed plotter prompt go to ``images.edit``;
+    the model returns a base64 PNG which we decode to bytes. SDK exceptions are
+    translated to stable :class:`AiImageError` categories so the frontend never
+    sees a raw provider error. The API key stays here, never in the response.
     """
+
+    def __init__(self, config: AiImageConfig):
+        self.config = config
+        self._sdk = None
+
+    def _client(self):
+        if self._sdk is None:
+            from openai import OpenAI
+
+            self._sdk = OpenAI(
+                api_key=self.config.api_key, timeout=float(self.config.timeout_seconds)
+            )
+        return self._sdk
+
+    def generate_plotter_image(self, request: AiImageRequest) -> AiImageOutput:
+        import base64
+
+        import openai
+
+        client = self._client()
+        image_arg = (
+            request.filename or "input.png",
+            request.image_bytes,
+            request.mime or "image/png",
+        )
+        kwargs: dict = {
+            "model": self.config.model,
+            "image": image_arg,
+            "prompt": request.prompt,
+            "size": self.config.size,
+            "n": 1,
+        }
+        # gpt-image-1 takes a named quality; "auto" is the model default, so we
+        # only forward an explicit choice. response_format must not be sent —
+        # the model always returns b64_json.
+        if self.config.quality and self.config.quality != "auto":
+            kwargs["quality"] = self.config.quality
+
+        try:
+            resp = client.images.edit(**kwargs)
+        except openai.AuthenticationError as exc:
+            raise AiImageError(
+                "auth_failed", "OpenAI-Schlüssel ungültig oder ohne Berechtigung."
+            ) from exc
+        except openai.PermissionDeniedError as exc:
+            raise AiImageError("auth_failed", "OpenAI hat den Zugriff verweigert.") from exc
+        except openai.RateLimitError as exc:
+            raise AiImageError(
+                "rate_limited", "OpenAI Rate Limit erreicht — bitte später erneut versuchen."
+            ) from exc
+        except openai.APITimeoutError as exc:
+            raise AiImageError("timeout", "OpenAI hat zu lange gebraucht.") from exc
+        except openai.BadRequestError as exc:
+            message = str(exc).lower()
+            if any(w in message for w in ("safety", "policy", "moderation", "rejected")):
+                raise AiImageError(
+                    "policy_rejected", "Bild oder Prompt wurde vom OpenAI-Filter abgelehnt."
+                ) from exc
+            raise AiImageError("bad_response", "OpenAI lehnte die Anfrage ab.") from exc
+        except (openai.APIConnectionError, openai.APIError) as exc:
+            raise AiImageError("bad_response", "OpenAI-Anfrage fehlgeschlagen.") from exc
+
+        data = getattr(resp, "data", None) or []
+        b64 = getattr(data[0], "b64_json", None) if data else None
+        if not b64:
+            raise AiImageError("bad_response", "OpenAI-Antwort enthielt kein Bild.")
+
+        return AiImageOutput(
+            image_bytes=base64.b64decode(b64),
+            mime="image/png",
+            model=self.config.model,
+            provider_response_id=getattr(resp, "id", None),
+        )
+
+
+def make_client(config: AiImageConfig) -> AiImageClient:
+    """Pick the client for the active configuration: fake when AI_IMAGE_FAKE is
+    set, otherwise the real OpenAI client when a key is present."""
     if config.fake:
         return FakeAiImageClient()
-    raise AiImageError(
-        "not_configured",
-        "Die echte OpenAI-Anbindung ist noch nicht aktiviert. "
-        "Setze AI_IMAGE_FAKE=true zum Testen.",
-    )
+    if config.api_key:
+        return OpenAiImageApiClient(config)
+    raise AiImageError("not_configured", "AI Designer ist nicht konfiguriert.")
