@@ -229,6 +229,13 @@ export default function AiImageDesigner({
 
         {/* Result column */}
         <div className="card ai-result">
+          {busy && (
+            <div className="ai-result-busy">
+              <span className="spinner" />
+              <h3>{t("ai.generatingTitle")}</h3>
+              <p className="muted small">{t("ai.generatingHint")}</p>
+            </div>
+          )}
           {variants.length === 0 ? (
             <div className="ai-empty">
               <span className="ai-empty-icon">✎</span>
