@@ -23,9 +23,9 @@ RUN apt-get update \
         poppler-utils libgl1 libglib2.0-0 curl \
     && rm -rf /var/lib/apt/lists/*
 
-# uv for fast, reproducible installs. Install from PyPI so builds do not depend
-# on pulling the helper image from GHCR.
-RUN pip install --no-cache-dir uv==0.8.23
+# uv for fast, reproducible installs. Install from PyPI instead of copying from
+# GHCR so local builds don't depend on GitHub Container Registry auth/token fetches.
+RUN pip install --no-cache-dir uv
 
 # Run as an unprivileged user. The data volume is created and chowned here so
 # the non-root process can write to it (named volumes inherit this ownership).

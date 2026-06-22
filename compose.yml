@@ -7,7 +7,15 @@ x-logging: &default-logging
 
 services:
   gcodescribe:
-    build: .
+    # NOTE: Run this as a single instance only. The live-view WebSocket stream
+    # keeps its sessions in process memory, so the publisher and the viewer must
+    # reach the same process. Do NOT set deploy.replicas > 1, do NOT run multiple
+    # gcodescribe containers behind a load balancer, and keep uvicorn at a single
+    # worker (see plotter/web/server.py). If you ever need to scale out, move the
+    # stream onto Redis pub/sub (Redis is already a service here).
+    build:
+      context: .
+      network: host
     ports:
       - "${PLOTTER_HOST_PORT:-8000}:8000"
     environment:
