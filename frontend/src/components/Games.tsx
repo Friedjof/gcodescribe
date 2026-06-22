@@ -1,10 +1,14 @@
 import { useEffect, useState } from "react";
 import { api, type Calibration, type ColoringPageResponse } from "../api";
 import { useI18n } from "../i18n";
-import { toPath } from "../paint/geometry";
 import type { Pt } from "../paint/geometry";
+import GamePreviewSvg from "../games/PreviewSvg";
+import LiveButton from "../stream/LiveButton";
+import { stopGlobalLive, useLiveRegistryState } from "../stream/liveRegistry";
+import { useLiveStream } from "../stream/useLiveStream";
 import Modal from "./Modal";
 import Segmented from "./Segmented";
+import OsmMapEditor from "./OsmMapEditor";
 import {
   type GameId,
   type DotsDensity,
@@ -38,7 +42,7 @@ const COLORING_PATTERN_OPTIONS: Array<{ value: ColoringPatternMode; icon: string
   { value: "penrose", icon: "✶", labelKey: "games.option.coloring.penrose" },
 ];
 
-export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
+export default function Games({ visible = true, onOpenPaint }: { visible?: boolean; onOpenPaint: () => void }) {
   const { t } = useI18n();
   const [selected, setSelected] = useState<GameId>(ALL_GAMES[0].id);
   const [cal, setCal] = useState<Calibration | null>(null);
@@ -76,8 +80,36 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
   const [coloringPatternComplexity, setColoringPatternComplexity] = useState(0.4);
   const [coloringPatternShowSeed, setColoringPatternShowSeed] = useState(false);
   const [preview, setPreview] = useState<GeneratedPreview | null>(null);
+  const [showOsmMapEditor, setShowOsmMapEditor] = useState(false);
   const selectedGame = ALL_GAMES.find((game) => game.id === selected) ?? ALL_GAMES[0];
   const supported = SUPPORTED_GAMES.has(selectedGame.id);
+  const globalLive = useLiveRegistryState();
+
+  const live = useLiveStream("games", () => {
+    if (!cal) return null;
+    if (!preview) {
+      return {
+        cal,
+        page: { id: "games-placeholder", name: t("games.generatedTitle"), objects: [], grid: { step: 10, snap: false } },
+        meta: { sourceId: "games", mode: "placeholder", pageName: t("games.generatedTitle") },
+      };
+    }
+    const solutionLines = (preview.gameId === "maze" ? showMazeSolution : showSudokuSolution)
+      ? preview.template.solutionLines
+      : undefined;
+    return {
+      cal,
+      page: { id: `game-${preview.gameId}`, name: preview.template.name, objects: [], grid: { step: 10, snap: false } },
+      meta: { sourceId: "games", mode: "game", pageName: preview.template.name },
+      game: {
+        name: preview.template.name,
+        lines: preview.template.lines,
+        solutionLines,
+        width: preview.template.width,
+        height: preview.template.height,
+      },
+    };
+  });
 
   const fail = (e: any) => setErr(String(e.message ?? e));
 
@@ -93,6 +125,8 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
         ? mazePlaceholderTemplate(cal, t, mazeSize, mazeType)
         : selectedGame.id === "sudoku"
           ? sudokuPlaceholderTemplate(cal, t, sudokuDifficulty, sudokuSeed)
+        : selectedGame.id === "osmMap"
+          ? osmPlaceholderTemplate(cal, t)
         : selectedGame.id === "coloringMandala"
           ? coloringPlaceholderTemplate(cal, t, "mandala", coloringMandalaMode, coloringMandalaComplexity, coloringMandalaShowSeed)
           : selectedGame.id === "coloringPattern"
@@ -115,6 +149,21 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
     setPreview(null);
     setErr(null);
   };
+
+  useEffect(() => {
+    if (live.state === "live") live.sendSnapshot("snapshot");
+  }, [preview, showMazeSolution, showSudokuSolution, live.state]);
+
+  useEffect(() => {
+    if (visible || live.state !== "live") return;
+    live.sendPlaceholder("games-hidden");
+  }, [visible, live.state]);
+
+  useEffect(() => {
+    if (!preview || !cal) return;
+    if (!globalLive.active || globalLive.sourceId === "games") return;
+    live.start();
+  }, [preview, cal, globalLive.active, globalLive.sourceId]);
 
   const updateDotsDensity = (density: DotsDensity) => {
     setDotsDensity(density);
@@ -295,6 +344,10 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
   };
 
   const generateAction = () => {
+    if (selectedGame.id === "osmMap") {
+      setShowOsmMapEditor(true);
+      return;
+    }
     generatePreview();
   };
 
@@ -362,6 +415,17 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
               {t(supported ? "games.ready" : "games.later")}
             </span>
           </div>
+
+          {!preview && (globalLive.active || live.state === "live" || live.state === "connecting" || live.state === "error") && (
+            <div className="games-live-standby">
+              <span className="muted">{t("live.standby")}</span>
+              <LiveButton
+                state={globalLive.active && live.state === "idle" ? "live" : live.state}
+                viewers={live.viewers}
+                onClick={() => globalLive.active && live.state === "idle" ? stopGlobalLive() : live.state === "live" || live.state === "connecting" ? live.stop("user-stopped") : live.start()}
+              />
+            </div>
+          )}
 
           {!supported && (
             <div className="banner warn-inline">
@@ -756,11 +820,20 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
           onClose={() => !busy && setPreview(null)}
           className="games-modal"
           bodyClassName="games-modal-body"
-          headerActions={SEEDED_GAMES.has(preview.gameId) ? (
-            <button type="button" className="ghost games-mini-action" disabled={busy} onClick={regeneratePreview}>
-              {t("games.regenerate")}
-            </button>
-          ) : undefined}
+          headerActions={(
+            <div className="games-modal-actions">
+              <LiveButton
+                state={live.state}
+                viewers={live.viewers}
+                onClick={() => live.state === "live" || live.state === "connecting" ? live.stop("user-stopped") : live.start()}
+              />
+              {SEEDED_GAMES.has(preview.gameId) && (
+                <button type="button" className="ghost games-mini-action" disabled={busy} onClick={regeneratePreview}>
+                  {t("games.regenerate")}
+                </button>
+              )}
+            </div>
+          )}
           footer={
             <>
               {SEEDED_GAMES.has(preview.gameId) && (
@@ -794,7 +867,7 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
               <span className="games-chip">{preview.template.width.toFixed(0)} × {preview.template.height.toFixed(0)} mm</span>
               <span className="games-chip">{preview.template.lines.length} {t("common.linesShort")}</span>
             </div>
-            <PreviewSvg
+            <GamePreviewSvg
               cal={cal}
               lines={preview.template.lines}
               solutionLines={
@@ -804,11 +877,41 @@ export default function Games({ onOpenPaint }: { onOpenPaint: () => void }) {
               }
               className="games-modal-preview"
             />
+            {live.error && <div className="banner err live-error-inline">{live.error}</div>}
           </div>
         </Modal>
       )}
+
+      {showOsmMapEditor && cal && (
+        <OsmMapEditor
+          cal={cal}
+          busy={busy}
+          onClose={() => setShowOsmMapEditor(false)}
+          onInsert={(template) => {
+            setShowOsmMapEditor(false);
+            createPageFromTemplate("osmMap", template);
+          }}
+        />
+      )}
     </div>
   );
+}
+
+function osmPlaceholderTemplate(
+  cal: Calibration,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): TemplateSpec {
+  const width = Math.max(20, cal.plot_width - 8);
+  const height = Math.max(20, cal.plot_height - 8);
+  return {
+    name: t("game.osmMap.name"),
+    lines: [],
+    width,
+    height,
+    details: [
+      { label: t("games.osm.layers"), value: t("games.osm.chooseInEditor") },
+    ],
+  };
 }
 
 function mazePlaceholderTemplate(cal: Calibration, t: (key: string, vars?: Record<string, string | number>) => string, size: MazeSize, type: MazeType): TemplateSpec {
@@ -951,66 +1054,6 @@ function SeedVisibilityToggle({ checked, onChange, label, onText, offText }: {
         </span>
         <span>{checked ? onText : offText}</span>
       </button>
-    </div>
-  );
-}
-
-function PreviewSvg({ cal, lines, solutionLines, className = "" }: {
-  cal: Calibration;
-  lines: Pt[][];
-  solutionLines?: Pt[][];
-  className?: string;
-}) {
-  const W = cal.plot_width;
-  const H = cal.plot_height;
-  const pad = Math.max(W, H) * 0.04 + 4;
-  const stroke = Math.max(Math.max(W, H) * 0.004, 0.45);
-  const grid = Math.max(10, Math.round(Math.min(W, H) / 10 / 5) * 5);
-  const major = grid * 5;
-  return (
-    <div className={`games-preview ${className}`.trim()}>
-      <svg viewBox={`${-pad} ${-pad} ${W + 2 * pad} ${H + 2 * pad}`} preserveAspectRatio="xMidYMid meet">
-        <defs>
-          <pattern id="games-grid-minor" width={grid} height={grid} patternUnits="userSpaceOnUse">
-            <path d={`M ${grid} 0 L 0 0 L 0 ${grid}`} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={0.25} />
-          </pattern>
-          <pattern id="games-grid-major" width={major} height={major} patternUnits="userSpaceOnUse">
-            <rect width={major} height={major} fill="url(#games-grid-minor)" />
-            <path d={`M ${major} 0 L 0 0 L 0 ${major}`} fill="none" stroke="rgba(255,255,255,0.13)" strokeWidth={0.4} />
-          </pattern>
-        </defs>
-
-        <rect x={0} y={0} width={W} height={H} rx={1.5} fill="#101013" stroke="var(--accent)" strokeWidth={0.6} />
-        <rect x={0} y={0} width={W} height={H} fill="url(#games-grid-major)" />
-
-        {lines.map((line, index) => (
-          <path
-            key={index}
-            d={toPath(line)}
-            fill="none"
-            stroke="var(--busy)"
-            strokeWidth={stroke}
-            strokeLinejoin="round"
-            strokeLinecap="round"
-          />
-        ))}
-
-        {solutionLines?.map((line, index) => (
-          <path
-            key={`sol-${index}`}
-            d={toPath(line)}
-            fill="none"
-            stroke="rgba(255, 80, 80, 0.85)"
-            strokeWidth={stroke * 2.2}
-            strokeLinejoin="round"
-            strokeLinecap="round"
-          />
-        ))}
-
-        <text x={W / 2} y={H + pad * 0.7} fontSize={Math.max(W, H) * 0.022} fill="var(--muted)" textAnchor="middle">
-          {W.toFixed(0)} × {H.toFixed(0)} mm
-        </text>
-      </svg>
     </div>
   );
 }

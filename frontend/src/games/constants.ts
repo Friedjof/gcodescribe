@@ -13,6 +13,7 @@ export const SUPPORTED_GAMES = new Set<GameId>([
   "bingo",
   "coloringMandala",
   "coloringPattern",
+  "osmMap",
   "cityCountryRiver",
 ]);
 
@@ -41,6 +42,12 @@ export const GAME_GROUPS: { key: string; games: GameDef[] }[] = [
     games: [
       { id: "coloringMandala", group: "coloring" },
       { id: "coloringPattern", group: "coloring" },
+    ],
+  },
+  {
+    key: "games.group.maps",
+    games: [
+      { id: "osmMap", group: "maps" },
     ],
   },
   {

@@ -11,9 +11,10 @@ export type GameId =
   | "bingo"
   | "coloringMandala"
   | "coloringPattern"
+  | "osmMap"
   | "cityCountryRiver";
 
-export type GameGroup = "grid" | "puzzle" | "coloring" | "party";
+export type GameGroup = "grid" | "puzzle" | "coloring" | "maps" | "party";
 
 export type GameDef = {
   id: GameId;
