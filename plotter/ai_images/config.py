@@ -3,10 +3,10 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
-# `gpt-image-1` is the configured default; the real model is whatever
-# OPENAI_IMAGE_MODEL names. Only the Image API ("image-api") path is wired for
-# the MVP; the Responses path is reserved for later.
-DEFAULT_MODEL = "gpt-image-1"
+# `gpt-image-2` is the newest image model and the configured default; the real
+# model is whatever OPENAI_IMAGE_MODEL names. Only the Image API ("image-api")
+# path is wired for the MVP; the Responses path is reserved for later.
+DEFAULT_MODEL = "gpt-image-2"
 DEFAULT_API_MODE = "image-api"
 DEFAULT_SIZE = "1024x1024"
 DEFAULT_QUALITY = "auto"

@@ -139,9 +139,9 @@ function AdminApp() {
 
   const tabs: { value: Tab; label: string }[] = [
     { value: "paint", label: t("tabs.paint") },
+    ...(aiStatus?.enabled ? [{ value: "ai" as Tab, label: t("tabs.ai") }] : []),
     { value: "games", label: t("tabs.games") },
     { value: "gallery", label: t("tabs.gallery") },
-    ...(aiStatus?.enabled ? [{ value: "ai" as Tab, label: t("tabs.ai") }] : []),
     { value: "convert", label: t("tabs.jobs") },
     { value: "paper", label: t("tabs.paper") },
     { value: "calibrate", label: t("tabs.calibrate") },

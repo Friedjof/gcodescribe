@@ -157,8 +157,8 @@ class OpenAiImageApiClient:
             "size": self.config.size,
             "n": 1,
         }
-        # gpt-image-1 takes a named quality; "auto" is the model default, so we
-        # only forward an explicit choice. response_format must not be sent —
+        # gpt-image models take a named quality; "auto" is the model default, so
+        # we only forward an explicit choice. response_format must not be sent —
         # the model always returns b64_json.
         if self.config.quality and self.config.quality != "auto":
             kwargs["quality"] = self.config.quality
