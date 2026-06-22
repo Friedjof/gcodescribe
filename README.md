@@ -1,62 +1,53 @@
 # GCodeScribe
 
-A browser-based pen plotter controller for turning PDF, SVG, image, and Office
-documents — or built-in generated artwork — into safe G-code for an
-**Anycubic i3 Mega S** or any OctoPrint-backed printer.
+A browser-based pen-plotter studio for turning PDF, SVG, image, and Office
+documents — plus generated templates, maps, Markdown layouts, and optional
+AI-assisted artwork — into safe G-code for an **Anycubic i3 Mega S**, any
+OctoPrint-backed printer, or a direct USB-serial Marlin setup.
 
 <table>
   <tr>
-    <td width="70%"><img src="media/images/gcode-preview.png" alt="GCodeScribe main document placement view with rocket artwork" width="100%"></td>
-    <td width="30%"><img src="media/images/automaticchickenfeeder-plot.png" alt="Real pen-plot result of converted artwork" width="100%"></td>
+    <td width="70%"><img src="media/images/design-and-plot.png" alt="GCodeScribe designer with artwork placed on the virtual plot bed" width="100%"></td>
+    <td width="30%"><img src="media/images/automaticchickenfeeder-plot.png" alt="Real pen plot created with GCodeScribe" width="100%"></td>
   </tr>
 </table>
 
-GCodeScribe combines document conversion, built-in generators, OpenStreetMap
-map plotting, a paint canvas, visual layout, paper calibration, G-code preview,
-a design gallery, job management, and printer control in one small web app.
-Bring in a document or generate one, place it on the virtual bed, calibrate the
-physical sheet, generate G-code, preview the toolpaths, and send it to the
-printer — all from the same interface.
+GCodeScribe combines document conversion, an interactive designer, an asset
+gallery, AI image redrawing, OpenStreetMap plotting, browser-side generators,
+live paper calibration, G-code preview, and printer control in one small web
+app. Bring in an existing file or generate something new, place it on the
+virtual bed, preview the mapped toolpaths, and send it to the printer from the
+same interface.
 
-## Preview
+## Highlights
 
 <table>
   <tr>
-    <td width="33%"><img src="media/images/main-view_pdf-rendering.png" alt="PDF rendering"></td>
-    <td width="33%"><img src="media/images/design-and-plot.png" alt="Design and plot workflow"></td>
-    <td width="33%"><img src="media/images/live-calibration.png" alt="Live paper calibration"></td>
+    <td width="50%"><img src="media/images/ai-designer-preview.png" alt="AI Designer with generated line art and plotter-line preview"></td>
+    <td width="50%"><img src="media/images/galerie-view.png" alt="Gallery view with reusable uploaded and generated assets"></td>
   </tr>
   <tr>
-    <td align="center"><strong>PDF rendering</strong></td>
-    <td align="center"><strong>Design and plot</strong></td>
-    <td align="center"><strong>Live calibration</strong></td>
+    <td align="center"><strong>AI Designer</strong></td>
+    <td align="center"><strong>Gallery Asset Library</strong></td>
   </tr>
   <tr>
-    <td width="33%"><img src="media/images/games-view.png" alt="Built-in game and coloring generators"></td>
-    <td width="33%"><img src="media/images/plot-jobs.png" alt="Generated plot jobs"></td>
-    <td width="33%"><img src="media/images/control.png" alt="Printer control"></td>
+    <td width="50%"><img src="media/images/coloring.png" alt="Coloring editor for assigning linework to multiple pen colors"></td>
+    <td width="50%"><img src="media/images/gcode-preview.png" alt="G-code preview mapped onto the printer bed and paper"></td>
   </tr>
   <tr>
-    <td align="center"><strong>Generators &amp; games</strong></td>
-    <td align="center"><strong>Plot jobs</strong></td>
-    <td align="center"><strong>Printer control</strong></td>
+    <td align="center"><strong>Coloring Editor</strong></td>
+    <td align="center"><strong>G-code Preview</strong></td>
   </tr>
 </table>
 
 ## Features
 
-### Convert documents
+### Convert, generate & remix
 
 - Convert PDF, SVG, raster images, and Office documents into plotter-ready
   G-code with [vpype](https://vpype.readthedocs.io).
 - Trace image-only PDFs and scans with OpenCV while preserving vector paths
   from vector PDFs. Auto mode chooses the best conversion path automatically.
-- Place documents visually in the **Design &amp; Plot** tab: upload to the
-  gallery, insert any page onto the bed preview, then drag, scale, and fit
-  artwork into the calibrated plot area — or quick-plot a page in two clicks.
-
-### Generate &amp; design
-
 - Generate printable artwork directly in the browser — no source file needed:
   - **Puzzles:** mazes (classic, masked, hex, polar) and sudoku.
   - **Games:** dots &amp; boxes, tic-tac-toe, meta tic-tac-toe, connect four,
@@ -65,13 +56,32 @@ printer — all from the same interface.
   - **Maps:** select a live OpenStreetMap viewport, choose streets, paths,
     buildings, waterways, water, rail, or transit layers, and turn the result
     into plotter-ready vector linework.
-- Draw from scratch on the paint canvas: place shapes and text, scale and
-  arrange them, cover lower lines with mask rectangles, pan/zoom/rotate the
-  canvas view, and turn the result into a plot job.
+- Use the optional **AI Designer** to turn a text prompt, photo, or sketch into
+  plotter-ready black-on-white line art. Tune trace mode, detail, aspect
+  ratio, effect, and lettering; create feedback-driven variants; and re-render
+  plotter lines without another provider call.
 - Keep every upload and generated design in the **gallery** — the one asset
   library for images, SVG, and multi-page PDF/Office documents (admin and public
   `/upload` submissions, filterable by origin) — with thumbnails, titles,
-  archiving, and one-click reuse or insertion into the designer.
+  archiving, plottability scores, and one-click reuse or insertion into the
+  designer.
+
+### Design, score & color
+
+- Place documents visually in the **Design &amp; Plot** tab: upload to the
+  gallery, insert any page onto the bed preview, then drag, rotate, scale,
+  center, and fit artwork into the calibrated plot area — or quick-plot a page
+  in two clicks.
+- Draw from scratch on the paint canvas: place shapes and text, scale and
+  arrange them, cover lower lines with mask rectangles, pan/zoom/rotate the
+  canvas view, and turn the result into a plot job.
+- Lay out plot-friendly notes, cards, and worksheets with the built-in
+  Markdown editor, then insert them as vector text into the designer.
+- See plottability feedback before printing: gallery items, AI outputs, and
+  paint pages are scored so overly slow, tiny, or fragmented drawings stand
+  out early.
+- Use the **Coloring Editor** to assign linework to multiple pen colors and
+  generate separate G-code jobs per color for pen-swap workflows.
 
 ### Calibrate &amp; plot safely
 
@@ -98,24 +108,31 @@ printer — all from the same interface.
 
 - Preview generated G-code against the bed and calibrated paper before sending
   it to the printer.
-- Start a second-screen live view from the designer, games, or gallery: canvas
-  edits, game templates, gallery previews, and 3D G-code previews can stay live
-  while you switch tabs.
+- Start a second-screen live view from the designer, games, gallery, or AI
+  results: canvas edits, game templates, gallery previews, and 3D G-code
+  previews can stay live while you switch tabs.
+- Run through OctoPrint or direct USB serial from the same UI. If both are
+  configured, switch the active backend at runtime without restarting.
 - Track the head position from sent commands and persist it in Redis, with a
   file-store fallback for simple local setups.
+- Enable optional browser notifications for plot progress milestones while a
+  job is running.
 - Send, start, pause, cancel, home, jog, and lift/lower the pen through
-  OctoPrint from the same UI.
+  OctoPrint or the serial backend from the same UI.
 
 ## Run with Docker (recommended)
 
 ```bash
 cp .env.example .env
-# edit .env: set OCTOPRINT_* or enable PRINTER_SERIAL_* for direct USB
+# edit .env: set OCTOPRINT_* or enable PRINTER_SERIAL_*; optionally set OPENAI_API_KEY
 docker compose up --build
 ```
 
 Open <http://localhost:8000>. Calibration and generated jobs are persisted in
 the `gcodescribe-data` volume (`/data`).
+
+Set `OPENAI_API_KEY` to enable the AI Designer tab, or `AI_IMAGE_FAKE=true`
+for cost-free local testing.
 
 On first opening the admin app, create the local admin account and enroll a
 TOTP authenticator. The public `/upload` page stays available without login;
@@ -197,6 +214,14 @@ backend serves automatically.
 | `PLOTTER_AUTH_SESSION_TTL` | Admin session lifetime in seconds | `1209600` |
 | `PLOTTER_AUTH_COOKIE_SECURE` | Mark session cookie HTTPS-only | `false` |
 | `GCODESCRIBE_TAG`   | GHCR image tag (prod compose only)  | `latest`  |
+| `OPENAI_API_KEY`    | Enable AI Designer with the real OpenAI image backend | — |
+| `AI_IMAGE_FAKE`     | Enable the fake AI Designer backend for local testing | `false` |
+| `OPENAI_IMAGE_MODEL` | OpenAI image model used by AI Designer | `gpt-image-2` |
+| `OPENAI_IMAGE_API_MODE` | OpenAI image API mode | `image-api` |
+| `AI_IMAGE_SIZE`     | Requested AI output size             | `1024x1024` |
+| `AI_IMAGE_QUALITY`  | Requested AI output quality          | `auto`    |
+| `AI_IMAGE_MAX_INPUT_MB` | Max upload size for AI input images | `10`   |
+| `AI_IMAGE_TIMEOUT_SECONDS` | Timeout for AI image generation requests | `90` |
 
 ### Direct USB serial (without OctoPrint)
 
