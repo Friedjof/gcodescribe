@@ -12,7 +12,7 @@ from .errors import AiImageError
 
 @dataclass
 class AiImageRequest:
-    image_bytes: bytes
+    image_bytes: bytes | None
     filename: str
     mime: str
     prompt: str
@@ -120,10 +120,11 @@ class _Lcg:
 class OpenAiImageApiClient:
     """Real client backed by the OpenAI Image API ``edit`` endpoint.
 
-    The reference image plus the composed plotter prompt go to ``images.edit``;
-    the model returns a base64 PNG which we decode to bytes. SDK exceptions are
-    translated to stable :class:`AiImageError` categories so the frontend never
-    sees a raw provider error. The API key stays here, never in the response.
+    With a reference image we call ``images.edit``; text-only prompts use
+    ``images.generate``. The model returns a base64 PNG which we decode to bytes.
+    SDK exceptions are translated to stable :class:`AiImageError` categories so
+    the frontend never sees a raw provider error. The API key stays here, never
+    in the response.
     """
 
     def __init__(self, config: AiImageConfig):
@@ -145,14 +146,8 @@ class OpenAiImageApiClient:
         import openai
 
         client = self._client()
-        image_arg = (
-            request.filename or "input.png",
-            request.image_bytes,
-            request.mime or "image/png",
-        )
         kwargs: dict = {
             "model": self.config.model,
-            "image": image_arg,
             "prompt": request.prompt,
             "size": self.config.size,
             "n": 1,
@@ -164,7 +159,15 @@ class OpenAiImageApiClient:
             kwargs["quality"] = self.config.quality
 
         try:
-            resp = client.images.edit(**kwargs)
+            if request.image_bytes is not None:
+                kwargs["image"] = (
+                    request.filename or "input.png",
+                    request.image_bytes,
+                    request.mime or "image/png",
+                )
+                resp = client.images.edit(**kwargs)
+            else:
+                resp = client.images.generate(**kwargs)
         except openai.AuthenticationError as exc:
             raise AiImageError(
                 "auth_failed", "OpenAI-Schlüssel ungültig oder ohne Berechtigung."

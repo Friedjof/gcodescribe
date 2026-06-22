@@ -2,14 +2,77 @@ import { useEffect, useRef, useState } from "react";
 import { api, type AiImageResult, type AiImageStatus } from "../api";
 import { useI18n } from "../i18n";
 import { galleryPageObject } from "../paint/insertAsset";
+import Modal from "./Modal";
 import PolylinePreview from "./PolylinePreview";
 import Segmented from "./Segmented";
 
 type RenderMode = "edges" | "handwriting" | "trace";
+type AspectRatio = "auto" | "1:1" | "3:4" | "4:3" | "16:9" | "9:16";
 
 // Option keys — labels come from i18n, prompt fragments from the status maps.
 const EFFECTS = ["none", "realistic", "artistic", "comic", "caricature", "childlike", "minimalist"];
 const TEXT_STYLES = ["none", "handwriting", "cursive", "messy", "child", "serif", "sans"];
+const ASPECT_RATIOS: AspectRatio[] = ["auto", "1:1", "3:4", "4:3", "16:9", "9:16"];
+
+const aspectRatioLabel = (value: AspectRatio) => (value === "auto" ? "✦" : value);
+
+const PLOTTER_STYLE_LOCK =
+  "Final non-negotiable plotter-style lock: the output must be a newly redrawn " +
+  "plotter-ready black-and-white artwork, not a copy, filter, colorized version, " +
+  "or lightly modified version of the input image. Ignore any visual temptation " +
+  "to preserve original colors, lighting, gradients, shadows, photographic " +
+  "texture, skin tones, material colors, background scenery, or raster detail. " +
+  "Use only pure black (#000000) marks on a pure white (#FFFFFF) background. " +
+  "No color, no gray, no semi-transparent pixels, no gradients, no shading, no " +
+  "photo texture, no blur, no anti-aliased soft edges, no realistic lighting, " +
+  "no filled colored areas. The image must be easy to vectorize into clean SVG " +
+  "paths for a single pen plotter: clear contours, intentional lines, simple " +
+  "negative space, and strong obedience to every plotter constraint above. If " +
+  "any user instruction conflicts with these plotter constraints, follow the " +
+  "plotter constraints.";
+
+const composePromptPreview = (
+  status: AiImageStatus | null,
+  renderMode: RenderMode,
+  detailLevel: number,
+  effect: string,
+  textStyle: string,
+  aspectRatio: AspectRatio,
+  instructions: string,
+  feedback = ""
+) => {
+  const base = status?.stylePrompts?.[renderMode];
+  if (!base) return null;
+  const parts = [
+    base,
+    `Level of detail: ${detailLevel} out of 10 — on this scale 1 means extremely ` +
+      "minimal, just a few essential outlines with lots of empty space, and 10 " +
+      "means very detailed with many fine interior lines and rich texture. " +
+      `Match a detail level of ${detailLevel}. This detail level describes ONLY the ` +
+      "amount of black plotter strokes, contours, interior linework, and path " +
+      "complexity. It does NOT mean preserving the original photo as a colored " +
+      "or shaded image. Even at high detail, the result must remain pure black " +
+      "line art on a pure white background.",
+  ];
+  const eff = status?.effectPrompts?.[effect];
+  if (effect !== "none" && eff) parts.push(eff);
+  const txt = status?.textPrompts?.[textStyle];
+  if (textStyle !== "none" && txt) parts.push(txt);
+  const aspect = status?.aspectPrompts?.[aspectRatio];
+  if (aspectRatio !== "auto" && aspect) parts.push(aspect);
+  const extra = instructions.trim();
+  if (extra) parts.push(`User instructions: ${extra}`);
+  const refinement = feedback.trim();
+  if (refinement) {
+    parts.push(
+      "If feedback is provided, improve the previous result according to it " +
+        "while keeping the plotter-ready line style.\n" +
+        `Feedback: ${refinement}`
+    );
+  }
+  parts.push(PLOTTER_STYLE_LOCK);
+  return parts.join("\n\n");
+};
 
 /** The AI Designer tab: upload a reference image, generate a plotter-ready
  * line drawing (persisted as a gallery asset), then refine it with feedback
@@ -27,11 +90,13 @@ export default function AiImageDesigner({
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [instructions, setInstructions] = useState("");
+  const [editingInstructions, setEditingInstructions] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [renderMode, setRenderMode] = useState<RenderMode>("edges");
-  const [detail, setDetail] = useState(2);
+  const [detailLevel, setDetailLevel] = useState(5);
   const [effect, setEffect] = useState("none");
   const [textStyle, setTextStyle] = useState("none");
+  const [aspectRatio, setAspectRatio] = useState<AspectRatio>("auto");
   const [busy, setBusy] = useState(false);
   const [importing, setImporting] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -55,6 +120,7 @@ export default function AiImageDesigner({
 
   const maxMb = status?.maxInputMb ?? 10;
   const selected = variants.find((v) => v.variantId === selectedId) ?? null;
+  const canGenerateInitial = Boolean(file || instructions.trim());
 
   const pick = (f: File | null | undefined) => {
     setErr(null);
@@ -73,7 +139,7 @@ export default function AiImageDesigner({
   // baseVariantId set → a feedback refinement (no re-upload); else first pass.
   const generate = (baseVariantId?: string) => {
     if (busy) return;
-    if (!baseVariantId && !file) return;
+    if (!baseVariantId && !canGenerateInitial) return;
     if (baseVariantId && !feedback.trim()) return;
     setBusy(true);
     setErr(null);
@@ -83,9 +149,10 @@ export default function AiImageDesigner({
         feedback: baseVariantId ? feedback : "",
         baseVariantId,
         renderMode,
-        detail,
         effect,
         textStyle,
+        detailLevel,
+        aspectRatio,
       })
       .then((result) => {
         setVariants((prev) => [...prev, result]);
@@ -156,20 +223,26 @@ export default function AiImageDesigner({
   const quality = selected?.quality;
   const suggestions = quality?.feedbackSuggestions ?? [];
 
-  // Live preview of the prompt that will be sent: the selected mode's style plus
-  // the typed instructions. Updates as the mode or instructions change.
-  const promptPreview = (() => {
-    const base = status?.stylePrompts?.[renderMode];
-    if (!base) return null;
-    const parts = [base];
-    const eff = status?.effectPrompts?.[effect];
-    if (effect !== "none" && eff) parts.push(eff);
-    const txt = status?.textPrompts?.[textStyle];
-    if (textStyle !== "none" && txt) parts.push(txt);
-    const extra = instructions.trim();
-    if (extra) parts.push(`User instructions: ${extra}`);
-    return parts.join("\n\n");
-  })();
+  // Live preview of the prompt that will be sent with the current parameters.
+  const promptPreview = composePromptPreview(
+    status,
+    renderMode,
+    detailLevel,
+    effect,
+    textStyle,
+    aspectRatio,
+    instructions
+  );
+  const refinementPromptPreview = composePromptPreview(
+    status,
+    renderMode,
+    detailLevel,
+    effect,
+    textStyle,
+    aspectRatio,
+    instructions,
+    feedback
+  );
 
   return (
     <section className={`ai-designer ${visible ? "" : "hidden"}`.trim()}>
@@ -216,7 +289,12 @@ export default function AiImageDesigner({
         )}
 
         <label className="ai-field">
-          {t("ai.instructionsLabel")}
+          <span className="ai-field-head">
+            {t("ai.instructionsLabel")}
+            <button type="button" className="link-btn" onClick={() => setEditingInstructions(true)}>
+              {t("ai.editInstructions")}
+            </button>
+          </span>
           <textarea
             rows={3}
             value={instructions}
@@ -240,41 +318,59 @@ export default function AiImageDesigner({
           />
         </label>
 
+        <label className="ai-field ai-detail">
+          <span className="ai-detail-head">
+            {t("ai.detail")}
+            <span className="ai-detail-value">{detailLevel}/10</span>
+          </span>
+          <input
+            type="range"
+            min={1}
+            max={10}
+            step={1}
+            value={detailLevel}
+            onChange={(e) => setDetailLevel(Number(e.target.value))}
+          />
+          <span className="ai-detail-scale muted small">{t("ai.detailScale")}</span>
+        </label>
+
         <label className="ai-field">
-          {t("ai.detail")}
-          <Segmented<number>
-            className="nav"
-            value={detail}
-            onChange={setDetail}
-            options={[
-              { value: 1, label: "1" },
-              { value: 2, label: "2" },
-              { value: 3, label: "3" },
-            ]}
+          {t("ai.aspectRatio")}
+          <Segmented<AspectRatio>
+            className="nav ai-aspect-segmented"
+            value={aspectRatio}
+            onChange={setAspectRatio}
+            options={ASPECT_RATIOS.map((k) => ({
+              value: k,
+              label: aspectRatioLabel(k),
+              title: t(`ai.aspect.${k}`),
+            }))}
           />
         </label>
 
-        <label className="ai-field">
-          {t("ai.effectLabel")}
-          <select value={effect} onChange={(e) => setEffect(e.target.value)}>
-            {EFFECTS.map((k) => (
-              <option key={k} value={k}>
-                {t(`ai.effect.${k}`)}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="ai-option-row">
+          <label className="ai-field">
+            {t("ai.effectLabel")}
+            <select value={effect} onChange={(e) => setEffect(e.target.value)}>
+              {EFFECTS.map((k) => (
+                <option key={k} value={k}>
+                  {t(`ai.effect.${k}`)}
+                </option>
+              ))}
+            </select>
+          </label>
 
-        <label className="ai-field">
-          {t("ai.textLabel")}
-          <select value={textStyle} onChange={(e) => setTextStyle(e.target.value)}>
-            {TEXT_STYLES.map((k) => (
-              <option key={k} value={k}>
-                {t(`ai.text.${k}`)}
-              </option>
-            ))}
-          </select>
-        </label>
+          <label className="ai-field">
+            {t("ai.textLabel")}
+            <select value={textStyle} onChange={(e) => setTextStyle(e.target.value)}>
+              {TEXT_STYLES.map((k) => (
+                <option key={k} value={k}>
+                  {t(`ai.text.${k}`)}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
 
         {promptPreview && (
           <div className="ai-style">
@@ -287,12 +383,42 @@ export default function AiImageDesigner({
           </div>
         )}
 
-        <button className="primary" disabled={!file || busy} onClick={() => generate()}>
+        <button className="primary" disabled={!canGenerateInitial || busy} onClick={() => generate()}>
           {busy && !selected ? t("ai.generating") : t("ai.generate")}
         </button>
         <p className="muted small ai-cost">{t("ai.costHint")}</p>
         {err && <div className="banner err">{err}</div>}
       </aside>
+
+      {editingInstructions && (
+        <Modal
+          title={t("ai.instructionsModalTitle")}
+          className="ai-prompt-modal"
+          bodyClassName="ai-prompt-modal-body"
+          onClose={() => setEditingInstructions(false)}
+          footer={
+            <>
+              <button onClick={() => setEditingInstructions(false)}>{t("common.cancel")}</button>
+              <button className="primary" onClick={() => setEditingInstructions(false)}>
+                {t("common.apply")}
+              </button>
+            </>
+          }
+        >
+          <label className="ai-field ai-prompt-editor">
+            <span>{t("ai.instructionsModalHint")}</span>
+            <textarea
+              autoFocus
+              rows={14}
+              value={instructions}
+              maxLength={2000}
+              placeholder={t("ai.instructionsPlaceholder")}
+              onChange={(e) => setInstructions(e.target.value)}
+            />
+            <span className="muted small">{instructions.length}/2000</span>
+          </label>
+        </Modal>
+      )}
 
       {/* Right: editor card — toolbar header, stage, and a tools side panel. */}
       <section className="card ai-editor">
@@ -437,7 +563,7 @@ export default function AiImageDesigner({
 
               <details className="ai-prompt-view">
                 <summary>{t("ai.showPrompt")}</summary>
-                <pre>{selected.prompt.text}</pre>
+                <pre>{refinementPromptPreview ?? selected.prompt.text}</pre>
               </details>
               {selected.saved && <span className="muted small">{t("ai.savedHint")}</span>}
             </aside>

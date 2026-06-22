@@ -30,13 +30,16 @@ async def ai_image_generate(
     detail: int = Form(2),
     effect: str = Form("none"),
     text_style: str = Form("none"),
+    detail_level: int = Form(5),
+    aspect_ratio: str = Form("auto"),
 ) -> dict:
     config = load_config()
     if not config.enabled:
         raise AiImageError("not_configured", "AI Designer ist nicht konfiguriert.")
-    # A file is optional: a feedback request without one iterates on the parent
-    # variant. Read at most one byte past the limit so an oversized upload never
-    # lands fully in memory; the service re-checks and reports the category.
+    # A file is optional: text-only requests generate from the prompt, and
+    # feedback requests without an upload iterate on the parent variant. Read at
+    # most one byte past the limit so an oversized upload never lands fully in
+    # memory; the service re-checks and reports the category.
     filename = ""
     mime = ""
     data: bytes | None = None
@@ -44,8 +47,8 @@ async def ai_image_generate(
         filename = file.filename
         mime = file.content_type or ""
         data = await file.read(config.max_input_mb * 1024 * 1024 + 1)
-    if data is None and not base_variant_id:
-        raise HTTPException(400, "Bild oder Basis-Variante erforderlich")
+    if data is None and not base_variant_id and not instructions.strip():
+        raise HTTPException(400, "Bild oder Prompt erforderlich")
     return AiImageService(config).generate(
         filename=filename,
         data=data,
@@ -58,6 +61,8 @@ async def ai_image_generate(
         detail=detail,
         effect=effect,
         text_style=text_style,
+        detail_level=detail_level,
+        aspect_ratio=aspect_ratio,
     )
 
 

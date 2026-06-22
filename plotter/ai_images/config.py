@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
-from .prompts import EFFECT_PROMPTS, STYLE_PROMPTS, TEXT_PROMPTS
+from .prompts import ASPECT_PROMPTS, EFFECT_PROMPTS, STYLE_PROMPTS, TEXT_PROMPTS
 
 # `gpt-image-2` is the newest image model and the configured default; the real
 # model is whatever OPENAI_IMAGE_MODEL names. Only the Image API ("image-api")
@@ -70,6 +70,7 @@ class AiImageConfig:
             "stylePrompts": STYLE_PROMPTS,
             "effectPrompts": EFFECT_PROMPTS,
             "textPrompts": TEXT_PROMPTS,
+            "aspectPrompts": ASPECT_PROMPTS,
         }
 
 

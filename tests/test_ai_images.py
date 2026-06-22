@@ -15,6 +15,7 @@ from plotter.ai_images.client import OpenAiImageApiClient
 from plotter.ai_images.config import load_config
 from plotter.ai_images.errors import AiImageError
 from plotter.ai_images.prompts import (
+    ASPECT_PROMPTS,
     EFFECT_PROMPTS,
     STYLE_PROMPTS,
     TEXT_PROMPTS,
@@ -33,9 +34,9 @@ def _png_bytes(w=320, h=240) -> bytes:
     return buf.tobytes()
 
 
-def _stub_sdk(edit):
-    """A minimal stand-in for the OpenAI SDK client exposing images.edit."""
-    return types.SimpleNamespace(images=types.SimpleNamespace(edit=edit))
+def _stub_sdk(edit, generate=None):
+    """A minimal stand-in for the OpenAI SDK client exposing images calls."""
+    return types.SimpleNamespace(images=types.SimpleNamespace(edit=edit, generate=generate or edit))
 
 
 def _ok_edit(**_kwargs):
@@ -112,6 +113,7 @@ def test_status_enabled_with_fake(workspace, monkeypatch):
     assert status["model"]
     assert status["stylePrompts"]["edges"] == STYLE_PROMPTS["edges"]
     assert set(status["stylePrompts"]) == {"edges", "handwriting", "trace"}
+    assert status["aspectPrompts"]["16:9"] == ASPECT_PROMPTS["16:9"]
     assert "OPENAI_API_KEY" not in status and "api_key" not in status
 
 
@@ -152,9 +154,26 @@ def test_compose_prompt_combines_effect_and_text():
     assert TEXT_PROMPTS["serif"] in out
 
 
-def test_compose_prompt_none_adds_no_fragment():
+def test_compose_prompt_none_adds_no_effect_text_fragments():
     out = compose_prompt(render_mode="edges", effect="none", text_style="none")
-    assert out == STYLE_PROMPTS["edges"]
+    assert STYLE_PROMPTS["edges"] in out
+    assert EFFECT_PROMPTS["comic"] not in out and TEXT_PROMPTS["serif"] not in out
+
+
+def test_compose_prompt_states_detail_level():
+    assert "Level of detail: 9 out of 10" in compose_prompt(detail_level=9)
+    # Always present, even at the default.
+    assert "Level of detail: 5 out of 10" in compose_prompt()
+
+
+def test_compose_prompt_clamps_detail_level():
+    assert "Level of detail: 10 out of 10" in compose_prompt(detail_level=99)
+    assert "Level of detail: 1 out of 10" in compose_prompt(detail_level=-5)
+
+
+def test_compose_prompt_adds_aspect_ratio():
+    assert ASPECT_PROMPTS["16:9"] in compose_prompt(aspect_ratio="16:9")
+    assert ASPECT_PROMPTS["16:9"] not in compose_prompt(aspect_ratio="auto")
 
 
 # -- service end-to-end (fake) ------------------------------------------------
@@ -231,6 +250,37 @@ def test_generate_stores_effect_and_text_in_prompt(workspace, monkeypatch):
     assert stored["ai"]["textStyle"] == "serif"
 
 
+def test_generate_stores_detail_level_in_prompt(workspace, monkeypatch):
+    monkeypatch.setenv("AI_IMAGE_FAKE", "true")
+    result = AiImageService(load_config()).generate(
+        filename="p.png", data=_png_bytes(), mime="image/png", detail_level=8
+    )
+    assert "Level of detail: 8 out of 10" in result["prompt"]["text"]
+    stored = GalleryService().get(result["galleryItem"]["id"])
+    assert stored["ai"]["detailLevel"] == 8
+
+
+def test_generate_stores_aspect_ratio_in_prompt(workspace, monkeypatch):
+    monkeypatch.setenv("AI_IMAGE_FAKE", "true")
+    result = AiImageService(load_config()).generate(
+        filename="p.png", data=_png_bytes(), mime="image/png", aspect_ratio="9:16"
+    )
+    assert ASPECT_PROMPTS["9:16"] in result["prompt"]["text"]
+    stored = GalleryService().get(result["galleryItem"]["id"])
+    assert stored["ai"]["aspectRatio"] == "9:16"
+
+
+def test_generate_accepts_text_prompt_without_image(workspace, monkeypatch):
+    monkeypatch.setenv("AI_IMAGE_FAKE", "true")
+    result = AiImageService(load_config()).generate(instructions="Draw a small fox")
+
+    assert result["variantId"]
+    assert "Draw a small fox" in result["prompt"]["text"]
+    stored = GalleryService().get(result["galleryItem"]["id"])
+    assert stored["ai"]["userInstructions"] == "Draw a small fox"
+    assert stored["title"] == "AI: prompt"
+
+
 def test_generate_normalizes_unknown_effect_and_text(workspace, monkeypatch):
     monkeypatch.setenv("AI_IMAGE_FAKE", "true")
     result = AiImageService(load_config()).generate(
@@ -271,7 +321,7 @@ def test_feedback_unknown_parent_raises(workspace, monkeypatch):
 def test_generate_without_image_or_parent_raises(workspace, monkeypatch):
     monkeypatch.setenv("AI_IMAGE_FAKE", "true")
     with pytest.raises(AiImageError) as exc:
-        AiImageService(load_config()).generate(feedback="hi")
+        AiImageService(load_config()).generate()
     assert exc.value.category == "unsupported_file"
 
 
@@ -379,7 +429,15 @@ def test_route_feedback_without_file(workspace, monkeypatch):
     assert second.json()["parentVariantId"] == variant_id
 
 
-def test_route_generate_requires_image_or_parent(workspace, monkeypatch):
+def test_route_generate_accepts_text_prompt_without_file(workspace, monkeypatch):
+    monkeypatch.setenv("AI_IMAGE_FAKE", "true")
+    client = TestClient(create_app())
+    resp = client.post("/api/ai-images/generate", data={"instructions": "draw a moon"})
+    assert resp.status_code == 200, resp.text
+    assert "draw a moon" in resp.json()["prompt"]["text"]
+
+
+def test_route_generate_requires_image_prompt_or_parent(workspace, monkeypatch):
     monkeypatch.setenv("AI_IMAGE_FAKE", "true")
     client = TestClient(create_app())
     resp = client.post("/api/ai-images/generate", data={"feedback": "hi"})
@@ -420,6 +478,28 @@ def test_openai_client_decodes_b64(workspace, monkeypatch):
     assert out.image_bytes.startswith(b"\x89PNG")
     assert out.model == cfg.model
     assert out.provider_response_id == "img_resp_1"
+
+
+def test_openai_client_uses_generate_without_image(workspace, monkeypatch):
+    cfg = _real_config(monkeypatch)
+    client = OpenAiImageApiClient(cfg)
+    calls = {"edit": 0, "generate": 0}
+
+    def edit(**_kwargs):
+        calls["edit"] += 1
+        return _ok_edit()
+
+    def generate(**_kwargs):
+        calls["generate"] += 1
+        return _ok_edit()
+
+    monkeypatch.setattr(client, "_client", lambda: _stub_sdk(edit, generate))
+    out = client.generate_plotter_image(
+        ai_client.AiImageRequest(image_bytes=None, filename="prompt", mime="", prompt="draw")
+    )
+
+    assert out.image_bytes.startswith(b"\x89PNG")
+    assert calls == {"edit": 0, "generate": 1}
 
 
 def _raiser(exc):

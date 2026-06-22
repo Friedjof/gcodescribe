@@ -12,9 +12,12 @@ from .client import AiImageRequest, make_client
 from .config import ALLOWED_RENDER_MODES, DEFAULT_RENDER_MODE, AiImageConfig
 from .errors import AiImageError
 from .prompts import (
+    DEFAULT_DETAIL_LEVEL,
     DEFAULT_EFFECT,
     DEFAULT_TEXT,
     compose_prompt,
+    normalize_aspect_ratio,
+    normalize_detail_level,
     normalize_effect,
     normalize_text,
     style_prompt_for,
@@ -54,6 +57,8 @@ class AiImageService:
         detail: int = 2,
         effect: str = DEFAULT_EFFECT,
         text_style: str = DEFAULT_TEXT,
+        detail_level: int = DEFAULT_DETAIL_LEVEL,
+        aspect_ratio: str = "auto",
     ) -> dict:
         if not self.config.enabled:
             raise AiImageError("not_configured", "AI Designer ist nicht konfiguriert.")
@@ -62,9 +67,12 @@ class AiImageService:
         detail = max(1, min(int(detail), 3))
         effect = normalize_effect(effect)
         text_style = normalize_text(text_style)
+        detail_level = normalize_detail_level(detail_level)
+        aspect_ratio = normalize_aspect_ratio(aspect_ratio)
 
         # Pick the reference image: an explicit upload wins; otherwise a feedback
-        # request iterates on the parent variant's own AI output.
+        # request iterates on the parent variant's own AI output. Initial
+        # generations may be text-only when the user provided instructions.
         parent = self._resolve_parent(base_variant_id) if base_variant_id else None
         if base_variant_id and parent is None:
             raise AiImageError("bad_response", "Basis-Variante nicht gefunden.")
@@ -73,12 +81,16 @@ class AiImageService:
             ref_bytes, ref_name, ref_mime = data, filename, (mime or "image/png")
         elif parent is not None:
             ref_bytes, ref_name, ref_mime = parent["bytes"], parent["filename"], parent["mime"]
+        elif instructions.strip():
+            ref_bytes, ref_name, ref_mime = None, "prompt", ""
         else:
             raise AiImageError(
-                "unsupported_file", "Kein Referenzbild — Bild hochladen oder Variante wählen."
+                "unsupported_file", "Kein Referenzbild oder Prompt — Bild hochladen oder Text eingeben."
             )
 
-        prompt = compose_prompt(instructions, feedback, render_mode, effect, text_style)
+        prompt = compose_prompt(
+            instructions, feedback, render_mode, effect, text_style, detail_level, aspect_ratio
+        )
         client = make_client(self.config)
         output = client.generate_plotter_image(
             AiImageRequest(
@@ -128,6 +140,8 @@ class AiImageService:
             "detail": detail,
             "effect": effect,
             "textStyle": text_style,
+            "detailLevel": detail_level,
+            "aspectRatio": aspect_ratio,
             "created": time.time(),
         }
         self._attach_ai_meta(item["id"], ai_meta)
@@ -171,6 +185,8 @@ class AiImageService:
         mode = ai.get("renderMode", DEFAULT_RENDER_MODE)
         effect = ai.get("effect", DEFAULT_EFFECT)
         text_style = ai.get("textStyle", DEFAULT_TEXT)
+        detail_level = ai.get("detailLevel", DEFAULT_DETAIL_LEVEL)
+        aspect_ratio = ai.get("aspectRatio", "auto")
         return {
             "variantId": ai.get("variantId"),
             "parentVariantId": ai.get("parentVariantId"),
@@ -183,7 +199,9 @@ class AiImageService:
                 "instructions": instructions,
                 "feedback": feedback,
                 # The exact, full prompt string that was sent to the model.
-                "text": compose_prompt(instructions, feedback, mode, effect, text_style),
+                "text": compose_prompt(
+                    instructions, feedback, mode, effect, text_style, detail_level, aspect_ratio
+                ),
             },
             "quality": assess(preview),
         }

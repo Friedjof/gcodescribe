@@ -3369,6 +3369,8 @@ input[type="checkbox"]:disabled {
 .ai-style p { margin: 4px 0 0; }
 
 .ai-field { display: flex; flex-direction: column; gap: 6px; font-size: 0.9em; color: var(--muted); }
+.ai-field-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ai-field-head .link-btn { font-size: 0.88em; white-space: nowrap; }
 .ai-field textarea,
 .ai-field select {
   width: 100%;
@@ -3381,6 +3383,37 @@ input[type="checkbox"]:disabled {
   font: inherit;
 }
 .ai-field select { resize: none; cursor: pointer; }
+.ai-option-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+}
+.ai-prompt-modal { width: min(760px, 100%); }
+.ai-prompt-modal-body { display: block; }
+.ai-prompt-editor textarea {
+  min-height: min(52vh, 460px);
+  line-height: 1.45;
+}
+
+/* Compact detail-level slider. */
+.ai-detail { gap: 4px; }
+.ai-detail-head { display: flex; align-items: center; justify-content: space-between; }
+.ai-detail-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  font-weight: 600;
+  font-size: 0.85em;
+}
+.ai-detail input[type="range"] {
+  width: 100%;
+  height: 4px;
+  margin: 2px 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.ai-detail-scale { opacity: 0.8; }
+.ai-aspect-segmented { flex-wrap: wrap; }
+.ai-aspect-segmented button { flex: 1 1 44px; }
 .ai-cost { margin: 0; }
 
 /* Right: editor card — toolbar header, stage, side panel (mirrors Paint). */

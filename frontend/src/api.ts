@@ -290,6 +290,7 @@ export interface AiImageStatus {
   stylePrompts?: Record<string, string>;
   effectPrompts?: Record<string, string>;
   textPrompts?: Record<string, string>;
+  aspectPrompts?: Record<string, string>;
 }
 
 export interface AiImageQuality {
@@ -773,6 +774,8 @@ export const api = {
       detail?: number;
       effect?: string;
       textStyle?: string;
+      detailLevel?: number;
+      aspectRatio?: string;
     }
   ) => {
     const fd = new FormData();
@@ -786,6 +789,8 @@ export const api = {
     if (opts?.detail != null) fd.append("detail", String(opts.detail));
     if (opts?.effect) fd.append("effect", opts.effect);
     if (opts?.textStyle) fd.append("text_style", opts.textStyle);
+    if (opts?.detailLevel != null) fd.append("detail_level", String(opts.detailLevel));
+    if (opts?.aspectRatio) fd.append("aspect_ratio", opts.aspectRatio);
     return req<AiImageResult>("/api/ai-images/generate", { method: "POST", body: fd });
   },
   aiImageRerender: (itemId: string, renderMode: string, detail: number) =>
