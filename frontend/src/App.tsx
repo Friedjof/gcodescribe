@@ -173,8 +173,8 @@ function AdminApp() {
           visited.has(value) ? (
             <div key={value} style={{ display: tab === value ? "contents" : "none" }}>
               {value === "paint" && <Paint visible={tab === "paint"} status={status} onAction={refreshStatus} />}
-              {value === "games" && <Games onOpenPaint={() => setTab("paint")} />}
-              {value === "gallery" && <Gallery onOpenPaint={() => setTab("paint")} />}
+              {value === "games" && <Games visible={tab === "games"} onOpenPaint={() => setTab("paint")} />}
+              {value === "gallery" && <Gallery visible={tab === "gallery"} onOpenPaint={() => setTab("paint")} />}
               {value === "paper" && (
                 <Paper status={status} onAction={refreshStatus} visible={tab === "paper"} />
               )}
@@ -192,6 +192,7 @@ function AdminApp() {
 }
 
 function AuthGate({ children }: { children: ReactNode }) {
+  const { t } = useI18n();
   const [session, setSession] = useState<AuthSession | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
@@ -209,7 +210,7 @@ function AuthGate({ children }: { children: ReactNode }) {
   }, []);
 
   if (err) return <AuthShell><div className="banner err">{err}</div></AuthShell>;
-  if (!session) return <AuthShell><p className="muted">Loading…</p></AuthShell>;
+  if (!session) return <AuthShell><p className="muted">{t("common.loading")}</p></AuthShell>;
   if (!session.configured) return <SetupForm onDone={refresh} />;
   if (!session.authenticated) return <LoginForm username={session.username ?? ""} onDone={refresh} />;
   return <>{children}</>;
