@@ -8,8 +8,8 @@ import Segmented from "./Segmented";
 type RenderMode = "edges" | "handwriting" | "trace";
 
 /** The AI Designer tab: upload a reference image, generate a plotter-ready
- * line drawing (persisted as a gallery asset), inspect its traced preview and
- * plottability, then open it straight in the designer. */
+ * line drawing (persisted as a gallery asset), then refine it with feedback
+ * into further variants. Each variant can be opened straight in the designer. */
 export default function AiImageDesigner({
   status,
   visible = true,
@@ -23,13 +23,15 @@ export default function AiImageDesigner({
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [instructions, setInstructions] = useState("");
+  const [feedback, setFeedback] = useState("");
   const [renderMode, setRenderMode] = useState<RenderMode>("edges");
   const [detail, setDetail] = useState(2);
   const [busy, setBusy] = useState(false);
   const [importing, setImporting] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [result, setResult] = useState<AiImageResult | null>(null);
+  const [variants, setVariants] = useState<AiImageResult[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Local object-URL preview of the upload; revoked on change to avoid leaks.
@@ -44,6 +46,7 @@ export default function AiImageDesigner({
   }, [file]);
 
   const maxMb = status?.maxInputMb ?? 10;
+  const selected = variants.find((v) => v.variantId === selectedId) ?? null;
 
   const pick = (f: File | null | undefined) => {
     setErr(null);
@@ -59,22 +62,35 @@ export default function AiImageDesigner({
     setFile(f);
   };
 
-  const generate = () => {
-    if (!file || busy) return;
+  // baseVariantId set → a feedback refinement (no re-upload); else first pass.
+  const generate = (baseVariantId?: string) => {
+    if (busy) return;
+    if (!baseVariantId && !file) return;
+    if (baseVariantId && !feedback.trim()) return;
     setBusy(true);
     setErr(null);
     api
-      .aiImageGenerate(file, { instructions, renderMode, detail })
-      .then(setResult)
+      .aiImageGenerate(baseVariantId ? null : file, {
+        instructions,
+        feedback: baseVariantId ? feedback : "",
+        baseVariantId,
+        renderMode,
+        detail,
+      })
+      .then((result) => {
+        setVariants((prev) => [...prev, result]);
+        setSelectedId(result.variantId);
+        if (baseVariantId) setFeedback("");
+      })
       .catch((e) => setErr(String(e.message ?? e)))
       .finally(() => setBusy(false));
   };
 
   const toDesigner = () => {
-    if (!result || importing) return;
+    if (!selected || importing) return;
     setImporting(true);
     setErr(null);
-    const { galleryItem, preview } = result;
+    const { galleryItem, preview } = selected;
     api
       .getCalibration()
       .then((cal) =>
@@ -91,8 +107,11 @@ export default function AiImageDesigner({
       .finally(() => setImporting(false));
   };
 
-  const quality = result?.quality;
-  const complexityLabel = quality ? t(`ai.quality.${quality.complexity}`) : "";
+  const addSuggestion = (s: string) =>
+    setFeedback((f) => (f.trim() ? `${f.trim()} ${s}` : s));
+
+  const quality = selected?.quality;
+  const suggestions = quality?.feedbackSuggestions ?? [];
 
   return (
     <section className={`ai-designer ${visible ? "" : "hidden"}`.trim()}>
@@ -183,8 +202,8 @@ export default function AiImageDesigner({
             />
           </label>
 
-          <button className="primary" disabled={!file || busy} onClick={generate}>
-            {busy ? t("ai.generating") : t("ai.generate")}
+          <button className="primary" disabled={!file || busy} onClick={() => generate()}>
+            {busy && !selected ? t("ai.generating") : t("ai.generate")}
           </button>
           <p className="muted small ai-cost">{t("ai.costHint")}</p>
           {err && <div className="banner err">{err}</div>}
@@ -192,7 +211,7 @@ export default function AiImageDesigner({
 
         {/* Result column */}
         <div className="card ai-result">
-          {!result ? (
+          {variants.length === 0 ? (
             <div className="ai-empty">
               <span className="ai-empty-icon">✎</span>
               <h3>{t("ai.emptyTitle")}</h3>
@@ -200,42 +219,90 @@ export default function AiImageDesigner({
             </div>
           ) : (
             <>
-              <div className="ai-images">
-                <figure>
-                  <figcaption className="muted small">{t("ai.resultSource")}</figcaption>
-                  {previewUrl ? <img src={previewUrl} alt="" /> : <div className="ai-ph" />}
-                </figure>
-                <figure>
-                  <figcaption className="muted small">{t("ai.resultOutput")}</figcaption>
-                  <img src={result.imageUrl} alt="" />
-                </figure>
-                <figure>
-                  <figcaption className="muted small">{t("ai.resultLines")}</figcaption>
-                  <PolylinePreview data={result.preview} className="ai-poly" />
-                </figure>
-              </div>
-
-              <div className={`ai-quality ${quality?.complexity}`}>
-                <span className="ai-badge">{complexityLabel}</span>
-                <span className="muted small">
-                  {t("ai.qualityStats", {
-                    lines: quality?.lineCount ?? 0,
-                    points: quality?.pointCount ?? 0,
-                  })}
-                </span>
-              </div>
-              {quality?.warnings.map((w) => (
-                <div key={w} className="banner warn">
-                  {w}
+              {variants.length > 1 && (
+                <div className="ai-variant-strip">
+                  <span className="muted small">{t("ai.variants")}</span>
+                  {variants.map((v, i) => (
+                    <button
+                      key={v.variantId}
+                      className={`ai-variant-chip ${v.variantId === selectedId ? "active" : ""}`.trim()}
+                      onClick={() => setSelectedId(v.variantId)}
+                    >
+                      {`V${i + 1}`}
+                    </button>
+                  ))}
                 </div>
-              ))}
+              )}
 
-              <div className="ai-actions">
-                <button className="primary" disabled={importing} onClick={toDesigner}>
-                  {importing ? t("common.loading") : t("ai.openDesigner")}
-                </button>
-                <span className="muted small">{t("ai.savedHint")}</span>
-              </div>
+              {selected && (
+                <>
+                  <div className="ai-images">
+                    <figure>
+                      <figcaption className="muted small">{t("ai.resultSource")}</figcaption>
+                      {previewUrl ? <img src={previewUrl} alt="" /> : <div className="ai-ph" />}
+                    </figure>
+                    <figure>
+                      <figcaption className="muted small">{t("ai.resultOutput")}</figcaption>
+                      <img src={selected.imageUrl} alt="" />
+                    </figure>
+                    <figure>
+                      <figcaption className="muted small">{t("ai.resultLines")}</figcaption>
+                      <PolylinePreview data={selected.preview} className="ai-poly" />
+                    </figure>
+                  </div>
+
+                  <div className={`ai-quality ${quality?.complexity}`}>
+                    <span className="ai-badge">{t(`ai.quality.${quality?.complexity}`)}</span>
+                    <span className="muted small">
+                      {t("ai.qualityStats", {
+                        lines: quality?.lineCount ?? 0,
+                        points: quality?.pointCount ?? 0,
+                      })}
+                    </span>
+                  </div>
+                  {quality?.warnings.map((w) => (
+                    <div key={w} className="banner warn">
+                      {w}
+                    </div>
+                  ))}
+
+                  <div className="ai-actions">
+                    <button className="primary" disabled={importing} onClick={toDesigner}>
+                      {importing ? t("common.loading") : t("ai.openDesigner")}
+                    </button>
+                    <span className="muted small">{t("ai.savedHint")}</span>
+                  </div>
+
+                  <div className="ai-feedback">
+                    <label className="ai-field">
+                      {t("ai.feedbackLabel")}
+                      <textarea
+                        rows={2}
+                        value={feedback}
+                        maxLength={1000}
+                        placeholder={t("ai.feedbackPlaceholder")}
+                        onChange={(e) => setFeedback(e.target.value)}
+                      />
+                    </label>
+                    {suggestions.length > 0 && (
+                      <div className="ai-suggestions">
+                        {suggestions.map((s) => (
+                          <button key={s} className="ai-chip" onClick={() => addSuggestion(s)}>
+                            + {s}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <button
+                      className="primary"
+                      disabled={busy || !feedback.trim()}
+                      onClick={() => generate(selected.variantId)}
+                    >
+                      {busy ? t("ai.generating") : t("ai.regenerate")}
+                    </button>
+                  </div>
+                </>
+              )}
             </>
           )}
         </div>

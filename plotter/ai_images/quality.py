@@ -29,13 +29,20 @@ def assess(preview: dict) -> dict:
     short_line_count = sum(1 for p in polylines if _length(p) < SHORT_LINE_MM)
 
     warnings: list[str] = []
+    # Each warning pairs with a ready-to-use feedback phrase the UI can drop
+    # into the feedback box so the user can act on it with one click.
+    suggestions: list[str] = []
     short_fraction = short_line_count / line_count if line_count else 0.0
     if line_count >= MANY_LINES:
         warnings.append(f"Sehr viele Linien ({line_count}) — der Plot dauert lange.")
+        suggestions.append("Weniger Details, klarere und längere Konturen.")
     if short_fraction >= MANY_SHORT_FRACTION and short_line_count > 20:
         warnings.append(
             f"Viele kurze Linien ({short_line_count}) — wirkt wie Punkte/Textur."
         )
+        suggestions.append("Keine Punkte oder Textur, nur durchgehende Linien.")
+    if line_count == 0:
+        suggestions.append("Deutlichere, kräftigere schwarze Konturen.")
 
     if line_count == 0:
         complexity = "bad"
@@ -50,4 +57,5 @@ def assess(preview: dict) -> dict:
         "shortLineCount": short_line_count,
         "complexity": complexity,
         "warnings": warnings,
+        "feedbackSuggestions": suggestions,
     }

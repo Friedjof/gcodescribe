@@ -105,6 +105,47 @@ def test_generate_persists_gallery_item_with_ai_meta(workspace, monkeypatch):
     assert stored["ai"]["renderMode"] == "edges"
 
 
+def test_generate_includes_feedback_suggestions(workspace, monkeypatch):
+    monkeypatch.setenv("AI_IMAGE_FAKE", "true")
+    result = AiImageService(load_config()).generate(
+        filename="photo.png", data=_png_bytes(), mime="image/png"
+    )
+    assert "feedbackSuggestions" in result["quality"]
+    assert isinstance(result["quality"]["feedbackSuggestions"], list)
+
+
+def test_feedback_variant_chains_to_parent_without_reupload(workspace, monkeypatch):
+    monkeypatch.setenv("AI_IMAGE_FAKE", "true")
+    service = AiImageService(load_config())
+    v1 = service.generate(filename="photo.png", data=_png_bytes(), mime="image/png")
+
+    # No file this time: the feedback request iterates on the parent variant.
+    v2 = service.generate(
+        feedback="less detail", base_variant_id=v1["variantId"]
+    )
+    assert v2["parentVariantId"] == v1["variantId"]
+    assert v2["variantId"] != v1["variantId"]
+    stored = GalleryService().get(v2["galleryItem"]["id"])
+    assert stored["ai"]["feedback"] == "less detail"
+    assert stored["ai"]["parentVariantId"] == v1["variantId"]
+
+
+def test_feedback_unknown_parent_raises(workspace, monkeypatch):
+    monkeypatch.setenv("AI_IMAGE_FAKE", "true")
+    with pytest.raises(AiImageError) as exc:
+        AiImageService(load_config()).generate(
+            feedback="more contour", base_variant_id="doesnotexist"
+        )
+    assert exc.value.category == "bad_response"
+
+
+def test_generate_without_image_or_parent_raises(workspace, monkeypatch):
+    monkeypatch.setenv("AI_IMAGE_FAKE", "true")
+    with pytest.raises(AiImageError) as exc:
+        AiImageService(load_config()).generate(feedback="hi")
+    assert exc.value.category == "unsupported_file"
+
+
 def test_generate_rejects_non_image(workspace, monkeypatch):
     monkeypatch.setenv("AI_IMAGE_FAKE", "true")
     with pytest.raises(AiImageError) as exc:
@@ -142,6 +183,32 @@ def test_route_status_and_generate(workspace, monkeypatch):
     body = resp.json()
     assert body["galleryItem"]["uploader"] == "admin"
     assert body["quality"]["complexity"] in ("good", "medium", "bad")
+
+
+def test_route_feedback_without_file(workspace, monkeypatch):
+    monkeypatch.setenv("AI_IMAGE_FAKE", "true")
+    client = TestClient(create_app())
+    first = client.post(
+        "/api/ai-images/generate",
+        files={"file": ("photo.png", _png_bytes(), "image/png")},
+        data={"render_mode": "edges"},
+    )
+    assert first.status_code == 200, first.text
+    variant_id = first.json()["variantId"]
+
+    second = client.post(
+        "/api/ai-images/generate",
+        data={"feedback": "fewer lines", "base_variant_id": variant_id},
+    )
+    assert second.status_code == 200, second.text
+    assert second.json()["parentVariantId"] == variant_id
+
+
+def test_route_generate_requires_image_or_parent(workspace, monkeypatch):
+    monkeypatch.setenv("AI_IMAGE_FAKE", "true")
+    client = TestClient(create_app())
+    resp = client.post("/api/ai-images/generate", data={"feedback": "hi"})
+    assert resp.status_code == 400
 
 
 def test_route_status_disabled(workspace, monkeypatch):

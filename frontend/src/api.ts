@@ -295,6 +295,7 @@ export interface AiImageQuality {
   shortLineCount: number;
   complexity: "good" | "medium" | "bad";
   warnings: string[];
+  feedbackSuggestions: string[];
 }
 
 /** One generated variant: the persisted gallery item plus its traced preview,
@@ -755,7 +756,7 @@ export const api = {
   // --- AI image designer ---
   aiImageStatus: () => req<AiImageStatus>("/api/ai-images/status"),
   aiImageGenerate: (
-    file: File,
+    file: File | null,
     opts?: {
       instructions?: string;
       feedback?: string;
@@ -766,7 +767,8 @@ export const api = {
     }
   ) => {
     const fd = new FormData();
-    fd.append("file", file);
+    // No file on a feedback request: the backend iterates on the parent variant.
+    if (file) fd.append("file", file);
     if (opts?.instructions) fd.append("instructions", opts.instructions);
     if (opts?.feedback) fd.append("feedback", opts.feedback);
     if (opts?.baseVariantId) fd.append("base_variant_id", opts.baseVariantId);

@@ -3418,3 +3418,35 @@ input[type="checkbox"]:disabled {
   .ai-grid { grid-template-columns: 1fr; }
   .ai-images { grid-template-columns: 1fr 1fr; }
 }
+
+/* AI Designer: variant strip + feedback */
+.ai-variant-strip { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ai-variant-chip {
+  min-width: 38px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.85em;
+}
+.ai-variant-chip.active { color: var(--text); border-color: var(--accent); background: rgba(10, 132, 255, 0.12); }
+.ai-feedback {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ai-suggestions { display: flex; flex-wrap: wrap; gap: 6px; }
+.ai-chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px dashed var(--border);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.8em;
+}
+.ai-chip:hover { color: var(--text); border-color: var(--accent); }

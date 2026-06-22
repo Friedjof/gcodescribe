@@ -5,6 +5,7 @@ import time
 import uuid
 
 from ..pipeline import PlotterError
+from ..services.errors import ServiceError
 from ..services.gallery import GalleryService
 from ..services.upload_validation import UnsupportedUpload, UploadTooLarge
 from .client import AiImageRequest, make_client
@@ -34,8 +35,8 @@ class AiImageService:
     def generate(
         self,
         *,
-        filename: str,
-        data: bytes,
+        filename: str = "",
+        data: bytes | None = None,
         mime: str = "",
         instructions: str = "",
         feedback: str = "",
@@ -49,15 +50,29 @@ class AiImageService:
 
         render_mode = render_mode if render_mode in ALLOWED_RENDER_MODES else DEFAULT_RENDER_MODE
         detail = max(1, min(int(detail), 3))
-        self._validate_input(filename, data)
+
+        # Pick the reference image: an explicit upload wins; otherwise a feedback
+        # request iterates on the parent variant's own AI output.
+        parent = self._resolve_parent(base_variant_id) if base_variant_id else None
+        if base_variant_id and parent is None:
+            raise AiImageError("bad_response", "Basis-Variante nicht gefunden.")
+        if data:
+            self._validate_input(filename, data)
+            ref_bytes, ref_name, ref_mime = data, filename, (mime or "image/png")
+        elif parent is not None:
+            ref_bytes, ref_name, ref_mime = parent["bytes"], parent["filename"], parent["mime"]
+        else:
+            raise AiImageError(
+                "unsupported_file", "Kein Referenzbild — Bild hochladen oder Variante wählen."
+            )
 
         prompt = compose_prompt(instructions, feedback)
         client = make_client(self.config)
         output = client.generate_plotter_image(
             AiImageRequest(
-                image_bytes=data,
-                filename=filename,
-                mime=mime,
+                image_bytes=ref_bytes,
+                filename=ref_name,
+                mime=ref_mime,
                 prompt=prompt,
                 size=self.config.size,
                 user_instructions=instructions,
@@ -70,7 +85,7 @@ class AiImageService:
 
         variant_id = uuid.uuid4().hex[:12]
         out_name = f"ai-plotter-{variant_id}.png"
-        item_title = (title or f"AI: {filename.rsplit('.', 1)[0]}").strip()
+        item_title = (title or f"AI: {ref_name.rsplit('.', 1)[0]}").strip()
         try:
             item = self.gallery.create(
                 out_name,
@@ -91,8 +106,8 @@ class AiImageService:
             "variantId": variant_id,
             "parentVariantId": base_variant_id,
             "providerResponseId": output.provider_response_id,
-            "sourceFilename": filename,
-            "sourceMime": mime,
+            "sourceFilename": ref_name,
+            "sourceMime": ref_mime,
             "stylePrompt": STYLE_PROMPT,
             "stylePromptHash": style_prompt_hash(),
             "userInstructions": instructions.strip(),
@@ -120,6 +135,27 @@ class AiImageService:
             },
             "quality": quality,
         }
+
+    def _resolve_parent(self, base_variant_id: str) -> dict | None:
+        """Find the gallery item for a variant id and return its AI output as a
+        reference image. A plain gallery scan (Option A): no extra index file,
+        fine for the expected small gallery sizes.
+        """
+        for meta in self.gallery.list(include_archived=True):
+            ai = meta.get("ai") or {}
+            if ai.get("variantId") != base_variant_id:
+                continue
+            try:
+                path, info = self.gallery.original_path(meta["id"])
+            except ServiceError:
+                return None
+            return {
+                "item": meta,
+                "bytes": path.read_bytes(),
+                "filename": info.get("filename") or "parent.png",
+                "mime": info.get("mime") or "image/png",
+            }
+        return None
 
     def _validate_input(self, filename: str, data: bytes) -> None:
         max_bytes = self.config.max_input_mb * 1024 * 1024
