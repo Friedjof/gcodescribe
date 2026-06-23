@@ -421,6 +421,37 @@ export interface PageIndex {
   };
 }
 
+// --- settings ---
+export interface AppSettings {
+  printer: {
+    octoprint_url: string;
+    octoprint_api_key_configured: boolean;
+    octoprint_verify_ssl: boolean;
+    serial_enabled: boolean;
+    serial_port: string;
+    serial_baud: number;
+    default_backend: string;
+  };
+  ai: {
+    enabled: boolean;
+    fake: boolean;
+    api_key_configured: boolean;
+    model: string;
+    api_mode: string;
+    size: string;
+    quality: string;
+    max_input_mb: number;
+    timeout_seconds: number;
+  };
+  storage: { data_dir: string };
+  auth: { session_ttl: number; cookie_secure: boolean };
+  server: { host: string; port: number; redis_url: string };
+}
+
+export interface EffectiveSettings extends AppSettings {
+  sources: Record<string, Record<string, string>>;
+}
+
 async function req<T>(url: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(url, { credentials: "same-origin", ...opts });
   if (!res.ok) {
@@ -857,4 +888,16 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text, font, size, connect_spaces: connectSpaces }),
     }),
+
+  // --- settings ---
+  getSettings: () => req<AppSettings>("/api/settings"),
+  getEffectiveSettings: () => req<EffectiveSettings>("/api/settings/effective"),
+  patchSettings: (settings: Record<string, unknown>) =>
+    req<EffectiveSettings>("/api/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ settings }),
+    }),
+  resetSetting: (section: string, field: string) =>
+    req<EffectiveSettings>(`/api/settings/${section}/${field}`, { method: "DELETE" }),
 };

@@ -9,6 +9,7 @@ import Calibrate from "./components/Calibrate";
 import Control from "./components/Control";
 import Paper from "./components/Paper";
 import Segmented from "./components/Segmented";
+import SettingsDialog from "./components/SettingsDialog";
 import { useToasts } from "./components/Toasts";
 import { useI18n } from "./i18n";
 
@@ -32,6 +33,7 @@ function AdminApp() {
   const { lang, setLang, t } = useI18n();
   const toast = useToasts();
   const [tab, setTab] = useState<Tab>("paint");
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [visited, setVisited] = useState<Set<Tab>>(() => new Set<Tab>(["paint"]));
   const [status, setStatus] = useState<any>(null);
   const [aiStatus, setAiStatus] = useState<AiImageStatus | null>(null);
@@ -167,6 +169,7 @@ function AdminApp() {
             <option value="fr">{t("lang.fr")}</option>
             <option value="es">{t("lang.es")}</option>
           </select>
+          <button className="settings-btn" onClick={() => setSettingsOpen(true)} title={t("settings.headerButton")}>⚙</button>
           <StatusPill status={status} />
         </div>
       </header>
@@ -174,6 +177,8 @@ function AdminApp() {
       <nav className="tabs-nav">
         <Segmented<Tab> className="nav" value={tab} onChange={setTab} options={tabs} />
       </nav>
+
+      {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
 
       <main>
         {/* Kept alive: rendered once visited, hidden (not unmounted) when inactive.

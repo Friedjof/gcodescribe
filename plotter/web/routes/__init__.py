@@ -1,4 +1,4 @@
-from . import auth, calibration, jobs, osm_map, pages, paper, printer, sources, stream, sudoku
+from . import auth, calibration, jobs, osm_map, pages, paper, printer, settings, sources, stream, sudoku
 
 __all__ = [
     "auth",
@@ -8,6 +8,7 @@ __all__ = [
     "pages",
     "paper",
     "printer",
+    "settings",
     "sources",
     "stream",
     "sudoku",

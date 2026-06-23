@@ -24,6 +24,7 @@ from .routes import (
     paper,
     printer,
     profiles,
+    settings,
     sources,
     stream,
     sudoku,
@@ -63,6 +64,7 @@ def create_app() -> FastAPI:
         paper,
         printer,
         profiles,
+        settings,
         sources,
         sudoku,
     )

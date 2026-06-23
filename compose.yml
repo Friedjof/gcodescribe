@@ -29,6 +29,7 @@ services:
       # one (octoprint|serial) until a choice is persisted. If serial is the
       # active backend it opens the USB port at app start and keeps it for the
       # container lifetime. The configured USB device is passed through below.
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
       PRINTER_SERIAL_ENABLED: "${PRINTER_SERIAL_ENABLED:-false}"
       PRINTER_DEFAULT_BACKEND: "${PRINTER_DEFAULT_BACKEND:-}"
       PRINTER_SERIAL_PORT: "${PRINTER_SERIAL_PORT:-/dev/ttyUSB0}"
