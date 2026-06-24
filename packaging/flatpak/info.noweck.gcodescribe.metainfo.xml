@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>info.noweck.gcodescribe</id>
+  <launchable type="desktop-id">info.noweck.gcodescribe.desktop</launchable>
+
+  <name>GCodeScribe</name>
+  <summary>Browser-based pen-plotter studio</summary>
+
+  <metadata_license>FSFAP</metadata_license>
+  <project_license>LicenseRef-proprietary</project_license>
+
+  <description>
+    <p>
+      GCodeScribe converts PDF, SVG, image, and Office documents — plus generated
+      templates, maps, Markdown layouts, and optional AI-assisted artwork — into safe
+      G-code for pen plotters connected via serial or OctoPrint.
+    </p>
+    <p>Features include:</p>
+    <ul>
+      <li>Single-line font text rendering</li>
+      <li>Live calibration and profile management</li>
+      <li>G-code preview and job gallery</li>
+      <li>Map and maze generators</li>
+      <li>AI image design (optional OpenAI key)</li>
+      <li>Coloring pages and mandala generators</li>
+      <li>Direct serial and OctoPrint printer backends</li>
+    </ul>
+  </description>
+
+  <url type="homepage">https://github.com/Friedjof/gcodescribe</url>
+  <url type="bugtracker">https://github.com/Friedjof/gcodescribe/issues</url>
+
+  <categories>
+    <category>Graphics</category>
+    <category>Engineering</category>
+  </categories>
+
+  <provides>
+    <binary>gcodescribe-desktop</binary>
+  </provides>
+
+  <content_rating type="oars-1.1"/>
+
+  <releases>
+    <release version="0.3.0" date="2026-06-23">
+      <description>
+        <p>Initial Flatpak release.</p>
+      </description>
+    </release>
+  </releases>
+</component>

@@ -82,10 +82,18 @@ class FileStateStore(StateStore):
 
 
 def create_store() -> StateStore:
-    """Redis if reachable, otherwise the (equally persistent) file store."""
-    url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+    """Redis if reachable, otherwise the (equally persistent) file store.
+
+    Set ``STATE_STORE=file`` to skip Redis entirely (used by the Flatpak build).
+    """
+    if os.environ.get("STATE_STORE", "").strip().lower() == "file":
+        store: StateStore = FileStateStore()
+        log.info("State store: %s (STATE_STORE=file)", store.describe())
+        return store
+
+    url = os.environ.get("REDIS_URL", "").strip() or "redis://localhost:6379/0"
     try:
-        store: StateStore = RedisStateStore(url)
+        store = RedisStateStore(url)
     except Exception as exc:  # redis missing / unreachable
         store = FileStateStore()
         log.warning("Redis not available (%s) — falling back to %s", exc, store.describe())

@@ -31,6 +31,7 @@ dependencies = [
 [project.scripts]
 gcodescribe = "plotter.cli:main"
 gcodescribe-web = "plotter.web.server:main"
+gcodescribe-desktop = "plotter.desktop.app:main"
 
 [build-system]
 requires = ["hatchling"]

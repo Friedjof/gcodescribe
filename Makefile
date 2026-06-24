@@ -1,4 +1,4 @@
-.PHONY: dev dev-plain build install clean redis redis-stop
+.PHONY: dev dev-plain build setup install bundle flatpak clean redis redis-stop
 
 -include .env
 export
@@ -14,12 +14,23 @@ PRINTER_SERIAL_BAUD ?= 115200
 REDIS_PORT       ?= 6379
 REDIS_URL        ?= redis://localhost:$(REDIS_PORT)/0
 
-install:
+setup:
 	uv sync
 	cd frontend && npm install
 
 build:
 	cd frontend && npm run build
+
+# Schnell: baut inkrementell aus Cache, installiert direkt — kein Bundle-Schritt.
+install:
+	@bash scripts/flatpak-install.sh
+
+# Langsam: erstellt GCodeScribe.flatpak für Distribution (~2–5 min xz-Kompression).
+bundle:
+	@bash scripts/flatpak-bundle.sh
+
+# Alias für Rückwärtskompatibilität
+flatpak: bundle
 
 # Persistent Redis for the position cache (survives app restarts).
 redis:

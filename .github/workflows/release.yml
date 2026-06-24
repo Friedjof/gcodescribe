@@ -86,6 +86,32 @@ jobs:
             --notes-file notes.md \
             --verify-tag
 
+  # Build the Flatpak bundle and attach it to the GitHub release.
+  flatpak:
+    name: Build & upload Flatpak
+    needs: release
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-49
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          bundle: GCodeScribe-${{ github.ref_name }}.flatpak
+          manifest-path: packaging/flatpak/info.noweck.gcodescribe.yml
+          cache-key: flatpak-builder-${{ github.ref_name }}
+          upload-artifact: true
+
+      - name: Upload Flatpak bundle to GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${GITHUB_REF_NAME}" \
+            "GCodeScribe-${GITHUB_REF_NAME}.flatpak" \
+            --clobber
+
   # Optional: build & publish the Docker image to GHCR. Delete this job if you
   # don't want to publish a container image on release.
   image:

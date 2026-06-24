@@ -1,0 +1,131 @@
+app-id: info.noweck.gcodescribe
+runtime: org.gnome.Platform
+runtime-version: '49'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.node22
+command: gcodescribe-desktop
+
+build-options:
+  # Allow network access during the build so pip and npm can download packages.
+  # For fully reproducible offline builds, run packaging/flatpak/generate-sources.sh
+  # first and switch to the offline approach described there.
+  build-args:
+    - --share=network
+  env:
+    PATH: /usr/lib/sdk/node22/bin:/app/bin:/usr/bin
+    NO_UPDATE_NOTIFIER: "1"
+
+finish-args:
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  # Network access: needed for OctoPrint (LAN), OSM, and optional AI features.
+  - --share=network
+  # Serial/USB access for direct printer connection (/dev/ttyUSB*, /dev/ttyACM*).
+  # --device=all is broad; test whether --device=usb is sufficient for your setup.
+  - --device=all
+
+modules:
+
+  # ── Poppler utilities (pdftocairo, pdftoppm, pdfinfo) ────────────────────
+  # poppler-data provides encoding tables required by poppler at runtime.
+  - name: poppler-data
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DENABLE_TESTING=OFF
+    sources:
+      - type: archive
+        url: https://poppler.freedesktop.org/poppler-data-0.4.12.tar.gz
+        sha256: c835b640a40ce357e1b83666aabd95edffa24ddddd49b8daff63adb851cdab74
+
+  - name: poppler
+    buildsystem: cmake-ninja
+    build-options:
+      env:
+        NINJA_STATUS: "[%f/%t] "
+      cflags: -O2
+      cxxflags: -O2
+    config-opts:
+      - -DENABLE_TESTING=OFF
+      - -DENABLE_UNSTABLE_API_ABI_HEADERS=ON
+      - -DENABLE_GOBJECT_INTROSPECTION=OFF
+      - -DENABLE_QT5=OFF
+      - -DENABLE_QT6=OFF
+      - -DENABLE_LIBOPENJPEG=none
+      - -DBUILD_GTK_TESTS=OFF
+      - -DBUILD_CPP_TESTS=OFF
+      - -DBUILD_MANUAL_TESTS=OFF
+      - -DENABLE_BOOST=OFF
+    sources:
+      - type: archive
+        url: https://poppler.freedesktop.org/poppler-24.12.0.tar.xz
+        sha256: 1cf374c3146f3f685d9257701bf0c2866c61d6c202c14d1f5c01a1f3a089028a
+
+  # ── React / Vite frontend ─────────────────────────────────────────────────
+  - name: frontend
+    buildsystem: simple
+    build-commands:
+      - . /usr/lib/sdk/node22/enable.sh
+      - npm ci
+      - mkdir -p /app/share/gcodescribe/static
+      - npx vite build --outDir /app/share/gcodescribe/static --emptyOutDir
+    sources:
+      - type: dir
+        path: ../../frontend
+
+  # ── Python runtime dependencies ───────────────────────────────────────────
+  # Source is pyproject.toml only: cache is invalidated when deps change,
+  # not on every code edit.
+  - name: python3-requirements
+    buildsystem: simple
+    build-commands:
+      - pip3 install --prefix=/app
+          hatchling
+          fastapi "uvicorn[standard]" httpx python-multipart redis
+          numpy "opencv-python-headless" networkx reportlab fonttools
+          "scikit-image" "argon2-cffi" pyotp dokusan pyserial
+          openai vpype "vpype-gcode" "python-docx" "python-pptx"
+    sources:
+      - type: file
+        path: ../../pyproject.toml
+
+  # ── gcodescribe application ───────────────────────────────────────────────
+  - name: gcodescribe
+    buildsystem: simple
+    build-commands:
+      # Install the Python package without re-installing deps (already above).
+      # This also installs the gcodescribe-desktop entry point via pyproject.toml.
+      - pip3 install --no-deps --no-build-isolation --prefix=/app .
+
+      # Link the pre-built frontend to the path app.py resolves at runtime.
+      # GNOME SDK 49 ships Python 3.13.
+      - |
+        STATIC=/app/lib/python3.13/site-packages/plotter/web/static
+        rm -rf "$STATIC"
+        ln -s /app/share/gcodescribe/static "$STATIC"
+
+      # Desktop integration
+      - install -Dm644 packaging/flatpak/info.noweck.gcodescribe.desktop
+          /app/share/applications/info.noweck.gcodescribe.desktop
+      - install -Dm644 packaging/flatpak/info.noweck.gcodescribe.metainfo.xml
+          /app/share/metainfo/info.noweck.gcodescribe.metainfo.xml
+      - install -Dm644 packaging/flatpak/info.noweck.gcodescribe.svg
+          /app/share/icons/hicolor/scalable/apps/info.noweck.gcodescribe.svg
+
+    sources:
+      # Use dest: to preserve the plotter/ package directory name.
+      # type: dir without dest copies CONTENTS to build root, which loses the
+      # directory name and breaks "packages = ['plotter']" in pyproject.toml.
+      - type: dir
+        path: ../../plotter
+        dest: plotter
+      - type: file
+        path: ../../pyproject.toml
+      - type: file
+        path: ../../main.py
+      - type: file
+        path: ../../README.md
+      - type: dir
+        path: ../../packaging/flatpak
+        dest: packaging/flatpak

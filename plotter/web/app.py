@@ -87,7 +87,9 @@ def create_app() -> FastAPI:
 
     @app.get("/api/health")
     def health() -> dict:
-        return {"ok": True}
+        import os
+        desktop = os.environ.get("GCODESCRIBE_PACKAGING", "").lower() == "flatpak"
+        return {"ok": True, "desktop": desktop}
 
     # Static frontend (built SPA) — mounted last so /api routes take precedence.
     static = Path(__file__).resolve().parent / "static"

@@ -14,6 +14,7 @@ wheels/
 .venv/
 .python-version
 .claude/
+.ruff_cache/
 
 docs/planing/
 
@@ -30,6 +31,13 @@ data/
 .env
 .env.*
 !.env.example
+
+# Flatpak build artefacts
+.flatpak-build/
+.flatpak-builder/
+.flatpak-repo/
+GCodeScribe*.flatpak
+packaging/flatpak/poppler-sha256.txt
 
 # OS/editor noise
 .DS_Store

@@ -29,6 +29,7 @@ frontend/dist/
 frontend/coverage/
 frontend/.vite/
 frontend/tsconfig.tsbuildinfo
+
 plotter/web/static/
 
 # Runtime data and generated files
@@ -39,6 +40,7 @@ docs/
 media/
 scripts/
 tests/
+packaging/
 compose*.yml
 compose*.yaml
 

@@ -1,0 +1,41 @@
+name: Flatpak
+
+# Build the Flatpak bundle on every PR and branch push.
+# Tag pushes (vX.Y.Z) are handled by the release workflow instead.
+on:
+  push:
+    branches: ['**']
+    paths:
+      - 'packaging/flatpak/**'
+      - 'plotter/**'
+      - 'frontend/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+  pull_request:
+    paths:
+      - 'packaging/flatpak/**'
+      - 'plotter/**'
+      - 'frontend/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+
+concurrency:
+  group: flatpak-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flatpak:
+    name: Build Flatpak bundle
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-49
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          bundle: GCodeScribe.flatpak
+          manifest-path: packaging/flatpak/info.noweck.gcodescribe.yml
+          cache-key: flatpak-builder-${{ github.sha }}
+          upload-artifact: true

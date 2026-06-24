@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=GCodeScribe
+GenericName=Pen-Plotter Studio
+Comment=Convert documents into pen-plotter G-code
+Exec=gcodescribe-desktop
+Icon=info.noweck.gcodescribe
+Terminal=false
+Type=Application
+Categories=Graphics;Engineering;
+Keywords=plotter;gcode;svg;pdf;drawing;pen;
+StartupNotify=true

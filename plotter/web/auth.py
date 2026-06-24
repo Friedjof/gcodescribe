@@ -10,6 +10,9 @@ SESSION_COOKIE = "gcodescribe_session"
 
 
 def auth_bypass_enabled() -> bool:
+    # Desktop (Flatpak) runs locally for a single user — no login needed.
+    if os.environ.get("GCODESCRIBE_PACKAGING", "").lower() == "flatpak":
+        return True
     for name in ("PLOTTER_AUTH_DEV_BYPASS", "PLOTTER_AUTH_TEST_BYPASS"):
         if os.environ.get(name, "").lower() in ("1", "true", "yes"):
             return True
