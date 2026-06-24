@@ -45,11 +45,18 @@ class Calibration:
     fit_to_area: bool = True  # scale the drawing to fit plot_width x plot_height
     flip_y: bool = True  # SVG y-axis points down; printer y-axis points up
     trust_axis_home: bool = False  # true if the firmware honours G28 axis arguments
+    park_after_plot: bool = True  # move to bed-centre/Y-max after the job finishes
 
     # Paper calibration: corner positions captured by jogging the head to the
     # sheet's corners (printer coordinates, mm). Keys: bl, br, tr, tl.
     paper_corners: dict = field(default_factory=dict)
     paper_margin: float = 0.0  # inset from the paper edge to the plot area
+
+    # No-go obstacle zones (e.g. clamps): list of dicts with keys
+    # id, x, y, w, h  — all in printer/bed coordinates (mm).
+    # Travel moves (pen-up) are routed around them; drawing moves through them
+    # are rejected by the safety checker.
+    obstacles: list = field(default_factory=list)
 
     @classmethod
     def path(cls) -> Path:
@@ -86,9 +93,10 @@ class Calibration:
         return Calibration(**data)
 
     def paper_rect(self) -> tuple[float, float, float, float] | None:
-        """Axis-aligned (x, y, width, height) of the captured paper, or None.
+        """Axis-aligned bounding box (x, y, width, height) of captured corners, or None.
 
         Needs at least two corners spanning both axes (e.g. bl + tr).
+        Used for display / preview; apply() uses paper_rect_inner() instead.
         """
         pts = [
             p
@@ -104,3 +112,80 @@ class Calibration:
         if width < 1.0 or height < 1.0:
             return None
         return (min(xs), min(ys), width, height)
+
+    def paper_rect_inner(self) -> tuple[float, float, float, float] | None:
+        """Largest axis-aligned rectangle that fits *inside* the captured quadrilateral.
+
+        With 4 corners this handles non-rectangular (tilted) paper correctly.
+        With fewer corners it falls back to the bounding box.
+        """
+        pts = [
+            [float(p[0]), float(p[1])]
+            for p in self.paper_corners.values()
+            if isinstance(p, (list, tuple)) and len(p) == 2
+        ]
+        if len(pts) < 2:
+            return None
+        if len(pts) < 4:
+            return self.paper_rect()
+
+        ys = [p[1] for p in pts]
+        y_min, y_max = min(ys), max(ys)
+        if y_max - y_min < 1.0:
+            return None
+
+        # Build edge list for the convex quadrilateral.
+        # Order corners: tl → tr → br → bl (canonical quad order).
+        order = ["tl", "tr", "br", "bl"]
+        ordered = []
+        for key in order:
+            if key in self.paper_corners:
+                p = self.paper_corners[key]
+                if isinstance(p, (list, tuple)) and len(p) == 2:
+                    ordered.append([float(p[0]), float(p[1])])
+        if len(ordered) != 4:
+            # Fall back if not all 4 canonical corners present.
+            ordered = pts
+        edges = [(ordered[i], ordered[(i + 1) % len(ordered)]) for i in range(len(ordered))]
+
+        def x_range_at_y(y: float) -> tuple[float, float] | None:
+            xs_at = []
+            for (ax, ay), (bx, by) in edges:
+                lo, hi = (ay, by) if ay <= by else (by, ay)
+                if lo <= y <= hi and abs(by - ay) > 1e-9:
+                    t = (y - ay) / (by - ay)
+                    xs_at.append(ax + t * (bx - ax))
+            if len(xs_at) < 2:
+                return None
+            return (min(xs_at), max(xs_at))
+
+        # Restrict y to the "interior" range where the polygon has a
+        # definite positive width.  For a convex quad, the two vertices with
+        # the lowest y values define the bottom edge, and the two with the
+        # highest y values define the top edge.  The inscribed rect y-range is
+        # [max of bottom pair, min of top pair] – this avoids the degenerate
+        # single-point extremes at y_min / y_max.
+        ys_sorted = sorted(ys)
+        y_inner_min = ys_sorted[1]   # 2nd lowest
+        y_inner_max = ys_sorted[-2]  # 2nd highest
+
+        if y_inner_max - y_inner_min < 1.0:
+            # Fall back to full bounding rect when corners are nearly co-linear.
+            return self.paper_rect()
+
+        x_left_max = float("-inf")
+        x_right_min = float("inf")
+        sample_ys = sorted(set(ys) | {y_inner_min, y_inner_max})
+        for sy in sample_ys:
+            if not (y_inner_min <= sy <= y_inner_max):
+                continue
+            r = x_range_at_y(sy)
+            if r and r[1] > r[0]:
+                x_left_max = max(x_left_max, r[0])
+                x_right_min = min(x_right_min, r[1])
+
+        width = x_right_min - x_left_max
+        height = y_inner_max - y_inner_min
+        if width < 1.0 or height < 1.0:
+            return None
+        return (x_left_max, y_inner_min, width, height)

@@ -55,6 +55,21 @@ export default function Calibrate() {
       .catch(fail);
   }, []);
 
+  // Live-sync: pick up calibration changes made from Paper / LiveView without
+  // reloading the page.  Skip if the user has unsaved edits in this view.
+  useEffect(() => {
+    const handle = () => {
+      if (dirty || !selectedId) return;
+      api.listProfiles().then(setProfiles).catch(() => {});
+      api.getProfile(selectedId).then((p) => {
+        setName(p.name);
+        setCal(p.calibration);
+      }).catch(() => {});
+    };
+    window.addEventListener("gcs:calibration-changed", handle);
+    return () => window.removeEventListener("gcs:calibration-changed", handle);
+  }, [selectedId, dirty]);
+
   if (!cal) return <div className="card">{t("calibrate.loading")}</div>;
 
   const selected = profiles.find((p) => p.id === selectedId) ?? null;
@@ -301,6 +316,15 @@ export default function Calibrate() {
                   onClick={() => set("trust_axis_home", !cal.trust_axis_home)}
                 >
                   <span>{t("calibrate.trustAxisHome")}</span>
+                  <i />
+                </button>
+                <button
+                  type="button"
+                  className={"toggle-pill" + (cal.park_after_plot ? " on" : "")}
+                  aria-pressed={cal.park_after_plot}
+                  onClick={() => set("park_after_plot", !cal.park_after_plot)}
+                >
+                  <span>{t("calibrate.parkAfterPlot")}</span>
                   <i />
                 </button>
               </div>

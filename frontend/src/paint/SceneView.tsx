@@ -112,6 +112,28 @@ const SceneView = forwardRef<SVGSVGElement, SceneViewProps>(function SceneView({
           </g>
         );
       })}
+
+      {/* Obstacle no-go zones — converted from bed to local (editor) coordinates */}
+      {(cal.obstacles ?? []).map((obs) => {
+        const lx = obs.x - cal.origin_x;
+        const lw = obs.w;
+        const lh = obs.h;
+        const ly = cal.flip_y
+          ? cal.plot_height + cal.origin_y - obs.y - obs.h
+          : obs.y - cal.origin_y;
+        return (
+          <rect
+            key={obs.id}
+            x={lx} y={ly} width={lw} height={lh}
+            fill="rgba(255,59,48,0.13)"
+            stroke="rgba(255,59,48,0.7)"
+            strokeWidth={STROKE * 0.5}
+            strokeDasharray={`${STROKE * 1.5} ${STROKE * 0.8}`}
+            pointerEvents="none"
+          />
+        );
+      })}
+
       {children}
       </g>
     </svg>

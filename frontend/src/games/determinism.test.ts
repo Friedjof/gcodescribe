@@ -20,8 +20,10 @@ const cal: Calibration = {
   fit_to_area: true,
   flip_y: false,
   trust_axis_home: false,
+  park_after_plot: true,
   paper_corners: {},
   paper_margin: 0,
+  obstacles: [],
 };
 
 const t = (key: string) => key;

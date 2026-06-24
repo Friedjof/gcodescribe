@@ -10,6 +10,7 @@ import vpype
 from .calibration import Calibration
 from .export import calibration_comment
 from .pipeline import PlotterError
+from .routing import route_travel
 from .safety import GcodeSafetyChecker
 
 PX_TO_MM = 25.4 / 96.0  # vpype works in CSS pixels
@@ -108,17 +109,23 @@ def placed_gcode(
     pen_up = f"G0 Z{cal.pen_up_z:.3f} F{cal.z_feed:.0f}"
     pen_down = f"G1 Z{cal.pen_down_z:.3f} F{cal.z_feed:.0f}"
     lines = ["G21", "G90", pen_up]
+    obstacles = cal.obstacles or []
+    cursor: tuple[float, float] = (0.0, 0.0)
     for poly in _sorted_for_travel(drawing.polylines):
         px, py = tx(poly[0])
-        lines.append(f"G0 X{px:.3f} Y{py:.3f} F{cal.travel_feed:.0f}")
+        for wx, wy in route_travel(cursor, (px, py), obstacles):
+            lines.append(f"G0 X{wx:.3f} Y{wy:.3f} F{cal.travel_feed:.0f}")
         lines.append(pen_down)
         for point in poly[1:]:
             px, py = tx(point)
             lines.append(f"G1 X{px:.3f} Y{py:.3f} F{cal.draw_feed:.0f}")
         lines.append(pen_up)
-    # Park: bed all the way forward (Y max) so the sheet is easy to remove, head
-    # centred on X — i.e. the nozzle rests at the back-centre of the bed.
-    lines += [f"G0 X{cal.bed_width / 2:.3f} Y{cal.bed_height:.3f} F{cal.travel_feed:.0f}", "M2"]
+        cursor = tx(poly[-1])
+    if cal.park_after_plot:
+        park: tuple[float, float] = (cal.bed_width / 2, cal.bed_height)
+        for wx, wy in route_travel(cursor, park, obstacles):
+            lines.append(f"G0 X{wx:.3f} Y{wy:.3f} F{cal.travel_feed:.0f}")
+    lines.append("M2")
     gcode = "\n".join(lines) + "\n"
 
     GcodeSafetyChecker(cal).check(gcode, name=name)

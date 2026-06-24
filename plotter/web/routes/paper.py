@@ -21,10 +21,21 @@ class CornerRequest(BaseModel):
     corner: str  # bl | br | tr | tl
 
 
+class CornerAtRequest(BaseModel):
+    x: float
+    y: float
+
+
 @router.post("/paper/corner")
 def set_paper_corner(req: CornerRequest) -> dict:
     """Store the current head position as one of the paper corners."""
     return service().capture(req.corner)
+
+
+@router.put("/paper/corner/{corner}")
+def set_paper_corner_at(corner: str, req: CornerAtRequest) -> dict:
+    """Set a corner to explicit coordinates (no machine movement)."""
+    return service().set_corner_at(corner, req.x, req.y)
 
 
 @router.delete("/paper/corner/{corner}")
@@ -35,6 +46,16 @@ def delete_paper_corner(corner: str) -> dict:
 @router.delete("/paper")
 def reset_paper() -> dict:
     return service().reset()
+
+
+class ObstaclesRequest(BaseModel):
+    obstacles: list[dict]
+
+
+@router.put("/paper/obstacles")
+def set_obstacles(req: ObstaclesRequest) -> dict:
+    """Replace the no-go obstacle list in the active calibration profile."""
+    return service().set_obstacles(req.obstacles)
 
 
 class PaperApplyRequest(BaseModel):

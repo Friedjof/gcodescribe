@@ -9,6 +9,7 @@ from .export import calibration_comment
 from .jobmeta import profile_comment, write_job_meta
 from .linemerge import merge_polylines
 from .pipeline import PlotterError
+from .routing import route_travel
 from .safety import GcodeSafetyChecker
 from .storage import jobs_dir
 
@@ -199,6 +200,23 @@ def page_thumbnail(page: dict, target: float = 100.0) -> dict | None:
     return {"d": "".join(parts), "w": round(w * scale), "h": round(h * scale)}
 
 
+def _obs_to_local_polygon(obs: dict, cal: Calibration) -> Polygon:
+    """Convert a bed-coordinate obstacle rect to a local (editor mm, y-down) polygon.
+
+    The inverse of the printer() coordinate transform used in scene_gcode.
+    """
+    ox, oy, ow, oh = obs["x"], obs["y"], obs["w"], obs["h"]
+    lx0 = ox - cal.origin_x
+    lx1 = ox + ow - cal.origin_x
+    if cal.flip_y:
+        ly0 = cal.plot_height + cal.origin_y - oy - oh  # upper edge in SVG (small local y)
+        ly1 = cal.plot_height + cal.origin_y - oy       # lower edge in SVG (large local y)
+    else:
+        ly0 = oy - cal.origin_y
+        ly1 = oy + oh - cal.origin_y
+    return [(lx0, ly0), (lx1, ly0), (lx1, ly1), (lx0, ly1)]
+
+
 def _sorted_for_travel(polylines: list[Polyline]) -> list[Polyline]:
     if len(polylines) > 4000:
         return polylines
@@ -226,6 +244,16 @@ def scene_gcode(page: dict, cal: Calibration) -> str:
     polylines = page_polylines(page)
     if not polylines:
         raise PlotterError("Die Seite enthält keine ungeplotteten Linien.")
+
+    # Clip drawing strokes that cross obstacle zones (treat like erase masks).
+    # This stops the pen from drawing through a clamp; the safety checker then
+    # validates that no segment (travel or draw) penetrates any obstacle.
+    if cal.obstacles:
+        obs_polys = [_obs_to_local_polygon(obs, cal) for obs in cal.obstacles]
+        polylines = _apply_masks(polylines, obs_polys)
+        if not polylines:
+            raise PlotterError("Die Seite enthält keine ungeplotteten Linien.")
+
     # Join pieces that meet end-to-end into continuous strokes, so a wall the
     # eye reads as one line is plotted without lifting the pen at every segment.
     polylines = merge_polylines(polylines)
@@ -240,18 +268,25 @@ def scene_gcode(page: dict, cal: Calibration) -> str:
             return cal.origin_x + x, cal.origin_y + cal.plot_height - y
         return cal.origin_x + x, cal.origin_y + y
 
+    obstacles = cal.obstacles or []
+    cursor: Point = (0.0, 0.0)  # current printer position (home after G28)
+
     for poly in _sorted_for_travel(polylines):
-        x, y = printer(poly[0])
-        lines.append(f"G0 X{x:.3f} Y{y:.3f} F{cal.travel_feed:.0f}")
+        dest = printer(poly[0])
+        for wx, wy in route_travel(cursor, dest, obstacles):
+            lines.append(f"G0 X{wx:.3f} Y{wy:.3f} F{cal.travel_feed:.0f}")
         lines.append(pen_down)
         for point in poly[1:]:
             x, y = printer(point)
             lines.append(f"G1 X{x:.3f} Y{y:.3f} F{cal.draw_feed:.0f}")
         lines.append(pen_up)
+        cursor = printer(poly[-1])
 
-    # Park: bed all the way forward (Y max) so the sheet is easy to remove, head
-    # centred on X — i.e. the nozzle rests at the back-centre of the bed.
-    lines += [f"G0 X{cal.bed_width / 2:.3f} Y{cal.bed_height:.3f} F{cal.travel_feed:.0f}", "M2"]
+    if cal.park_after_plot:
+        park: Point = (cal.bed_width / 2, cal.bed_height)
+        for wx, wy in route_travel(cursor, park, obstacles):
+            lines.append(f"G0 X{wx:.3f} Y{wy:.3f} F{cal.travel_feed:.0f}")
+    lines.append("M2")
     gcode = "\n".join(lines) + "\n"
     GcodeSafetyChecker(cal).check(gcode, name=page.get("name") or page.get("id") or "Paint-Seite")
     return calibration_comment(cal) + gcode

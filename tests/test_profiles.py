@@ -136,6 +136,8 @@ class TestFingerprint:
             changed[field] = float(value) + 1.5
         elif isinstance(value, dict):
             changed[field] = {"bl": [1.0, 2.0]}
+        elif isinstance(value, list):
+            changed[field] = [{"id": "test", "x": 10.0, "y": 10.0, "w": 20.0, "h": 20.0}]
         else:  # pragma: no cover - defensive
             raise AssertionError(f"unhandled field type: {field}")
         assert calibration_fingerprint(base) != calibration_fingerprint(changed)

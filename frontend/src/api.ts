@@ -1,3 +1,12 @@
+/** A rectangular no-go zone in printer/bed coordinates (mm). */
+export interface Obstacle {
+  id: string;
+  x: number;  // left edge (printer mm)
+  y: number;  // bottom edge (printer mm, y-up)
+  w: number;  // width mm
+  h: number;  // height mm
+}
+
 export interface Calibration {
   bed_width: number;
   bed_height: number;
@@ -15,8 +24,10 @@ export interface Calibration {
   fit_to_area: boolean;
   flip_y: boolean;
   trust_axis_home: boolean;
+  park_after_plot: boolean;
   paper_corners: Record<string, [number, number]>;
   paper_margin: number;
+  obstacles: Obstacle[];
 }
 
 export interface AuthSession {
@@ -476,6 +487,7 @@ function mazeSizeValue(size: string) {
 }
 
 export const api = {
+  health: () => req<{ ok: boolean; desktop: boolean }>("/api/health"),
   authSession: () => req<AuthSession>("/api/auth/session"),
   authSetupStart: (username: string, password: string) =>
     req<AuthSetupStart>("/api/auth/setup/start", {
@@ -673,6 +685,10 @@ export const api = {
     req<Job>(`/api/testpattern/${name}`, { method: "POST" }),
 
   octoStatus: () => req<any>("/api/printer/status"),
+  octoprintCheck: () =>
+    req<{ ok: boolean; version?: string; api?: string; error?: string }>(
+      "/api/printer/octoprint/check"
+    ),
   listBackends: () =>
     req<Array<{ id: string; configured: boolean; online: boolean; active: boolean }>>(
       "/api/printer/backends"
@@ -758,6 +774,12 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ corner }),
     }),
+  setCornerAt: (corner: string, x: number, y: number) =>
+    req<PaperState>(`/api/paper/corner/${corner}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ x, y }),
+    }),
   clearCorner: (corner: string) =>
     req<PaperState>(`/api/paper/corner/${corner}`, { method: "DELETE" }),
   resetPaper: () => req<PaperState>("/api/paper", { method: "DELETE" }),
@@ -766,6 +788,12 @@ export const api = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ margin }),
+    }),
+  setObstacles: (obstacles: Obstacle[]) =>
+    req<PaperState>("/api/paper/obstacles", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ obstacles }),
     }),
   jobPreview: (filename: string) =>
     req<GcodePreview>(`/api/jobs/${encodeURIComponent(filename)}/preview`),
@@ -802,12 +830,15 @@ export const api = {
     }),
   // `opts` only applies to admin (in-app) uploads, which take the asset path:
   // a render mode and detail level, mirroring the old createSource controls.
-  galleryUpload: (file: File, title: string, opts?: { mode?: string; detail?: number }) => {
+  galleryUploadInfo: () => req<{ enabled: boolean; secret_required: boolean }>("/api/gallery/upload-info"),
+  galleryUploadConfig: () => req<{ enabled: boolean; secret: string }>("/api/gallery/upload-config"),
+  galleryUpload: (file: File, title: string, opts?: { mode?: string; detail?: number; secret?: string }) => {
     const fd = new FormData();
     fd.append("file", file);
     fd.append("title", title);
     if (opts?.mode) fd.append("mode", opts.mode);
     if (opts?.detail != null) fd.append("detail", String(opts.detail));
+    if (opts?.secret) fd.append("secret", opts.secret);
     return req<GalleryItem>("/api/gallery", { method: "POST", body: fd });
   },
   galleryList: (includeArchived = true, uploader?: GalleryUploader) =>

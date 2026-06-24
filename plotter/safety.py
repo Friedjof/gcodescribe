@@ -8,6 +8,27 @@ from .services.errors import ServiceError
 _WORD = re.compile(r"([A-Z])(-?\d+(?:\.\d+)?)")
 
 
+def _seg_intersects_obs(a: tuple[float, float], b: tuple[float, float], obs: dict) -> bool:
+    """True iff segment a→b penetrates the obstacle rectangle (no margin)."""
+    x0, y0 = obs["x"], obs["y"]
+    x1, y1 = obs["x"] + obs["w"], obs["y"] + obs["h"]
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    p = (-dx, dx, -dy, dy)
+    q = (a[0] - x0, x1 - a[0], a[1] - y0, y1 - a[1])
+    t0, t1 = 0.0, 1.0
+    for pi, qi in zip(p, q):
+        if abs(pi) < 1e-9:
+            if qi < 0:
+                return False
+        elif pi < 0:
+            t0 = max(t0, qi / pi)
+        else:
+            t1 = min(t1, qi / pi)
+        if t0 > t1:
+            return False
+    return t0 <= t1
+
+
 class SafetyViolation(ServiceError):
     """Generated G-code would leave the configured bounds. Job is rejected."""
 
@@ -100,6 +121,19 @@ class GcodeSafetyChecker:
                     )
                     if not in_bed:
                         fail(line_no, raw, f"Travel bei ({nx:.2f}, {ny:.2f}) außerhalb des Betts")
+
+                # Obstacle zone check: neither pen-up nor pen-down moves may
+                # cross a declared no-go zone (e.g. a paper clamp).
+                for obs in (cal.obstacles or []):
+                    if _seg_intersects_obs((x, y), (nx, ny), obs):
+                        kind = "Stift-unten-Bewegung" if pen_down else "Fahrt"
+                        fail(
+                            line_no, raw,
+                            f"{kind} von ({x:.1f}, {y:.1f}) nach ({nx:.1f}, {ny:.1f}) "
+                            f"durchquert Sperrbereich "
+                            f"[X{obs['x']:.0f} Y{obs['y']:.0f} "
+                            f"{obs['w']:.0f}×{obs['h']:.0f} mm]",
+                        )
 
             x, y = nx, ny
             if nz is not None:

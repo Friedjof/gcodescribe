@@ -18,6 +18,17 @@ class PaperService:
         cal = cal or Calibration.load()
         return {"calibration": cal.as_dict(), "rect": cal.paper_rect()}
 
+    def set_corner_at(self, corner: str, x: float, y: float) -> dict:
+        """Set a corner to explicit coordinates (no head movement required)."""
+        if corner not in self.CORNERS:
+            raise ServiceError(f"unknown corner: {corner}")
+        cal = Calibration.load()
+        corners = dict(cal.paper_corners)
+        corners[corner] = [x, y]
+        cal = cal.merged({"paper_corners": corners})
+        cal.save()
+        return self.state(cal)
+
     def capture(self, corner: str) -> dict:
         if corner not in self.CORNERS:
             raise ServiceError(f"unknown corner: {corner}")
@@ -44,9 +55,16 @@ class PaperService:
         cal.save()
         return self.state(cal)
 
+    def set_obstacles(self, obstacles: list) -> dict:
+        """Replace the obstacle list for the active calibration profile."""
+        cal = Calibration.load()
+        cal = cal.merged({"obstacles": obstacles})
+        cal.save()
+        return self.state(cal)
+
     def apply(self, margin: float) -> dict:
         cal = Calibration.load()
-        rect = cal.paper_rect()
+        rect = cal.paper_rect_inner()
         if rect is None:
             raise ServiceError(
                 "Mindestens zwei gegenüberliegende Ecken setzen (z. B. unten links + oben rechts)."

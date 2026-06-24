@@ -53,6 +53,7 @@ FINGERPRINT_FIELDS = (
     "flip_y",
     "paper_corners",
     "paper_margin",
+    "obstacles",
 )
 
 PROFILE_FORMAT = "gcodescribe-profile"
