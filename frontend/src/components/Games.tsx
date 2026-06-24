@@ -43,7 +43,7 @@ const COLORING_PATTERN_OPTIONS: Array<{ value: ColoringPatternMode; icon: string
   { value: "penrose", icon: "✶", labelKey: "games.option.coloring.penrose" },
 ];
 
-export default function Games({ visible = true, onOpenPaint }: { visible?: boolean; onOpenPaint: () => void }) {
+export default function Games({ visible = true, onOpenPaint, desktop = false }: { visible?: boolean; onOpenPaint: () => void; desktop?: boolean }) {
   const { t } = useI18n();
   const toast = useToasts();
   const [selected, setSelected] = useState<GameId>(ALL_GAMES[0].id);
@@ -426,7 +426,7 @@ export default function Games({ visible = true, onOpenPaint }: { visible?: boole
             </span>
           </div>
 
-          {!preview && (globalLive.active || live.state === "live" || live.state === "connecting" || live.state === "error") && (
+          {!desktop && !preview && (globalLive.active || live.state === "live" || live.state === "connecting" || live.state === "error") && (
             <div className="games-live-standby">
               <span className="muted">{t("live.standby")}</span>
               <LiveButton
@@ -831,11 +831,13 @@ export default function Games({ visible = true, onOpenPaint }: { visible?: boole
           bodyClassName="games-modal-body"
           headerActions={(
             <div className="games-modal-actions">
-              <LiveButton
-                state={live.state}
-                viewers={live.viewers}
-                onClick={() => live.state === "live" || live.state === "connecting" ? live.stop("user-stopped") : live.start()}
-              />
+              {!desktop && (
+                <LiveButton
+                  state={live.state}
+                  viewers={live.viewers}
+                  onClick={() => live.state === "live" || live.state === "connecting" ? live.stop("user-stopped") : live.start()}
+                />
+              )}
               {SEEDED_GAMES.has(preview.gameId) && (
                 <button type="button" className="ghost games-mini-action" disabled={busy} onClick={regeneratePreview}>
                   {t("games.regenerate")}

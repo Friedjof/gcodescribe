@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type Calibration, type GcodePreview3D, type Page, type PageIndex, type SceneObject } from "../api";
 import PaintCanvas, { type Tool, type ViewRotation } from "./PaintCanvas";
 import MarkdownEditor from "./MarkdownEditor";
@@ -14,6 +14,7 @@ import { defaultSceneViewBox } from "../paint/SceneView";
 import { useLiveRegistryState } from "../stream/liveRegistry";
 import { useLiveStream } from "../stream/useLiveStream";
 import { IDENTITY, bounds, localize, objectWorldBounds, transformPolylines, type Pt, type Transform } from "../paint/geometry";
+import { isMaskObject, maskPolygon, subtractPolygon } from "../paint/masks";
 import { TEXT_FONTS, type TextFont } from "../paint/text";
 import {
   basePolylines,
@@ -99,14 +100,19 @@ function samePolylines(a: Pt[][], b: Pt[][]) {
   );
 }
 
+type EraserBrush = "point" | "small" | "medium" | "large";
+const ERASER_BRUSH_FACTOR: Record<"small" | "medium" | "large", number> = { small: 0.02, medium: 0.04, large: 0.08 };
+
 export default function Paint({
   visible = true,
   status,
   onAction,
+  desktop = false,
 }: {
   visible?: boolean;
   status?: any;
   onAction?: () => void;
+  desktop?: boolean;
 }) {
   const { t } = useI18n();
   const toast = useToasts();
@@ -115,6 +121,7 @@ export default function Paint({
   const [index, setIndex] = useState<PageIndex | null>(null);
   const [page, setPage] = useState<Page | null>(null);
   const [tool, setTool] = useState<Tool>("select");
+  const [eraserBrush, setEraserBrush] = useState<EraserBrush>("small");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [sending, setSending] = useState(false);
@@ -130,6 +137,9 @@ export default function Paint({
   const [sizeLinked, setSizeLinked] = useState(true);
   const [clipboardCount, setClipboardCount] = useState(0);
   const [plotMenuOpen, setPlotMenuOpen] = useState(false);
+  const [pagesCollapsed, setPagesCollapsed] = useState(() => {
+    try { return localStorage.getItem("paint-pages-collapsed") === "1"; } catch { return false; }
+  });
   const plotMenuRef = useRef<HTMLDivElement>(null);
   const [coloringOpen, setColoringOpen] = useState(false);
   const globalLive = useLiveRegistryState();
@@ -144,6 +154,11 @@ export default function Paint({
   // edit); this state mirrors their depth so the toolbar buttons can enable
   // and disable in step with them.
   const [history, setHistory] = useState({ undo: 0, redo: 0 });
+  // Text-draft: keeps the textarea value in sync with typing without triggering
+  // a backend render on every keystroke.  The actual render is debounced.
+  const [draftText, setDraftText] = useState<string | null>(null);
+  const draftTextRef = useRef<string | null>(null);
+  const textDraftTimer = useRef<number | undefined>(undefined);
   const syncHistory = () =>
     setHistory({ undo: undoStack.current.length, redo: redoStack.current.length });
   const resetHistory = () => {
@@ -178,10 +193,10 @@ export default function Paint({
     { value: "line", label: t("paint.tool.line"), icon: "╱" },
     { value: "rect", label: t("paint.tool.rect"), icon: "▭" },
     { value: "maskRect", label: t("paint.tool.maskRect"), icon: "▰" },
-    { value: "maskCircle", label: t("paint.tool.maskCircle"), icon: "●" },
     { value: "circle", label: t("paint.tool.circle"), icon: "◯" },
     { value: "semicircle", label: t("paint.tool.semicircle"), icon: "◗" },
     { value: "text", label: t("paint.tool.text"), icon: "T" },
+    { value: "maskCircle", label: t("paint.tool.maskCircle"), icon: "●" },
   ];
   const selectTools = tools.filter((o) => o.value === "select");
   const drawTools = tools.filter((o) => ["pen", "line", "rect", "maskRect", "maskCircle", "circle", "semicircle", "text"].includes(o.value));
@@ -195,6 +210,12 @@ export default function Paint({
   ];
 
   const fail = (e: any) => toast.error(String(e.message ?? e));
+
+  const eraserRadius = useMemo(() => {
+    if (eraserBrush === "point") return 0; // unused — PaintCanvas computes from STROKE when eraserIsPoint
+    const S = cal ? Math.max(cal.plot_width, cal.plot_height) : 300;
+    return S * ERASER_BRUSH_FACTOR[eraserBrush];
+  }, [eraserBrush, cal]);
 
   useEffect(() => {
     api.getCalibration().then(setCal).catch(fail);
@@ -453,7 +474,7 @@ export default function Paint({
   const plotSelection = () => {
     if (!page || busy || sending || pageBlocked || selectedIds.length === 0) return;
     const ids = [...selectedIds];
-    const subset = page.objects.filter((o) => ids.includes(o.id) && !o.plotted);
+    const subset = page.objects.filter((o) => ids.includes(o.id));
     if (subset.length === 0) return;
     generateJob(subset)
       .then((filename) => {
@@ -603,7 +624,7 @@ export default function Paint({
 
   const updateObject = (id: string, transform: Transform) => {
     if (!page) return;
-    const objects = page.objects.map((o) => (o.id === id ? { ...o, transform } : o));
+    const objects = page.objects.map((o) => (o.id === id ? { ...o, transform, plotted: false } : o));
     setPage({ ...page, objects });
     persist(page.id, objects);
   };
@@ -612,7 +633,7 @@ export default function Paint({
     if (!page || updates.size === 0) return;
     const objects = page.objects.map((o) => {
       const transform = updates.get(o.id);
-      return transform ? { ...o, transform } : o;
+      return transform ? { ...o, transform, plotted: false } : o;
     });
     setPage({ ...page, objects });
     persist(page.id, objects);
@@ -662,7 +683,7 @@ export default function Paint({
       .then(({ local }) => {
         const style = objectStyle(obj);
         const objects = page.objects.map((o) => o.id === id
-          ? { ...o, data: { ...data, basePolylines: local, style }, cachedPolylines: buildStyledPolylines(local, style) }
+          ? { ...o, plotted: false, data: { ...data, basePolylines: local, style }, cachedPolylines: buildStyledPolylines(local, style) }
           : o);
         setPage({ ...page, objects });
         persist(page.id, objects);
@@ -674,7 +695,12 @@ export default function Paint({
     if (!page || selectedIds.length !== 1) return false;
     const obj = page.objects.find((o) => o.id === selectedIds[0]);
     if (!obj || obj.type !== "text") return false;
-    updateTextObject(obj.id, { text: edit(String(obj.data?.text ?? defaultText)) });
+    const current = draftTextRef.current ?? String(obj.data?.text ?? defaultText);
+    const next = edit(current);
+    draftTextRef.current = next;
+    setDraftText(next);
+    clearTimeout(textDraftTimer.current);
+    textDraftTimer.current = window.setTimeout(() => updateTextObject(obj.id, { text: next }), 350);
     return true;
   };
 
@@ -701,7 +727,7 @@ export default function Paint({
         fill: { ...objectStyle(obj).fill, ...(patch.fill ?? {}) },
       });
       const base = basePolylines(obj);
-      return { ...obj, data: { ...(obj.data ?? {}), basePolylines: base, style }, cachedPolylines: buildStyledPolylines(base, style) };
+      return { ...obj, plotted: false, data: { ...(obj.data ?? {}), basePolylines: base, style }, cachedPolylines: buildStyledPolylines(base, style) };
     });
     setPage({ ...page, objects });
     persist(page.id, objects);
@@ -736,35 +762,87 @@ export default function Paint({
     persist(page.id, objects);
   };
 
+  const applyMaskStamp = (maskId: string) => {
+    if (!page) return;
+    const maskObj = page.objects.find((o) => o.id === maskId);
+    if (!maskObj || !isMaskObject(maskObj)) return;
+    const poly = maskPolygon(maskObj);
+    if (!poly || poly.length < 3) return;
+
+    const maskZ = zValue(maskObj, page.objects.indexOf(maskObj));
+    remember();
+
+    const nextObjects: typeof page.objects = [];
+    for (let idx = 0; idx < page.objects.length; idx++) {
+      const obj = page.objects[idx];
+      if (obj.id === maskId) continue; // remove the mask itself
+      if (obj.plotted || isMaskObject(obj)) { nextObjects.push(obj); continue; }
+      if (zValue(obj, idx) >= maskZ) { nextObjects.push(obj); continue; } // not behind mask
+
+      const world = transformPolylines((obj.cachedPolylines ?? []) as Pt[][], obj.transform ?? IDENTITY);
+      const clipped = world.flatMap((line) => subtractPolygon(line, poly)).filter((l) => l.length >= 2);
+
+      if (clipped.length === 0) continue; // entirely covered → remove object
+
+      const { local: nextLocal, cx, cy } = localize(clipped);
+      nextObjects.push({
+        ...obj,
+        data: { ...(obj.data ?? {}), basePolylines: nextLocal },
+        cachedPolylines: nextLocal,
+        transform: { ...(obj.transform ?? IDENTITY), x: cx, y: cy },
+      });
+    }
+
+    setMenu(null);
+    setSelectedIds([]);
+    setPage({ ...page, objects: nextObjects });
+    persist(page.id, nextObjects);
+  };
+
   const convertSelectedToLines = () => {
     if (!page || selectedIds.length === 0) return;
-    const selected = new Set(selectedIds);
-    const targets = page.objects.filter((obj) => selected.has(obj.id) && !obj.plotted);
-    const targetIds = new Set(targets.map((obj) => obj.id));
-    const converted: SceneObject[] = [];
-    let nextZ = page.objects.reduce((max, o, i) => Math.max(max, zValue(o, i)), -1) + 1;
-    for (const obj of targets) {
-      const local = ((obj.cachedPolylines as Pt[][] | undefined) ?? basePolylines(obj)).filter((line) => line.length >= 2);
+    const sel = new Set(selectedIds);
+    const targetIds = new Set(
+      page.objects.filter((o) => sel.has(o.id) && !o.plotted).map((o) => o.id),
+    );
+    if (!targetIds.size) return;
+
+    // Sort by current z-value so converted lines replace their source in the z-stack
+    const sorted = page.objects
+      .map((obj, i) => ({ obj, i }))
+      .sort((a, b) => zValue(a.obj, a.i) - zValue(b.obj, b.i))
+      .map(({ obj }) => obj);
+
+    const allConverted: SceneObject[] = [];
+    const nextSorted: SceneObject[] = [];
+    for (const obj of sorted) {
+      if (!targetIds.has(obj.id)) {
+        nextSorted.push(obj);
+        continue;
+      }
+      const local = ((obj.cachedPolylines as Pt[][] | undefined) ?? basePolylines(obj)).filter((l) => l.length >= 2);
       if (!local.length) continue;
       const world = transformPolylines(local, obj.transform ?? IDENTITY);
       for (const line of world) {
         const { local: nextLocal, cx, cy } = localize([line]);
-        converted.push({
+        const newObj: SceneObject = {
           id: crypto.randomUUID(),
           type: "pen",
           data: { basePolylines: nextLocal, style: DEFAULT_VECTOR_STYLE },
           cachedPolylines: nextLocal,
           transform: { x: cx, y: cy, rotation: 0, scale: 1 },
-          zOrder: nextZ++,
           plotted: false,
-        });
+        };
+        nextSorted.push(newObj);
+        allConverted.push(newObj);
       }
     }
-    if (!converted.length) return;
+    if (!allConverted.length) return;
     remember();
-    const objects = [...page.objects.filter((obj) => !targetIds.has(obj.id)), ...converted];
+    // Assign sequential zOrders so objects above/below the source stay in place
+    const objects = nextSorted.map((obj, zOrder) => ({ ...obj, zOrder }));
     setPage({ ...page, objects });
-    setSelectedIds(converted.map((obj) => obj.id));
+    setSelectedIds(allConverted.map((o) => o.id));
     setMenu(null);
     persist(page.id, objects);
   };
@@ -1013,7 +1091,7 @@ export default function Paint({
   // Only while the tab is on screen: the component stays mounted when hidden,
   // so its shortcuts (incl. Ctrl+C/V preventDefault) must not fire on other tabs.
   useEffect(() => {
-    if (!visible) return;
+    if (!visible || coloringOpen) return;
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
@@ -1092,6 +1170,22 @@ export default function Paint({
     return () => window.removeEventListener("keydown", onKey);
   });
 
+  // Reset the text draft whenever the selected object changes so the textarea
+  // always starts with the committed text of the newly selected object.
+  useEffect(() => {
+    const selectedId = selectedIds.length === 1 ? selectedIds[0] : null;
+    const obj = selectedId ? page?.objects.find((o) => o.id === selectedId && o.type === "text") : null;
+    clearTimeout(textDraftTimer.current);
+    if (obj) {
+      const txt = String(obj.data?.text ?? defaultText);
+      draftTextRef.current = txt;
+      setDraftText(txt);
+    } else {
+      draftTextRef.current = null;
+      setDraftText(null);
+    }
+  }, [selectedIds]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!cal || !index || !page) return <div className="card">{t("paint.loading")}</div>;
 
   const selectedObjects = page.objects.filter((o) => selectedIds.includes(o.id));
@@ -1109,11 +1203,25 @@ export default function Paint({
     : null;
   const selectedStyle = selectedObjects.length > 0 ? objectStyle(selectedObjects[0]) : DEFAULT_VECTOR_STYLE;
   const canUngroupMenu = !!menu && page.objects.some((obj) => menu.ids.includes(obj.id) && obj.groupId);
+  const menuMaskId = menu?.ids.length === 1
+    ? page?.objects.find((o) => o.id === menu.ids[0] && isMaskObject(o))?.id ?? null
+    : null;
+
+  const togglePagesCollapsed = () => {
+    setPagesCollapsed((v) => {
+      const next = !v;
+      try { localStorage.setItem("paint-pages-collapsed", next ? "1" : "0"); } catch {}
+      return next;
+    });
+  };
 
   return (
-    <div className="paint">
+    <div className={`paint${pagesCollapsed ? " pages-collapsed" : ""}`}>
       {menu && (
         <div className="paint-context-menu" style={{ left: menu.x, top: menu.y }} onContextMenu={(e) => e.preventDefault()}>
+          {menuMaskId && (
+            <button onClick={() => applyMaskStamp(menuMaskId)}>{t("paint.applyMask")}</button>
+          )}
           <button disabled={menu.ids.length < 2} onClick={() => groupSelected(menu.ids)}>{t("paint.group")}</button>
           <button disabled={!canUngroupMenu} onClick={() => ungroupSelected(menu.ids)}>{t("paint.ungroup")}</button>
         </div>
@@ -1162,6 +1270,8 @@ export default function Paint({
         onDuplicate={duplicate}
         onRemove={remove}
         onReorder={(ids) => api.reorderPages(ids).then(setIndex).catch(fail)}
+        sidebarCollapsed={pagesCollapsed}
+        onToggleSidebar={togglePagesCollapsed}
       />
 
       <section className="card paint-editor">
@@ -1183,11 +1293,13 @@ export default function Paint({
               </button>
             </label>
             <div className="paint-job-actions">
-              <LiveButton
-                state={live.state}
-                viewers={live.viewers}
-                onClick={() => live.state === "live" || live.state === "connecting" ? live.stop("user-stopped") : live.start()}
-              />
+              {!desktop && (
+                <LiveButton
+                  state={live.state}
+                  viewers={live.viewers}
+                  onClick={() => live.state === "live" || live.state === "connecting" ? live.stop("user-stopped") : live.start()}
+                />
+              )}
               <button
                 className="primary"
                 disabled={busy || sending || pageBlocked}
@@ -1288,6 +1400,8 @@ export default function Paint({
               onImageDrop={(file, at) => setImageImport({ file, at, mode: "edges", detail: 2 })}
               onTextAdd={addTextObject}
               onErase={eraseAcrossObjects}
+              eraserRadius={eraserRadius}
+              eraserIsPoint={eraserBrush === "point"}
               onCursorMove={live.state === "live" ? live.sendCursor : undefined}
               onCursorClick={live.state === "live" ? live.sendClick : undefined}
               viewRotation={viewRotation}
@@ -1342,6 +1456,24 @@ export default function Paint({
                 options={eraseTools.map((o) => ({ value: o.value, label: o.icon, title: o.label }))}
                 className="paint-tool-grid erase"
               />
+              {(tool === "erase" || tool === "eraseLine") && (
+                <>
+                  <Segmented<EraserBrush>
+                    value={eraserBrush}
+                    onChange={setEraserBrush}
+                    options={[
+                      { value: "point", label: t("paint.coloringBrushPoint"), title: t("paint.coloringBrushPoint") },
+                      { value: "small",  label: t("paint.coloringBrushSmall"),  title: t("paint.coloringBrushSize") },
+                      { value: "medium", label: t("paint.coloringBrushMedium"), title: t("paint.coloringBrushSize") },
+                      { value: "large",  label: t("paint.coloringBrushLarge"),  title: t("paint.coloringBrushSize") },
+                    ]}
+                    className="paint-tool-grid"
+                  />
+                  {eraserBrush !== "point" && (
+                    <div className="coloring-brush-hint">⌀ {Math.round(eraserRadius * 2)} mm</div>
+                  )}
+                </>
+              )}
               <div className="paint-tools-actions compact">
                 <button className="ghost" disabled={!hasSelection} onClick={deleteSelected}
                   title={hasSelection ? t("paint.deleteSelection") : t("paint.noSelection")} aria-label={t("paint.delete")}>
@@ -1564,8 +1696,17 @@ export default function Paint({
             <div className="field">
               <label>{t("paint.text")}</label>
               <textarea
-                value={String(selectedText.data?.text ?? defaultText)}
-                onChange={(e) => updateTextObject(selectedText.id, { text: e.target.value })}
+                value={draftText ?? String(selectedText.data?.text ?? defaultText)}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  draftTextRef.current = next;
+                  setDraftText(next);
+                  clearTimeout(textDraftTimer.current);
+                  textDraftTimer.current = window.setTimeout(
+                    () => updateTextObject(selectedText.id, { text: next }),
+                    350,
+                  );
+                }}
                 rows={3}
               />
             </div>
@@ -1574,7 +1715,11 @@ export default function Paint({
                 <label>{t("paint.font")}</label>
                 <select
                   value={(selectedText.data?.font ?? "sans") as TextFont}
-                  onChange={(e) => updateTextObject(selectedText.id, { font: e.target.value as TextFont })}
+                  onChange={(e) => {
+                    clearTimeout(textDraftTimer.current);
+                    const textPatch = draftTextRef.current !== null ? { text: draftTextRef.current } : {};
+                    updateTextObject(selectedText.id, { ...textPatch, font: e.target.value as TextFont });
+                  }}
                 >
                   {TEXT_FONTS.map((font) => (
                     <option key={font.value} value={font.value}>{t(font.labelKey)}</option>
@@ -1590,7 +1735,11 @@ export default function Paint({
                     max={80}
                     step={1}
                     value={Number(selectedText.data?.size ?? 12)}
-                    onChange={(e) => updateTextObject(selectedText.id, { size: Math.max(3, Number(e.target.value) || 12) })}
+                    onChange={(e) => {
+                      clearTimeout(textDraftTimer.current);
+                      const textPatch = draftTextRef.current !== null ? { text: draftTextRef.current } : {};
+                      updateTextObject(selectedText.id, { ...textPatch, size: Math.max(3, Number(e.target.value) || 12) });
+                    }}
                   />
                   <em>mm</em>
                 </div>
@@ -1613,6 +1762,7 @@ export default function Paint({
           cal={cal}
           page={page}
           activeProfile={index?.activeProfile}
+          initialRotation={viewRotation}
           onClose={() => setColoringOpen(false)}
           onCreated={(jobs) => toast.success(t("paint.coloringJobsCreated", { count: jobs.length }))}
           onColoringChange={(coloring) => setPage((p) => (p ? { ...p, coloring } : p))}

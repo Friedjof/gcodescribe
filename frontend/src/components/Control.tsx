@@ -138,6 +138,7 @@ export default function Control({
   const progress = job?.progress?.completion;
   const printing = job?.state?.toLowerCase?.().includes("printing");
   const paused = job?.state?.toLowerCase?.().includes("paused");
+  const [refreshing, setRefreshing] = useState(false);
 
   const run = (fn: () => Promise<any>) => {
     setErr(null);
@@ -147,6 +148,12 @@ export default function Control({
   useEffect(() => {
     if (err) toast.error(err);
   }, [err, toast]);
+
+  const doRefresh = () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    Promise.resolve(onAction()).finally(() => setRefreshing(false));
+  };
 
   const jog = (x: number, y: number, z: number) =>
     run(() =>
@@ -170,6 +177,16 @@ export default function Control({
     return (
       <div className="card">
         <h2>{t("control.title")}</h2>
+        <div className="control-offline-state">
+          <span className="control-offline-label">{t("control.offline")}</span>
+          <button
+            className="control-refresh-btn"
+            onClick={doRefresh}
+            disabled={refreshing}
+          >
+            {refreshing ? t("control.refreshing") : t("control.refresh")}
+          </button>
+        </div>
         <PrinterOverview status={status} onAction={onAction} />
         {status?.backend === "serial" ? (
           <>

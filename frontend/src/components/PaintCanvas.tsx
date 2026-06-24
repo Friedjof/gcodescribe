@@ -77,6 +77,7 @@ type Drag =
   | { mode: "move"; ids: string[]; primaryId: string; startMouse: Pt; startTs: Map<string, Transform>; startBoundsAll: [number, number, number, number]; vGuides: GuideCandidate[]; hGuides: GuideCandidate[] }
   | { mode: "resize"; id: string; edge: ResizeEdge; startTransform: Transform; startLocalBounds: [number, number, number, number]; anchorLocal: Pt; handleLocal: Pt; anchorWorld: Pt }
   | { mode: "groupScale"; ids: string[]; center: Pt; startDist: number; startTs: Map<string, Transform> }
+  | { mode: "groupRotate"; ids: string[]; center: Pt; startAngle: number; startTs: Map<string, Transform> }
   | { mode: "rotate"; id: string; center: Pt; startAngle: number; startRotation: number };
 
 const cl = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
@@ -212,6 +213,8 @@ export default function PaintCanvas({
   onCursorClick,
   viewRotation,
   onViewRotationChange,
+  eraserRadius: eraserRadiusProp,
+  eraserIsPoint = false,
 }: {
   cal: Calibration;
   page: Page;
@@ -230,6 +233,8 @@ export default function PaintCanvas({
   onCursorClick?: (click: { x: number; y: number; tool: Tool }) => void;
   viewRotation: ViewRotation;
   onViewRotationChange: (rotation: ViewRotation) => void;
+  eraserRadius?: number;
+  eraserIsPoint?: boolean;
 }) {
   const { t } = useI18n();
   const svgRef = useRef<SVGSVGElement>(null);
@@ -250,6 +255,7 @@ export default function PaintCanvas({
 
   const [draft, setDraft] = useState<Draft | null>(null);
   const [marquee, setMarquee] = useState<Marquee | null>(null);
+  const [stylusErasing, setStylusErasing] = useState(false);
   const [guides, setGuides] = useState<Guide[]>([]);
   const [rotationHint, setRotationHint] = useState<{ at: Pt; currentDeg: number; deltaDeg: number; snapped: boolean } | null>(null);
   const [view, setView] = useState<ViewBox>(baseView);
@@ -261,8 +267,12 @@ export default function PaintCanvas({
   // apart from a plain right-click (which should still open the context menu).
   const panMoved = useRef(false);
   const zoom = baseView.w / view.w;
+  // Stylus eraser tip or barrel eraser button overrides the active tool.
+  const effectiveTool: Tool = stylusErasing ? "erase" : tool;
   const STROKE = (S * 0.0045) / zoom;
   const HANDLE = (S * 0.016) / zoom;
+  // Effective eraser radius: point mode = cursor-tip size (zoom-adaptive, ~1 strokewidth)
+  const effRadius = eraserIsPoint ? STROKE * 1.2 : (eraserRadiusProp ?? ERASER_RADIUS);
 
   // How close (mm) a moving edge/center must come to a reference before it
   // snaps. Scaled to the plot area so it feels the same regardless of size.
@@ -331,7 +341,7 @@ export default function PaintCanvas({
 
   const objectSelectionIds = (obj: SceneObject) =>
     obj.groupId
-      ? page.objects.filter((o) => !o.plotted && o.groupId === obj.groupId).map((o) => o.id)
+      ? page.objects.filter((o) => o.groupId === obj.groupId).map((o) => o.id)
       : [obj.id];
 
   const marqueeBounds = (m: Marquee): [number, number, number, number] => [
@@ -356,11 +366,12 @@ export default function PaintCanvas({
   const emitCursor = (e: React.PointerEvent) => {
     if (!onCursorMove) return;
     const [x, y] = toMM(e);
+    const reportTool: Tool = (e.pointerType === "pen" && (e.buttons & 32) !== 0) ? "erase" : tool;
     onCursorMove({
       x: W > 0 ? Math.max(0, Math.min(1, x / W)) : 0,
       y: H > 0 ? Math.max(0, Math.min(1, y / H)) : 0,
       inside: x >= 0 && x <= W && y >= 0 && y <= H,
-      tool,
+      tool: reportTool,
     });
   };
 
@@ -394,8 +405,13 @@ export default function PaintCanvas({
   };
 
   const onSvgDown = (e: React.PointerEvent) => {
-    // Right button (or space + left) pans the zoomed canvas.
-    if (e.button === 2 || (e.button === 0 && spaceDown)) {
+    // Detect stylus eraser tip (buttons bit 5 = 0x20).
+    const penEraser = e.pointerType === "pen" && (e.buttons & 32) !== 0;
+    if (penEraser !== stylusErasing) setStylusErasing(penEraser);
+
+    // Touch pans (palm rejection); right-button or space+left also pans.
+    if (e.pointerType === "touch" || e.button === 2 || (e.button === 0 && spaceDown)) {
+      if (pan.current) return; // ignore second finger while already panning
       e.preventDefault();
       panMoved.current = false;
       pan.current = { pointerId: e.pointerId, startClient: [e.clientX, e.clientY], startView: view };
@@ -403,24 +419,31 @@ export default function PaintCanvas({
       setPanning(true);
       return;
     }
-    if (tool === "select") {
+
+    const activeTool: Tool = penEraser ? "erase" : tool;
+
+    if (activeTool === "select") {
       if (e.button !== 0) return;
       const p = toMM(e);
       setMarquee({ start: p, current: p, additive: e.ctrlKey || e.metaKey || e.shiftKey });
       svgRef.current!.setPointerCapture(e.pointerId);
       return;
     }
-    if (tool === "text") {
+    if (activeTool === "text") {
       const p = snapPt(toMM(e), step, snapOn);
       onTextAdd(p);
       return;
     }
     svgRef.current!.setPointerCapture(e.pointerId);
-    const p = tool === "pen" || tool === "erase" || tool === "eraseLine" ? toMM(e) : snapPt(toMM(e), step, snapOn);
-    setDraft({ tool, points: [p, p] });
+    const p = activeTool === "pen" || activeTool === "erase" || activeTool === "eraseLine" ? toMM(e) : snapPt(toMM(e), step, snapOn);
+    setDraft({ tool: activeTool, points: [p, p] });
   };
 
   const onSvgMove = (e: React.PointerEvent) => {
+    if (e.pointerType === "pen") {
+      const erasing = (e.buttons & 32) !== 0;
+      if (erasing !== stylusErasing) setStylusErasing(erasing);
+    }
     emitCursor(e);
     if (pan.current) {
       const svg = svgRef.current;
@@ -547,6 +570,34 @@ export default function PaintCanvas({
       }
       updateManySafe(updates);
 
+    } else if (d.mode === "groupRotate") {
+      const angle = Math.atan2(m[1] - d.center[1], m[0] - d.center[0]);
+      const rawDelta = angle - d.startAngle;
+      const snappedDelta = snapRotation(rawDelta);
+      const snapped = Math.abs(snappedDelta - rawDelta) > 0.0001;
+      const cos = Math.cos(snappedDelta);
+      const sin = Math.sin(snappedDelta);
+      const groupUpdates = new Map<string, Transform>();
+      for (const id of d.ids) {
+        const t = d.startTs.get(id);
+        if (!t) continue;
+        const dx = t.x - d.center[0];
+        const dy = t.y - d.center[1];
+        groupUpdates.set(id, {
+          ...t,
+          x: cl(d.center[0] + dx * cos - dy * sin, 0, W),
+          y: cl(d.center[1] + dx * sin + dy * cos, 0, H),
+          rotation: t.rotation + snappedDelta,
+        });
+      }
+      updateManySafe(groupUpdates);
+      setRotationHint({
+        at: [d.center[0], d.center[1] - HANDLE * 2.2],
+        currentDeg: displayDeg(snappedDelta),
+        deltaDeg: signedDeg(snappedDelta),
+        snapped,
+      });
+
     } else {
       const angle = Math.atan2(m[1] - d.center[1], m[0] - d.center[0]);
       const obj = page.objects.find((o) => o.id === d.id);
@@ -564,6 +615,7 @@ export default function PaintCanvas({
   };
 
   const onSvgUp = (e: React.PointerEvent) => {
+    if (e.pointerType === "pen" && stylusErasing && (e.buttons & 32) === 0) setStylusErasing(false);
     svgRef.current!.releasePointerCapture?.(e.pointerId);
     if (pan.current?.pointerId === e.pointerId) {
       pan.current = null;
@@ -577,7 +629,6 @@ export default function PaintCanvas({
         if (!marquee.additive) onSelect([]);
       } else {
         const picked = objectsByZ.flatMap((obj) => {
-          if (obj.plotted) return [];
           const ob = objectWorldBounds((obj.cachedPolylines ?? []) as Pt[][], obj.transform ?? IDENTITY);
           return intersects(mb, ob) ? objectSelectionIds(obj) : [];
         });
@@ -589,8 +640,8 @@ export default function PaintCanvas({
     }
     if (draft) {
       if (draft.tool === "erase" || draft.tool === "eraseLine") {
-        const pts = simplify(draft.points, ERASER_RADIUS / Math.max(zoom, 1));
-        if (pts.length >= 2) onErase(pts, draft.tool === "erase" ? "free" : "line", ERASER_RADIUS);
+        const pts = simplify(draft.points, effRadius / Math.max(zoom, 1));
+        if (pts.length >= 2) onErase(pts, draft.tool === "erase" ? "free" : "line", effRadius);
         setDraft(null);
         return;
       }
@@ -672,17 +723,6 @@ export default function PaintCanvas({
     };
   };
 
-  const openContextMenu = (e: React.MouseEvent, obj: SceneObject) => {
-    e.preventDefault();
-    e.stopPropagation();
-    // A right-drag pan also ends in a contextmenu event — don't open the menu then.
-    if (panMoved.current) { panMoved.current = false; return; }
-    const targetIds = objectSelectionIds(obj);
-    const ids = selectedIds.includes(obj.id) ? selectedIds : targetIds;
-    if (!selectedIds.includes(obj.id)) onSelect(ids);
-    onContextMenuSelection(ids, e.clientX, e.clientY);
-  };
-
   const startResize = (e: React.PointerEvent, obj: SceneObject, edge: ResizeEdge) => {
     if (e.button !== 0) return;
     e.stopPropagation();
@@ -723,6 +763,26 @@ export default function PaintCanvas({
     };
   };
 
+  const startGroupRotate = (e: React.PointerEvent, ids: string[], center: Pt) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    onEditStart();
+    svgRef.current!.setPointerCapture(e.pointerId);
+    const m = toMM(e);
+    drag.current = {
+      mode: "groupRotate",
+      ids,
+      center,
+      startAngle: Math.atan2(m[1] - center[1], m[0] - center[0]),
+      startTs: new Map(
+        page.objects
+          .filter((o) => ids.includes(o.id))
+          .map((o) => [o.id, { ...(o.transform ?? IDENTITY) }])
+      ),
+    };
+    setRotationHint({ at: [center[0], center[1] - HANDLE * 2.2], currentDeg: 0, deltaDeg: 0, snapped: false });
+  };
+
   const startRotate = (e: React.PointerEvent, obj: SceneObject, center: Pt) => {
     if (e.button !== 0) return;
     e.stopPropagation();
@@ -761,7 +821,7 @@ export default function PaintCanvas({
         if (!localLines.length) return [];
         const worldLines = transformPolylines(localLines, obj.transform ?? IDENTITY);
         return worldLines.flatMap((line, index) =>
-          lineNearPath(line, draft.points, ERASER_RADIUS) ? [{ id: `${obj.id}:${index}`, line }] : []
+          lineNearPath(line, draft.points, effRadius) ? [{ id: `${obj.id}:${index}`, line }] : []
         );
       })
     : [];
@@ -771,7 +831,7 @@ export default function PaintCanvas({
     .sort((a, b) => zValue(a.obj, a.index) - zValue(b.obj, b.index))
     .map(({ obj }) => obj);
 
-  const selectedObjects = objectsByZ.filter((obj) => selectedIds.includes(obj.id) && !obj.plotted);
+  const selectedObjects = objectsByZ.filter((obj) => selectedIds.includes(obj.id));
   const selectedBounds = selectedObjects.length > 1
     ? selectedObjects.reduce<[number, number, number, number] | null>((acc, obj) => {
         const b = objectWorldBounds((obj.cachedPolylines ?? []) as Pt[][], obj.transform ?? IDENTITY);
@@ -811,13 +871,13 @@ export default function PaintCanvas({
         ref={svgRef}
         viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
         preserveAspectRatio="xMidYMid meet"
-        style={{ cursor: panning ? "grabbing" : spaceDown ? "grab" : tool === "select" ? "default" : "crosshair", touchAction: "none" }}
+        style={{ cursor: panning ? "grabbing" : spaceDown ? "grab" : effectiveTool === "select" ? "default" : "crosshair", touchAction: "none" }}
         onWheel={onWheel}
         onPointerDownCapture={emitClick}
         onPointerDown={onSvgDown}
         onPointerMove={onSvgMove}
         onPointerUp={onSvgUp}
-        onPointerLeave={() => onCursorMove?.({ x: 0, y: 0, inside: false, tool })}
+        onPointerLeave={() => { setStylusErasing(false); onCursorMove?.({ x: 0, y: 0, inside: false, tool }); }}
         onContextMenu={(e) => e.preventDefault()}
         onDragOver={(e) => e.preventDefault()}
         onDrop={onDrop}
@@ -878,7 +938,7 @@ export default function PaintCanvas({
             d={toPath(line)}
             fill="none"
             stroke="var(--err)"
-            strokeWidth={Math.max(STROKE * 2.8, ERASER_RADIUS * 0.55)}
+            strokeWidth={Math.max(STROKE * 2.8, effRadius * 0.55)}
             strokeLinecap="round"
             strokeLinejoin="round"
             opacity={0.95}
@@ -890,7 +950,7 @@ export default function PaintCanvas({
         {draftWorld.map((line, i) => (
           <path key={`d${i}`} d={toPath(line as Pt[])} fill="none"
             stroke={draft?.tool === "erase" || draft?.tool === "eraseLine" ? "var(--err)" : "var(--busy)"}
-            strokeWidth={draft?.tool === "erase" || draft?.tool === "eraseLine" ? ERASER_RADIUS * 2 : STROKE}
+            strokeWidth={draft?.tool === "erase" || draft?.tool === "eraseLine" ? effRadius * 2 : STROKE}
             strokeDasharray={draft?.tool === "eraseLine" ? `${STROKE * 2} ${STROKE}` : undefined}
             strokeLinejoin="round" strokeLinecap="round" />
         ))}
@@ -907,7 +967,6 @@ export default function PaintCanvas({
         {/* selection hit areas + handles */}
         {tool === "select" &&
           objectsByZ.map((obj) => {
-            if (obj.plotted) return null;
             const t = obj.transform ?? IDENTITY;
             const localLines = (obj.cachedPolylines ?? []) as Pt[][];
             const localBounds = bounds(localLines.flat());
@@ -940,8 +999,18 @@ export default function PaintCanvas({
                   x={bx0 - m} y={by0 - m} width={bw + 2 * m} height={bh + 2 * m}
                   fill="transparent"
                   style={{ cursor: "move" }}
-                  onPointerDown={(e) => startMove(e, obj)}
-                  onContextMenu={(e) => openContextMenu(e, obj)}
+                  onPointerDown={(e) => {
+                    if (e.button === 2) {
+                      e.stopPropagation();
+                      const targetIds = objectSelectionIds(obj);
+                      const ids = selectedIds.includes(obj.id) ? selectedIds : targetIds;
+                      if (!selectedIds.includes(obj.id)) onSelect(ids);
+                      onContextMenuSelection(ids, e.clientX, e.clientY);
+                      return;
+                    }
+                    startMove(e, obj);
+                  }}
+                  onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
                 />
                 <polygon
                   points={outline}
@@ -986,12 +1055,14 @@ export default function PaintCanvas({
             );
           })}
 
-        {/* group selection outline + single scale handle */}
+        {/* group selection outline + rotate + scale handles */}
         {tool === "select" && selectedBounds && (() => {
           const [bx0, by0, bx1, by1] = selectedBounds;
           const m = STROKE * 3;
           const cx = (bx0 + bx1) / 2;
           const cy = (by0 + by1) / 2;
+          const rotHandleX = cx;
+          const rotHandleY = by0 - m - HANDLE * 1.5;
           return (
             <g>
               <rect
@@ -999,6 +1070,18 @@ export default function PaintCanvas({
                 fill="none" stroke="var(--accent)" strokeWidth={STROKE * 1.2}
                 strokeDasharray={`${STROKE * 3} ${STROKE * 1.5}`}
                 pointerEvents="none"
+              />
+              <line
+                x1={cx} y1={by0 - m} x2={rotHandleX} y2={rotHandleY}
+                stroke="var(--accent)" strokeWidth={STROKE}
+                strokeDasharray={`${STROKE} ${STROKE}`}
+                pointerEvents="none"
+              />
+              <circle
+                cx={rotHandleX} cy={rotHandleY} r={HANDLE / 2}
+                fill="var(--panel)" stroke="var(--accent)" strokeWidth={STROKE}
+                style={{ cursor: "grab" }}
+                onPointerDown={(e) => startGroupRotate(e, selectedObjects.map((obj) => obj.id), [cx, cy])}
               />
               <rect
                 x={bx1 + m - HANDLE * 0.425} y={by1 + m - HANDLE * 0.425}
