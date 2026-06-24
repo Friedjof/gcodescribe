@@ -1,0 +1,31 @@
+:root {
+  --bg: #0d0d0f;
+  --panel: #1c1c1e;
+  --panel-2: #2c2c2e;
+  --panel-3: #3a3a3c;
+  --border: rgba(255, 255, 255, 0.09);
+  --text: #f5f5f7;
+  --muted: #98989e;
+  --accent: #0a84ff;
+  --accent-hover: #2e95ff;
+  --ok: #30d158;
+  --warn: #ffd60a;
+  --err: #ff453a;
+  --busy: #bf5af2;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: radial-gradient(1200px 600px at 50% -200px, #1d1d22 0%, var(--bg) 60%);
+  min-height: 100vh;
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+    Inter, system-ui, sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+

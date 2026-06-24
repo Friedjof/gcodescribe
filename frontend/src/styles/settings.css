@@ -1,0 +1,228 @@
+/* ---- Settings dialog ------------------------------------------------------ */
+.settings-btn {
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 14px;
+  line-height: 1;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.settings-btn:hover { background: var(--panel-2); color: var(--text); }
+
+.settings-modal {
+  width: min(900px, 96vw);
+  height: min(600px, 90vh);
+  max-height: min(600px, 90vh);
+}
+.settings-modal .modal-body {
+  padding: 0;
+  overflow: hidden;
+  gap: 0;
+  height: 0; /* let flex: 1 take over inside the fixed-height modal */
+}
+
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 8px;
+  border-right: 1px solid var(--border);
+  min-width: 150px;
+  flex: 0 0 auto;
+}
+.settings-nav-item {
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.settings-nav-item:hover { background: var(--panel-2); color: var(--text); }
+.settings-nav-item.active { background: var(--panel-2); color: var(--text); }
+
+.settings-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+  min-width: 0;
+}
+
+.settings-section-heading {
+  margin: 0 0 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.settings-rows {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) 2fr;
+  gap: 0;
+  margin: 0;
+}
+.settings-label {
+  padding: 10px 0;
+  font-size: 13px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+}
+.settings-value {
+  padding: 10px 0;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.settings-val { font-variant-numeric: tabular-nums; }
+.settings-val.ok { color: var(--ok); }
+.settings-val.muted { color: var(--muted); }
+
+.settings-source {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+.settings-source-default     { background: rgba(152,152,158,0.15); color: var(--muted); }
+.settings-source-environment { background: rgba(10,132,255,0.15);  color: var(--accent); }
+.settings-source-saved       { background: rgba(48,209,88,0.15);   color: var(--ok); }
+.settings-source-pending     { background: rgba(255,214,10,0.15);   color: var(--warn); }
+
+.settings-input {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 5px 9px;
+  flex: 1;
+  min-width: 0;
+  max-width: 260px;
+}
+.settings-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.settings-input-num { max-width: 100px; }
+.settings-input-secret { max-width: 200px; flex: 0 1 200px; }
+
+.settings-value-secret { flex-wrap: wrap; gap: 6px; }
+
+.settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.settings-toggle input[type="checkbox"] { cursor: pointer; }
+
+.settings-reset {
+  padding: 4px 8px;
+  font-size: 13px;
+  flex: 0 0 auto;
+}
+
+.settings-err { color: var(--err); font-size: 13px; }
+
+/* Serial port picker */
+.settings-serial-dd { flex-direction: column; align-items: flex-start; gap: 6px; }
+.settings-serial-row { display: flex; align-items: center; gap: 6px; width: 100%; flex-wrap: wrap; }
+.settings-serial-input { max-width: 220px; }
+.settings-serial-scan {
+  padding: 5px 10px;
+  font-size: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.settings-serial-scan:hover { border-color: var(--accent); }
+.settings-serial-scan:disabled { opacity: 0.5; cursor: default; }
+.settings-serial-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  overflow: hidden;
+  width: 100%;
+  max-width: 420px;
+}
+.settings-serial-port {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border);
+}
+.settings-serial-port:last-child { border-bottom: none; }
+.settings-serial-port:hover { background: var(--panel-2); }
+.settings-serial-desc { color: var(--muted); font-size: 12px; flex: 1; }
+.settings-serial-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(48,209,88,0.15);
+  color: var(--ok);
+  white-space: nowrap;
+}
+.settings-serial-empty { padding: 10px 12px; color: var(--muted); font-size: 13px; }
+
+/* OctoPrint connection check */
+.settings-octo-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+}
+.settings-octo-btn {
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.settings-octo-btn:hover { border-color: var(--accent); }
+.settings-octo-btn:disabled { opacity: 0.5; cursor: default; }
+.settings-octo-result { font-size: 13px; }
+.settings-octo-result.ok { color: var(--ok); }
+.settings-octo-result.err { color: var(--err); }
+
+@media (max-width: 640px) {
+  .settings-modal .modal-body { flex-direction: column; }
+  .settings-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    min-width: 0;
+  }
+  .settings-rows { grid-template-columns: 1fr; }
+  .settings-label { border-bottom: none; padding-bottom: 2px; }
+}
