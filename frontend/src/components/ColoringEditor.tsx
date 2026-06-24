@@ -69,12 +69,13 @@ interface Props {
   cal: Calibration;
   page: Page;
   activeProfile?: ProfileRef | null;
+  initialRotation?: Rotation;
   onClose: () => void;
   onCreated: (jobs: Job[]) => void;
   onColoringChange?: (coloring: PageColoring) => void;
 }
 
-export default function ColoringEditor({ cal, page, activeProfile, onClose, onCreated, onColoringChange }: Props) {
+export default function ColoringEditor({ cal, page, activeProfile, initialRotation = 0, onClose, onCreated, onColoringChange }: Props) {
   const { t } = useI18n();
   const toast = useToasts();
   const { confirm, ConfirmNode } = useConfirm();
@@ -92,8 +93,8 @@ export default function ColoringEditor({ cal, page, activeProfile, onClose, onCr
     return { x: W / 2 - w / 2, y: H / 2 - h / 2, w, h };
   }
 
-  const [rotation, setRotation] = useState<Rotation>(0);
-  const [view, setView] = useState<ViewBox>(() => fitView(0));
+  const [rotation, setRotation] = useState<Rotation>(initialRotation);
+  const [view, setView] = useState<ViewBox>(() => fitView(initialRotation));
 
   // Plotted geometry with the designer's erase-masks applied, just like the
   // backend — so the editor shows and slices what actually plots.
@@ -166,7 +167,7 @@ export default function ColoringEditor({ cal, page, activeProfile, onClose, onCr
   const strokeW = S * 0.004 * zoom;
   // "Point" hits only what the cursor directly touches (a small, zoom-stable
   // tolerance); S/M/L are real brush radii in plot mm.
-  const lineHitRadius = Math.max(S * 0.004, S * 0.012 * zoom);
+  const lineHitRadius = Math.max(S * 0.001, S * 0.003 * zoom);
   const brushRadius = brush === "point" ? lineHitRadius : S * BRUSH_FACTOR[brush];
 
   const resolveColor = (): ColoringColor | null => (activeColor === "none" ? null : activeColor);
@@ -245,6 +246,7 @@ export default function ColoringEditor({ cal, page, activeProfile, onClose, onCr
       for (const line of visibleLines) {
         const [x0, y0, x1, y1] = line.bbox;
         if (p[0] < x0 - brushRadius || p[0] > x1 + brushRadius || p[1] < y0 - brushRadius || p[1] > y1 + brushRadius) continue;
+        if (isolate && !prev[line.id]?.some((c) => c === isolate)) continue;
         if (granularity === "whole") {
           let hit = false;
           for (let i = 0; i < line.segs; i++) if (distToSeg(p, line.world[i], line.world[i + 1]) <= brushRadius) { hit = true; break; }
@@ -254,6 +256,7 @@ export default function ColoringEditor({ cal, page, activeProfile, onClose, onCr
         } else {
           let arr: (ColoringColor | null)[] | null = null;
           for (let i = 0; i < line.segs; i++) {
+            if (isolate && (prev[line.id]?.[i] ?? null) !== isolate) continue;
             if (distToSeg(p, line.world[i], line.world[i + 1]) <= brushRadius) {
               if (!arr) arr = next[line.id] ? [...next[line.id]] : new Array(line.segs).fill(null);
               if (arr[i] !== color) { arr[i] = color; changed = true; }
@@ -276,6 +279,7 @@ export default function ColoringEditor({ cal, page, activeProfile, onClose, onCr
       for (const line of visibleLines) {
         const [x0, y0, x1, y1] = line.bbox;
         if (x1 < rminx || x0 > rmaxx || y1 < rminy || y0 > rmaxy) continue;
+        if (isolate && !prev[line.id]?.some((c) => c === isolate)) continue;
         if (granularity === "whole") {
           if (!line.world.some(inside)) continue;
           if (color === null) { if (next[line.id]) { delete next[line.id]; changed = true; } }
@@ -283,6 +287,7 @@ export default function ColoringEditor({ cal, page, activeProfile, onClose, onCr
         } else {
           let arr: (ColoringColor | null)[] | null = null;
           for (let i = 0; i < line.segs; i++) {
+            if (isolate && (prev[line.id]?.[i] ?? null) !== isolate) continue;
             const mid: Pt = [(line.world[i][0] + line.world[i + 1][0]) / 2, (line.world[i][1] + line.world[i + 1][1]) / 2];
             if (inside(mid) || inside(line.world[i]) || inside(line.world[i + 1])) {
               if (!arr) arr = next[line.id] ? [...next[line.id]] : new Array(line.segs).fill(null);
@@ -659,7 +664,7 @@ export default function ColoringEditor({ cal, page, activeProfile, onClose, onCr
             )}
 
             <div className="coloring-tool-actions">
-              <button className="coloring-fill-rest" onClick={fillRest}>{t("paint.coloringFillRest")}</button>
+              <button className="coloring-fill-rest" disabled={!!isolate} onClick={fillRest}>{t("paint.coloringFillRest")}</button>
               <button className="ghost" onClick={clearAll}>{t("paint.coloringClearAll")}</button>
             </div>
 
