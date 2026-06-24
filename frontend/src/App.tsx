@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { api, type AiImageStatus, type AuthSession, type AuthSetupStart } from "./api";
+import { api, type AiImageStatus, type AuthSession, type AuthSetupStart, type EffectiveSettings } from "./api";
 import AiImageDesigner from "./components/AiImageDesigner";
 import Convert from "./components/Convert";
 import Paint from "./components/Paint";
@@ -37,6 +37,8 @@ function AdminApp() {
   const [visited, setVisited] = useState<Set<Tab>>(() => new Set<Tab>(["paint"]));
   const [status, setStatus] = useState<any>(null);
   const [aiStatus, setAiStatus] = useState<AiImageStatus | null>(null);
+  const [aiInitialFile, setAiInitialFile] = useState<File | null>(null);
+  const [desktop, setDesktop] = useState(false);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">(() =>
     typeof Notification === "undefined" ? "unsupported" : Notification.permission
   );
@@ -51,10 +53,10 @@ function AdminApp() {
     setVisited((prev) => (prev.has(tab) ? prev : new Set(prev).add(tab)));
   }, [tab]);
 
-  // The AI Designer tab is server-gated: only shown when the backend reports a
-  // configured OpenAI key (or fake mode). Checked once after login.
+  // Checked once after login — server-gated flags.
   useEffect(() => {
     api.aiImageStatus().then(setAiStatus).catch(() => setAiStatus(null));
+    api.health().then((h) => setDesktop(h.desktop)).catch(() => {});
   }, []);
 
   const notificationsActive = notificationPermission === "granted";
@@ -105,9 +107,10 @@ function AdminApp() {
     const notifyMilestone = (pct: number, key = tracker.jobKey) => {
       if (!key || tracker.notified.has(pct)) return;
       tracker.notified.add(pct);
+      const name = key.replace(/\.[^/.]+$/, "");
       const message = pct >= 100
-        ? t("notify.plotDone")
-        : t("notify.plotProgress", { pct });
+        ? t("notify.plotDone", { name })
+        : t("notify.plotProgress", { pct, name });
       toast.success(message);
       if (notificationPermission === "granted") {
         new Notification(t("notify.title"), {
@@ -138,6 +141,22 @@ function AdminApp() {
     }
     tracker.wasPrinting = printing;
   }, [notificationPermission, status, t, toast]);
+
+  const openInAiDesigner = (itemId: string) => {
+    fetch(api.galleryOriginalUrl(itemId), { credentials: "same-origin" })
+      .then((r) => {
+        if (!r.ok) throw new Error(r.statusText);
+        return r.blob();
+      })
+      .then((blob) => {
+        const ext = blob.type.includes("png") ? "png" : "jpg";
+        const file = new File([blob], `gallery-${itemId}.${ext}`, { type: blob.type });
+        setAiInitialFile(file);
+        setVisited((prev) => (prev.has("ai") ? prev : new Set(prev).add("ai")));
+        setTab("ai");
+      })
+      .catch(() => {});
+  };
 
   const tabs: { value: Tab; label: string }[] = [
     { value: "paint", label: t("tabs.paint") },
@@ -178,7 +197,22 @@ function AdminApp() {
         <Segmented<Tab> className="nav" value={tab} onChange={setTab} options={tabs} />
       </nav>
 
-      {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && (
+        <SettingsDialog
+          onClose={() => setSettingsOpen(false)}
+          onSaved={(saved: EffectiveSettings) => {
+            if (saved.ai.enabled && !aiStatus?.enabled) {
+              api.aiImageStatus().then((s) => {
+                setAiStatus(s);
+                if (s.enabled) {
+                  setSettingsOpen(false);
+                  setTab("ai");
+                }
+              }).catch(() => {});
+            }
+          }}
+        />
+      )}
 
       <main>
         {/* Kept alive: rendered once visited, hidden (not unmounted) when inactive.
@@ -186,11 +220,11 @@ function AdminApp() {
         {KEEP_ALIVE.map((value) =>
           visited.has(value) ? (
             <div key={value} style={{ display: tab === value ? "contents" : "none" }}>
-              {value === "paint" && <Paint visible={tab === "paint"} status={status} onAction={refreshStatus} />}
-              {value === "games" && <Games visible={tab === "games"} onOpenPaint={() => setTab("paint")} />}
-              {value === "gallery" && <Gallery visible={tab === "gallery"} onOpenPaint={() => setTab("paint")} />}
+              {value === "paint" && <Paint visible={tab === "paint"} status={status} onAction={refreshStatus} desktop={desktop} />}
+              {value === "games" && <Games visible={tab === "games"} onOpenPaint={() => setTab("paint")} desktop={desktop} />}
+              {value === "gallery" && <Gallery visible={tab === "gallery"} onOpenPaint={() => setTab("paint")} onOpenAiDesigner={aiStatus?.enabled ? openInAiDesigner : undefined} aiEnabled={aiStatus?.enabled ?? false} desktop={desktop} />}
               {value === "ai" && (
-                <AiImageDesigner status={aiStatus} visible={tab === "ai"} onOpenPaint={() => setTab("paint")} />
+                <AiImageDesigner status={aiStatus} visible={tab === "ai"} onOpenPaint={() => setTab("paint")} initialFile={aiInitialFile} />
               )}
               {value === "paper" && (
                 <Paper status={status} onAction={refreshStatus} visible={tab === "paper"} />

@@ -82,10 +82,12 @@ export default function AiImageDesigner({
   status,
   visible = true,
   onOpenPaint,
+  initialFile = null,
 }: {
   status: AiImageStatus | null;
   visible?: boolean;
   onOpenPaint: () => void;
+  initialFile?: File | null;
 }) {
   const { t } = useI18n();
   const toast = useToasts();
@@ -107,6 +109,8 @@ export default function AiImageDesigner({
   const [err, setErr] = useState<string | null>(null);
   const [variants, setVariants] = useState<AiImageResult[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [showDiscardDialog, setShowDiscardDialog] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Local object-URL preview of the upload; revoked on change to avoid leaks.
@@ -119,6 +123,11 @@ export default function AiImageDesigner({
     setPreviewUrl(url);
     return () => URL.revokeObjectURL(url);
   }, [file]);
+
+  // Pre-populate with an image passed in from outside (e.g. from the gallery).
+  useEffect(() => {
+    if (initialFile) pick(initialFile);
+  }, [initialFile]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const maxMb = status?.maxInputMb ?? 10;
   const selected = variants.find((v) => v.variantId === selectedId) ?? null;
@@ -135,7 +144,48 @@ export default function AiImageDesigner({
       setErr(t("ai.errSize", { mb: maxMb }));
       return;
     }
+    if (variants.length > 0) {
+      setPendingFile(f);
+      setShowDiscardDialog(true);
+      return;
+    }
     setFile(f);
+  };
+
+  const handleReset = () => {
+    if (variants.length > 0) {
+      setPendingFile(null);
+      setShowDiscardDialog(true);
+    }
+  };
+
+  const doReset = (nextFile: File | null) => {
+    setVariants([]);
+    setSelectedId(null);
+    setFeedback("");
+    setFile(nextFile);
+    setPendingFile(null);
+    setShowDiscardDialog(false);
+  };
+
+  const handleDiscardConfirm = () => doReset(pendingFile);
+
+  const handleSaveAndDiscard = () => {
+    if (!selected || selected.saved) {
+      doReset(pendingFile);
+      return;
+    }
+    setSaving(true);
+    api
+      .aiImageSave(selected.galleryItem.id)
+      .then((updated) => {
+        setVariants((prev) =>
+          prev.map((v) => (v.variantId === updated.variantId ? updated : v))
+        );
+        doReset(pendingFile);
+      })
+      .catch((e) => setErr(String(e.message ?? e)))
+      .finally(() => setSaving(false));
   };
 
   // baseVariantId set → a feedback refinement (no re-upload); else first pass.
@@ -425,6 +475,37 @@ export default function AiImageDesigner({
         </Modal>
       )}
 
+      {showDiscardDialog && (
+        <Modal
+          title={t("ai.discardDialogTitle")}
+          className="ai-discard-modal"
+          onClose={() => {
+            setPendingFile(null);
+            setShowDiscardDialog(false);
+          }}
+          footer={
+            <>
+              <button
+                onClick={() => {
+                  setPendingFile(null);
+                  setShowDiscardDialog(false);
+                }}
+              >
+                {t("common.cancel")}
+              </button>
+              <button onClick={handleDiscardConfirm}>{t("ai.discardDiscard")}</button>
+              {selected && !selected.saved && (
+                <button className="primary" disabled={saving} onClick={handleSaveAndDiscard}>
+                  {saving ? t("common.loading") : t("ai.discardSave")}
+                </button>
+              )}
+            </>
+          }
+        >
+          <p>{t("ai.discardDialogBody")}</p>
+        </Modal>
+      )}
+
       {/* Right: editor card — toolbar header, stage, and a tools side panel. */}
       <section className="card ai-editor">
         <div className="ai-editor-toolbar">
@@ -442,6 +523,9 @@ export default function AiImageDesigner({
                   </button>
                 ))}
               </div>
+            )}
+            {variants.length > 0 && (
+              <button onClick={handleReset}>{t("ai.resetBtn")}</button>
             )}
             {selected && !selected.saved && (
               <button disabled={saving} onClick={saveToGallery}>
