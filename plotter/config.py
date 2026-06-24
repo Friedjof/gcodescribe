@@ -46,6 +46,11 @@ _SERVER_DEFAULTS: dict = dict(
     redis_url="redis://localhost:6379/0",
 )
 
+_GALLERY_DEFAULTS: dict = dict(
+    upload_enabled=False,
+    upload_secret="",
+)
+
 
 # ── typed settings models ────────────────────────────────────────────────────
 
@@ -93,12 +98,19 @@ class ServerSettings:
 
 
 @dataclass(frozen=True)
+class GallerySettings:
+    upload_enabled: bool
+    upload_secret: str  # plain token embedded in share URL — not a password
+
+
+@dataclass(frozen=True)
 class AppSettings:
     printer: PrinterSettings
     ai: AiSettings
     storage: StorageSettings
     auth: AuthSettings
     server: ServerSettings
+    gallery: GallerySettings
 
     def redact(self) -> dict:
         """Return an API-safe dict — secrets are replaced with presence flags."""
@@ -134,6 +146,10 @@ class AppSettings:
                 "host": self.server.host,
                 "port": self.server.port,
                 "redis_url": self.server.redis_url,
+            },
+            "gallery": {
+                "upload_enabled": self.gallery.upload_enabled,
+                "upload_secret_configured": bool(self.gallery.upload_secret),
             },
         }
 
@@ -253,6 +269,7 @@ def _load(saved: dict | None) -> tuple[AppSettings, SourceMap]:
     st_src: dict[str, ConfigSource] = {}
     au_src: dict[str, ConfigSource] = {}
     sv_src: dict[str, ConfigSource] = {}
+    g_src: dict[str, ConfigSource] = {}
 
     printer = PrinterSettings(
         octoprint_url=_str(
@@ -354,8 +371,19 @@ def _load(saved: dict | None) -> tuple[AppSettings, SourceMap]:
         ),
     )
 
+    gallery = GallerySettings(
+        upload_enabled=_bool(
+            "GALLERY_UPLOAD_ENABLED", _GALLERY_DEFAULTS["upload_enabled"],
+            s.get("gallery.upload_enabled"), g_src, "upload_enabled",
+        ),
+        upload_secret=_str(
+            "GALLERY_UPLOAD_SECRET", _GALLERY_DEFAULTS["upload_secret"],
+            s.get("gallery.upload_secret"), g_src, "upload_secret",
+        ),
+    )
+
     settings = AppSettings(
-        printer=printer, ai=ai, storage=storage, auth=auth, server=server,
+        printer=printer, ai=ai, storage=storage, auth=auth, server=server, gallery=gallery,
     )
     sources: SourceMap = {
         "printer": p_src,
@@ -363,5 +391,6 @@ def _load(saved: dict | None) -> tuple[AppSettings, SourceMap]:
         "storage": st_src,
         "auth": au_src,
         "server": sv_src,
+        "gallery": g_src,
     }
     return settings, sources

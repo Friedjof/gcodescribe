@@ -18,7 +18,21 @@ export default function Upload() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [result, setResult] = useState<GalleryItem | null>(null);
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [secretRequired, setSecretRequired] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const secret = new URLSearchParams(location.search).get("secret") ?? "";
+
+  useEffect(() => {
+    api
+      .galleryUploadInfo()
+      .then((r) => {
+        setEnabled(r.enabled);
+        setSecretRequired(r.secret_required);
+      })
+      .catch(() => setEnabled(false));
+  }, []);
 
   const pick = (f: File | undefined | null) => {
     setErr(null);
@@ -39,7 +53,7 @@ export default function Upload() {
     setBusy(true);
     setErr(null);
     api
-      .galleryUpload(file, title)
+      .galleryUpload(file, title, { secret: secret || undefined })
       .then((item) => {
         setResult(item);
         setFile(null);
@@ -52,6 +66,37 @@ export default function Upload() {
   useEffect(() => {
     if (err) toast.error(err);
   }, [err, toast]);
+
+  if (enabled === null) {
+    return (
+      <div className="upload-page">
+        <header className="upload-head">
+          <h1><span className="pen">✎</span> GCodeScribe</h1>
+        </header>
+        <section className="card upload-card">
+          <p className="muted">{t("common.loading")}</p>
+        </section>
+      </div>
+    );
+  }
+
+  if (!enabled || (secretRequired && !secret)) {
+    return (
+      <div className="upload-page">
+        <header className="upload-head">
+          <h1><span className="pen">✎</span> GCodeScribe</h1>
+          <p className="muted">{t("upload.subtitle")}</p>
+        </header>
+        <section className="card upload-card">
+          <div className="upload-locked">
+            <span className="upload-locked-icon">🔒</span>
+            <h2>{t("upload.locked")}</h2>
+            <p className="muted">{t("upload.lockedHint")}</p>
+          </div>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="upload-page">

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type GalleryItem, type GallerySvg, type GalleryUploader } from "../api";
 import { useI18n } from "../i18n";
+import GalleryAccessDialog from "./GalleryAccessDialog";
 import GalleryDetail from "./GalleryDetail";
 import { useLiveRegistryState } from "../stream/liveRegistry";
 import PolylinePreview from "./PolylinePreview";
@@ -19,7 +20,7 @@ const thumbCache = new Map<string, GallerySvg>();
 // Keep the last list so re-opening the tab renders instantly while we refetch.
 let listCache: GalleryItem[] = [];
 
-export default function Gallery({ visible = true, onOpenPaint }: { visible?: boolean; onOpenPaint: () => void }) {
+export default function Gallery({ visible = true, onOpenPaint, onOpenAiDesigner, aiEnabled = false, desktop = false }: { visible?: boolean; onOpenPaint: () => void; onOpenAiDesigner?: (itemId: string) => void; aiEnabled?: boolean; desktop?: boolean }) {
   const { t, lang } = useI18n();
   const toast = useToasts();
   const [items, setItems] = useState<GalleryItem[]>(listCache);
@@ -28,6 +29,7 @@ export default function Gallery({ visible = true, onOpenPaint }: { visible?: boo
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [accessOpen, setAccessOpen] = useState(false);
   const globalLive = useLiveRegistryState();
   const [err, setErr] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -128,6 +130,11 @@ export default function Gallery({ visible = true, onOpenPaint }: { visible?: boo
           <button className="primary gallery-upload-btn" disabled={uploading} onClick={() => fileRef.current?.click()}>
             {uploading ? t("upload.uploading") : t("gallery.upload")}
           </button>
+          {!desktop && (
+            <button className="ghost gallery-access-btn" onClick={() => setAccessOpen(true)}>
+              {t("gallery.uploadAccess")}
+            </button>
+          )}
           <Segmented<UploaderFilter>
             className="gallery-filter-seg"
             value={uploaderFilter}
@@ -166,8 +173,12 @@ export default function Gallery({ visible = true, onOpenPaint }: { visible?: boo
           onClose={() => setSelectedId(null)}
           onChanged={refreshSelected}
           onOpenPaint={onOpenPaint}
+          onOpenAiDesigner={onOpenAiDesigner}
+          aiEnabled={aiEnabled}
+          desktop={desktop}
         />
       )}
+      {accessOpen && <GalleryAccessDialog onClose={() => setAccessOpen(false)} />}
     </div>
   );
 }

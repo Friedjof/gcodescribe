@@ -27,6 +27,9 @@ export default function GalleryDetail({
   onClose,
   onChanged,
   onOpenPaint,
+  onOpenAiDesigner,
+  aiEnabled = false,
+  desktop = false,
 }: {
   item: GalleryItem;
   visible?: boolean;
@@ -34,6 +37,9 @@ export default function GalleryDetail({
   onClose: () => void;
   onChanged: () => void;
   onOpenPaint: () => void;
+  onOpenAiDesigner?: (itemId: string) => void;
+  aiEnabled?: boolean;
+  desktop?: boolean;
 }) {
   const { t } = useI18n();
   const toast = useToasts();
@@ -158,8 +164,10 @@ export default function GalleryDetail({
       fit_to_area: true,
       flip_y: false,
       trust_axis_home: false,
+      park_after_plot: true,
       paper_corners: {},
       paper_margin: 0,
+      obstacles: [],
     };
     return {
       cal,
@@ -210,11 +218,13 @@ export default function GalleryDetail({
         }
         headerActions={
           <div className="gallery-modal-actions">
-            <LiveButton
-              state={live.state}
-              viewers={live.viewers}
-              onClick={() => live.state === "live" || live.state === "connecting" ? live.stop("user-stopped") : live.start()}
-            />
+            {!desktop && (
+              <LiveButton
+                state={live.state}
+                viewers={live.viewers}
+                onClick={() => live.state === "live" || live.state === "connecting" ? live.stop("user-stopped") : live.start()}
+              />
+            )}
             {(hasGcode || item.original) && (
               <Segmented<View>
                 value={view}
@@ -257,6 +267,15 @@ export default function GalleryDetail({
               <a className="button ghost" href={originalUrl} download={item.original?.filename}>
                 {t("gallery.downloadOriginal")}
               </a>
+            )}
+            {aiEnabled && onOpenAiDesigner && item.original?.mime.startsWith("image/") && (
+              <button
+                className="ghost"
+                disabled={busy}
+                onClick={() => { onOpenAiDesigner(item.id); onClose(); }}
+              >
+                {t("gallery.toAiDesigner")}
+              </button>
             )}
             <button className="primary" disabled={busy || !svg} onClick={toPaint}>
               {t("gallery.toPaint")}

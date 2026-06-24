@@ -4,20 +4,39 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+from ...config import load_settings
 from ...gcode_preview import parse_gcode, parse_gcode_3d_text
 from ...services.gallery import GalleryService
+from ...services.settings_store import load_saved
 from ...services.upload_validation import MAX_UPLOAD_BYTES
 from ..auth import optional_admin, require_admin
 
 router = APIRouter(tags=["gallery"])
 
-# All gallery routes require an admin session except POST /gallery (create),
-# which stays public so the /upload page works without login. That endpoint
-# detects an admin session optionally to tag the upload's origin.
+# All gallery routes require an admin session except POST /gallery (create)
+# and GET /gallery/upload-info, which stay public. POST /gallery checks the
+# upload gate for non-admin requests.
 
 
 def service() -> GalleryService:
     return GalleryService()
+
+
+@router.get("/gallery/upload-info")
+def gallery_upload_info() -> dict:
+    """Public — tells the /upload page whether uploads are currently open."""
+    cfg = load_settings(load_saved())
+    return {
+        "enabled": cfg.gallery.upload_enabled,
+        "secret_required": bool(cfg.gallery.upload_secret),
+    }
+
+
+@router.get("/gallery/upload-config")
+def gallery_upload_config(_: dict = Depends(require_admin)) -> dict:
+    """Admin — returns full upload gate config including the plain-text secret."""
+    cfg = load_settings(load_saved())
+    return {"enabled": cfg.gallery.upload_enabled, "secret": cfg.gallery.upload_secret}
 
 
 @router.post("/gallery")
@@ -26,10 +45,19 @@ async def create_submission(
     title: str = Form(""),
     mode: str = Form("auto"),
     detail: int = Form(2),
+    secret: str = Form(""),
     session: dict | None = Depends(optional_admin),
 ) -> dict:
     if not file.filename:
         raise HTTPException(400, "Dateiname fehlt")
+
+    if not session:
+        cfg = load_settings(load_saved())
+        if not cfg.gallery.upload_enabled:
+            raise HTTPException(403, "Upload ist deaktiviert.")
+        if cfg.gallery.upload_secret and secret != cfg.gallery.upload_secret:
+            raise HTTPException(403, "Ungültiges Upload-Secret.")
+
     # Read at most one byte past the limit so oversized uploads never land
     # fully in memory; the service re-checks and reports the proper message.
     data = await file.read(MAX_UPLOAD_BYTES + 1)
