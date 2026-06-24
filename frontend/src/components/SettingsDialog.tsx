@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type EffectiveSettings } from "../api";
+import { api, type EffectiveSettings, type SerialPortCandidate } from "../api";
 import Modal from "./Modal";
 import { useI18n } from "../i18n";
 
@@ -16,7 +16,13 @@ const SECRET_KEY_MAP: Record<string, string> = {
   "printer.octoprint_api_key_configured": "printer.octoprint_api_key",
 };
 
-export default function SettingsDialog({ onClose }: { onClose: () => void }) {
+export default function SettingsDialog({
+  onClose,
+  onSaved,
+}: {
+  onClose: () => void;
+  onSaved?: (settings: EffectiveSettings) => void;
+}) {
   const { t } = useI18n();
   const [section, setSection] = useState<Section>("printer");
   const [data, setData] = useState<EffectiveSettings | null>(null);
@@ -59,7 +65,7 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
     );
     api
       .patchSettings(patch)
-      .then((d) => { setData(d); setPending({}); })
+      .then((d) => { setData(d); setPending({}); onSaved?.(d); })
       .catch((e) => setErr(String(e.message ?? e)))
       .finally(() => setSaving(false));
   };
@@ -159,6 +165,24 @@ function SectionView({
             );
           }
 
+          // Special: serial port with USB scan picker
+          if (key === "printer.serial_port") {
+            const fieldSource = key in pending ? "pending" : data.sources[section]?.[field];
+            const effectiveValue = (key in pending ? pending[key] : value) as string;
+            return (
+              <SerialPortRow
+                key={field}
+                label={label}
+                value={effectiveValue}
+                source={fieldSource}
+                onChange={(v) => onChange(key, v)}
+                onReset={fieldSource === "saved" || fieldSource === "pending"
+                  ? () => onReset(section, field)
+                  : undefined}
+              />
+            );
+          }
+
           // Normal editable field
           const fieldSource = key in pending ? "pending" : data.sources[section]?.[field];
           const effectiveValue = key in pending ? pending[key] : value;
@@ -176,6 +200,8 @@ function SectionView({
           );
         })}
       </dl>
+
+      {section === "printer" && <OctoPrintCheckSection />}
     </section>
   );
 }
@@ -316,5 +342,114 @@ function SourceBadge({ source }: { source: string }) {
     <span className={`settings-source settings-source-${source}`}>
       {t(`settings.source.${source}`)}
     </span>
+  );
+}
+
+// ── Serial port picker ────────────────────────────────────────────────────────
+
+function SerialPortRow({
+  label, value, source, onChange, onReset,
+}: {
+  label: string;
+  value: string;
+  source?: string;
+  onChange: (v: string) => void;
+  onReset?: () => void;
+}) {
+  const { t } = useI18n();
+  const [ports, setPorts] = useState<SerialPortCandidate[] | null>(null);
+  const [scanning, setScanning] = useState(false);
+
+  const scan = () => {
+    setScanning(true);
+    api.listSerialPorts()
+      .then(setPorts)
+      .catch(() => setPorts([]))
+      .finally(() => setScanning(false));
+  };
+
+  const select = (device: string) => {
+    onChange(device);
+    setPorts(null);
+  };
+
+  return (
+    <>
+      <dt className="settings-label">{label}</dt>
+      <dd className="settings-value settings-serial-dd">
+        <div className="settings-serial-row">
+          <input
+            type="text"
+            className="settings-input settings-serial-input"
+            value={value}
+            placeholder="/dev/ttyUSB0"
+            onChange={(e) => onChange(e.target.value)}
+          />
+          <button
+            className="settings-serial-scan"
+            disabled={scanning}
+            onClick={scan}
+          >
+            {scanning ? t("settings.printer.scanning") : t("settings.printer.scanPorts")}
+          </button>
+          {(source === "saved" || source === "pending") && onReset && (
+            <button className="settings-reset ghost" onClick={onReset} title={t("settings.resetField")}>↺</button>
+          )}
+          {source && source !== "pending" && <SourceBadge source={source} />}
+          {source === "pending" && <SourceBadge source="pending" />}
+        </div>
+        {ports !== null && (
+          <ul className="settings-serial-list">
+            {ports.length === 0 ? (
+              <li className="settings-serial-empty">{t("serial.noPorts")}</li>
+            ) : (
+              ports.map((p) => (
+                <li key={p.device} className="settings-serial-port" onClick={() => select(p.device)}>
+                  <code>{p.device}</code>
+                  {p.description && <span className="settings-serial-desc">{p.description}</span>}
+                  {p.likelyPrinter && (
+                    <span className="settings-serial-badge">{t("serial.likelyPrinter")}</span>
+                  )}
+                </li>
+              ))
+            )}
+          </ul>
+        )}
+      </dd>
+    </>
+  );
+}
+
+// ── OctoPrint connection check ────────────────────────────────────────────────
+
+function OctoPrintCheckSection() {
+  const { t } = useI18n();
+  const [result, setResult] = useState<{
+    ok: boolean; version?: string; api?: string; error?: string;
+  } | null>(null);
+  const [checking, setChecking] = useState(false);
+
+  const check = () => {
+    setChecking(true);
+    setResult(null);
+    api.octoprintCheck()
+      .then(setResult)
+      .catch((e: Error) => setResult({ ok: false, error: String(e.message ?? e) }))
+      .finally(() => setChecking(false));
+  };
+
+  return (
+    <div className="settings-octo-check">
+      <button onClick={check} disabled={checking} className="settings-octo-btn">
+        {checking ? t("settings.printer.checking") : t("settings.printer.checkConnection")}
+      </button>
+      {result && (
+        <span className={`settings-octo-result ${result.ok ? "ok" : "err"}`}>
+          {result.ok
+            ? t("settings.printer.checkOk", { version: result.version ?? "?" })
+            : (result.error ?? t("settings.printer.checkFail"))}
+        </span>
+      )}
+    </div>
   );
 }

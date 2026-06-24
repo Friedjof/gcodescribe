@@ -63,6 +63,25 @@ def serial_probe(req: SerialProbeRequest) -> dict:
     return probe(req.device)
 
 
+@router.get("/printer/octoprint/check")
+def octoprint_check() -> dict:
+    """Probe OctoPrint reachability with the currently saved settings."""
+    from ...config import load_settings
+    from ...printer.octoprint import OctoPrintClient, OctoPrintError
+    from ...services.settings_store import load_saved
+
+    cfg = load_settings(load_saved()).printer
+    client = OctoPrintClient(base_url=cfg.octoprint_url, api_key=cfg.octoprint_api_key)
+    if not client.configured:
+        return {"ok": False, "error": "OctoPrint nicht konfiguriert (URL oder API-Schlüssel fehlt)."}
+    try:
+        resp = client._request("GET", "/api/version")
+        data = resp.json()
+        return {"ok": True, "version": data.get("server", "?"), "api": data.get("api", "?")}
+    except OctoPrintError as exc:
+        return {"ok": False, "error": str(exc)}
+
+
 class BackendSelect(BaseModel):
     id: str  # octoprint | serial
 
