@@ -1,7 +1,11 @@
-.PHONY: dev dev-plain build setup install bundle flatpak clean redis redis-stop
+.PHONY: dev dev-plain build setup install bundle flatpak clean redis redis-stop \
+        pkg-image deb rpm appimage packages
 
 -include .env
 export
+
+VERSION := $(shell grep '^version' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+PKG_IMAGE := gcodescribe-packager
 
 PLOTTER_DATA_DIR ?= data
 PLOTTER_PORT     ?= 8010
@@ -54,5 +58,30 @@ dev:
 dev-plain:
 	@bash scripts/dev.sh
 
+# ── Package targets (Docker-based, reproducible) ─────────────────────────────
+
+# Build the packaging container once; subsequent calls hit the layer cache.
+pkg-image:
+	docker build -t $(PKG_IMAGE) -f packaging/Dockerfile.pkg .
+
+# Build a .deb inside the container and drop it in the project root.
+deb: pkg-image
+	docker run --rm -v "$(CURDIR):/src" -w /src $(PKG_IMAGE) \
+		bash scripts/build-pkg.sh deb $(VERSION)
+
+# Build a .rpm inside the container and drop it in the project root.
+rpm: pkg-image
+	docker run --rm -v "$(CURDIR):/src" -w /src $(PKG_IMAGE) \
+		bash scripts/build-pkg.sh rpm $(VERSION)
+
+# Build an AppImage inside the container and drop it in the project root.
+appimage: pkg-image
+	docker run --rm -v "$(CURDIR):/src" -w /src $(PKG_IMAGE) \
+		bash scripts/build-pkg.sh appimage $(VERSION)
+
+# Build all three formats in sequence.
+packages: deb rpm appimage
+
 clean:
-	rm -rf frontend/node_modules plotter/web/static data
+	rm -rf frontend/node_modules plotter/web/static data staging AppDir \
+		appimagetool-x86_64.AppImage *.deb *.rpm GCodeScribe-*.AppImage

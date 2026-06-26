@@ -151,74 +151,11 @@ jobs:
           echo "ver=$(python3.12 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")" \
             >> "$GITHUB_OUTPUT"
 
-      - name: Prepare staging directory
+      - name: Build deb / rpm / AppImage
         run: |
-          # plotter/web/static/ is already populated by the vite build step above
-          STAGING="$PWD/staging"
-          VENV="$STAGING/usr/lib/gcodescribe"
-
-          python3.12 -m venv "$VENV"
-          "$VENV/bin/pip" install --quiet .
-
-          mkdir -p "$STAGING/usr/bin"
-          for cmd in gcodescribe gcodescribe-web gcodescribe-desktop; do
-            printf '#!/bin/sh\nexec /usr/lib/gcodescribe/bin/%s "$@"\n' "$cmd" \
-              > "$STAGING/usr/bin/$cmd"
-            chmod +x "$STAGING/usr/bin/$cmd"
-          done
-
-          install -Dm644 packaging/flatpak/info.noweck.gcodescribe.desktop \
-            "$STAGING/usr/share/applications/info.noweck.gcodescribe.desktop"
-          install -Dm644 packaging/flatpak/info.noweck.gcodescribe.svg \
-            "$STAGING/usr/share/icons/hicolor/scalable/apps/info.noweck.gcodescribe.svg"
-          install -Dm644 packaging/flatpak/info.noweck.gcodescribe.metainfo.xml \
-            "$STAGING/usr/share/metainfo/info.noweck.gcodescribe.metainfo.xml"
-
-      - name: Build .deb
-        run: |
-          fpm -s dir -t deb \
-            -n gcodescribe \
-            --version "${{ steps.ver.outputs.ver }}" \
-            --description "GCodeScribe — convert documents into pen-plotter G-code" \
-            --url "https://github.com/${{ github.repository }}" \
-            --maintainer "Friedjof Noweck <claude@noweck.info>" \
-            --license MIT \
-            --depends libgtk-4-1 \
-            --depends libwebkit2gtk-4.1-0 \
-            --depends python3.12 \
-            -C staging usr/
-
-      - name: Build .rpm
-        run: |
-          fpm -s dir -t rpm \
-            -n gcodescribe \
-            --version "${{ steps.ver.outputs.ver }}" \
-            --description "GCodeScribe — convert documents into pen-plotter G-code" \
-            --url "https://github.com/${{ github.repository }}" \
-            --maintainer "Friedjof Noweck <claude@noweck.info>" \
-            --license MIT \
-            --depends gtk4 \
-            --depends webkitgtk6.0 \
-            --depends python3.12 \
-            -C staging usr/
-
-      - name: Build AppImage
-        run: |
-          wget -q \
-            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
-          chmod +x appimagetool-x86_64.AppImage
-
-          cp -a staging/. AppDir/
-          cp packaging/flatpak/info.noweck.gcodescribe.desktop AppDir/gcodescribe.desktop
-          cp packaging/flatpak/info.noweck.gcodescribe.svg AppDir/gcodescribe.svg
-
-          printf '#!/bin/sh\nexec "$APPDIR/usr/lib/gcodescribe/bin/gcodescribe-desktop" "$@"\n' \
-            > AppDir/AppRun
-          chmod +x AppDir/AppRun
-
-          ARCH=x86_64 VERSION="${{ steps.ver.outputs.ver }}" \
-            ./appimagetool-x86_64.AppImage --appimage-extract-and-run AppDir \
-            "GCodeScribe-${{ steps.ver.outputs.ver }}-x86_64.AppImage"
+          bash scripts/build-pkg.sh deb      "${{ steps.ver.outputs.ver }}"
+          bash scripts/build-pkg.sh rpm      "${{ steps.ver.outputs.ver }}"
+          bash scripts/build-pkg.sh appimage "${{ steps.ver.outputs.ver }}"
 
       - name: Upload packages to release
         env:

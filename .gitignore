@@ -32,6 +32,14 @@ data/
 .env.*
 !.env.example
 
+# Package build artefacts (deb/rpm/appimage)
+staging/
+AppDir/
+appimagetool-x86_64.AppImage
+*.deb
+*.rpm
+GCodeScribe-*.AppImage
+
 # Flatpak build artefacts
 .flatpak-build/
 .flatpak-builder/
