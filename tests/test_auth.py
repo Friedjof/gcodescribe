@@ -102,6 +102,7 @@ class TestAuthLogin:
         assert again.status_code == 401
 
     def test_gallery_upload_stays_public(self, workspace, cal, monkeypatch):
+        monkeypatch.setenv("GALLERY_UPLOAD_ENABLED", "1")
         c = client(workspace, monkeypatch)
         svg = (
             b'<svg xmlns="http://www.w3.org/2000/svg" width="10mm" height="10mm">'
