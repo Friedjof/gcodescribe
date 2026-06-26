@@ -112,6 +112,123 @@ jobs:
             "GCodeScribe-${GITHUB_REF_NAME}.flatpak" \
             --clobber
 
+  # Build deb, rpm and AppImage and attach them to the GitHub release.
+  package:
+    name: Build & upload packages
+    needs: release
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: System dependencies
+        run: |
+          sudo add-apt-repository -y ppa:deadsnakes/ppa
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            python3.12 python3.12-venv python3.12-dev \
+            ruby ruby-dev rubygems build-essential rpm \
+            libfuse2
+          sudo gem install fpm --no-document
+
+      - name: Read version
+        id: ver
+        run: |
+          echo "ver=$(python3.12 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")" \
+            >> "$GITHUB_OUTPUT"
+
+      - name: Prepare staging directory
+        run: |
+          mkdir -p plotter/web/static
+          cp -r frontend/dist/. plotter/web/static/
+
+          STAGING="$PWD/staging"
+          VENV="$STAGING/usr/lib/gcodescribe"
+
+          python3.12 -m venv "$VENV"
+          "$VENV/bin/pip" install --quiet .
+
+          mkdir -p "$STAGING/usr/bin"
+          for cmd in gcodescribe gcodescribe-web gcodescribe-desktop; do
+            printf '#!/bin/sh\nexec /usr/lib/gcodescribe/bin/%s "$@"\n' "$cmd" \
+              > "$STAGING/usr/bin/$cmd"
+            chmod +x "$STAGING/usr/bin/$cmd"
+          done
+
+          install -Dm644 packaging/flatpak/info.noweck.gcodescribe.desktop \
+            "$STAGING/usr/share/applications/info.noweck.gcodescribe.desktop"
+          install -Dm644 packaging/flatpak/info.noweck.gcodescribe.svg \
+            "$STAGING/usr/share/icons/hicolor/scalable/apps/info.noweck.gcodescribe.svg"
+          install -Dm644 packaging/flatpak/info.noweck.gcodescribe.metainfo.xml \
+            "$STAGING/usr/share/metainfo/info.noweck.gcodescribe.metainfo.xml"
+
+      - name: Build .deb
+        run: |
+          fpm -s dir -t deb \
+            -n gcodescribe \
+            --version "${{ steps.ver.outputs.ver }}" \
+            --description "GCodeScribe — convert documents into pen-plotter G-code" \
+            --url "https://github.com/${{ github.repository }}" \
+            --maintainer "Friedjof Noweck <claude@noweck.info>" \
+            --license MIT \
+            --depends libgtk-4-1 \
+            --depends libwebkit2gtk-4.1-0 \
+            --depends python3.12 \
+            -C staging usr/
+
+      - name: Build .rpm
+        run: |
+          fpm -s dir -t rpm \
+            -n gcodescribe \
+            --version "${{ steps.ver.outputs.ver }}" \
+            --description "GCodeScribe — convert documents into pen-plotter G-code" \
+            --url "https://github.com/${{ github.repository }}" \
+            --maintainer "Friedjof Noweck <claude@noweck.info>" \
+            --license MIT \
+            --depends gtk4 \
+            --depends webkitgtk6.0 \
+            --depends python3.12 \
+            -C staging usr/
+
+      - name: Build AppImage
+        run: |
+          wget -q \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+
+          cp -a staging/. AppDir/
+          cp packaging/flatpak/info.noweck.gcodescribe.desktop AppDir/gcodescribe.desktop
+          cp packaging/flatpak/info.noweck.gcodescribe.svg AppDir/gcodescribe.svg
+
+          printf '#!/bin/sh\nexec "$APPDIR/usr/lib/gcodescribe/bin/gcodescribe-desktop" "$@"\n' \
+            > AppDir/AppRun
+          chmod +x AppDir/AppRun
+
+          ARCH=x86_64 VERSION="${{ steps.ver.outputs.ver }}" \
+            ./appimagetool-x86_64.AppImage --appimage-extract-and-run AppDir \
+            "GCodeScribe-${{ steps.ver.outputs.ver }}-x86_64.AppImage"
+
+      - name: Upload packages to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${GITHUB_REF_NAME}" \
+            *.deb *.rpm "GCodeScribe-${{ steps.ver.outputs.ver }}-x86_64.AppImage" \
+            --clobber
+
   # Optional: build & publish the Docker image to GHCR. Delete this job if you
   # don't want to publish a container image on release.
   image:
