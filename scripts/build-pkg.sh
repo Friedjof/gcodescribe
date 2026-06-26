@@ -42,7 +42,7 @@ FPM_COMMON=(
   --version "$VERSION"
   --description "GCodeScribe — convert documents into pen-plotter G-code"
   --url "https://github.com/Friedjof/gcodescribe"
-  --maintainer "Friedjof Noweck <claude@noweck.info>"
+  --maintainer "Friedjof Noweck <dev@noweck.info>"
   --license MIT
   -C staging usr/
 )
@@ -72,7 +72,8 @@ case "$FORMAT" in
 
     cp -a staging/. AppDir/
     cp packaging/flatpak/info.noweck.gcodescribe.desktop AppDir/gcodescribe.desktop
-    cp packaging/flatpak/info.noweck.gcodescribe.svg AppDir/gcodescribe.svg
+    # Icon filename must match the Icon= field in the desktop file
+    cp packaging/flatpak/info.noweck.gcodescribe.svg AppDir/info.noweck.gcodescribe.svg
     printf '#!/bin/sh\nexec "$APPDIR/usr/lib/gcodescribe/bin/gcodescribe-desktop" "$@"\n' \
       > AppDir/AppRun
     chmod +x AppDir/AppRun
