@@ -11,6 +11,9 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   # ── Stage 1: Checks ───────────────────────────────────────────────────────
   backend:
@@ -57,7 +60,7 @@ jobs:
         working-directory: frontend
         run: npm run build
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: web-out
           path: plotter/web/static/
@@ -71,7 +74,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: web-out
           path: plotter/web/static/
@@ -164,19 +167,19 @@ jobs:
             ./appimagetool-x86_64.AppImage --appimage-extract-and-run AppDir \
             "GCodeScribe-${{ steps.ver.outputs.ver }}-x86_64.AppImage"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: pkg-deb
           path: "*.deb"
           retention-days: 7
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: pkg-rpm
           path: "*.rpm"
           retention-days: 7
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: pkg-appimage
           path: "GCodeScribe-*.AppImage"
