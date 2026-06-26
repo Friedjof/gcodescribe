@@ -60,7 +60,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: web-out
-          path: frontend/dist/
+          path: plotter/web/static/
           retention-days: 7
 
   # ── Stage 2: Package ──────────────────────────────────────────────────────
@@ -74,7 +74,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: web-out
-          path: frontend/dist/
+          path: plotter/web/static/
 
       - name: System dependencies
         run: |
@@ -94,10 +94,7 @@ jobs:
 
       - name: Prepare staging directory
         run: |
-          # Embed pre-built frontend so pip install bundles it into the package
-          mkdir -p plotter/web/static
-          cp -r frontend/dist/. plotter/web/static/
-
+          # plotter/web/static/ is already populated by the download-artifact step
           STAGING="$PWD/staging"
           VENV="$STAGING/usr/lib/gcodescribe"
 

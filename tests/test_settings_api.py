@@ -21,7 +21,7 @@ def test_settings_returns_200(client):
 
 def test_settings_has_all_sections(client):
     d = client.get("/api/settings").json()
-    assert set(d.keys()) == {"printer", "ai", "storage", "auth", "server"}
+    assert set(d.keys()) == {"printer", "ai", "storage", "auth", "server", "gallery"}
 
 
 def test_settings_no_raw_secrets(client, monkeypatch):
@@ -74,7 +74,7 @@ def test_effective_has_sources_key(client):
 
 def test_effective_sources_has_all_sections(client):
     d = client.get("/api/settings/effective").json()
-    assert set(d["sources"].keys()) == {"printer", "ai", "storage", "auth", "server"}
+    assert set(d["sources"].keys()) == {"printer", "ai", "storage", "auth", "server", "gallery"}
 
 
 def test_effective_sources_all_default_on_clean_env(client, monkeypatch):

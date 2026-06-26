@@ -133,6 +133,7 @@ jobs:
       - name: Build frontend
         working-directory: frontend
         run: npm run build
+        # vite outputs to ../plotter/web/static (see vite.config.ts outDir)
 
       - name: System dependencies
         run: |
@@ -152,9 +153,7 @@ jobs:
 
       - name: Prepare staging directory
         run: |
-          mkdir -p plotter/web/static
-          cp -r frontend/dist/. plotter/web/static/
-
+          # plotter/web/static/ is already populated by the vite build step above
           STAGING="$PWD/staging"
           VENV="$STAGING/usr/lib/gcodescribe"
 

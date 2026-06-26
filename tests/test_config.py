@@ -247,7 +247,7 @@ def test_redact_contains_all_expected_sections(monkeypatch):
     _clean_env(monkeypatch)
     cfg = load_settings()
     d = cfg.redact()
-    assert set(d.keys()) == {"printer", "ai", "storage", "auth", "server"}
+    assert set(d.keys()) == {"printer", "ai", "storage", "auth", "server", "gallery"}
 
 
 # ── source tracking ───────────────────────────────────────────────────────────
@@ -256,7 +256,7 @@ def test_redact_contains_all_expected_sections(monkeypatch):
 def test_sources_all_default_when_env_clean(monkeypatch):
     _clean_env(monkeypatch)
     _, sources = load_settings_with_sources()
-    for section in ("printer", "ai", "storage", "auth", "server"):
+    for section in ("printer", "ai", "storage", "auth", "server", "gallery"):
         for key, src in sources[section].items():
             assert src == "default", f"{section}.{key} expected default, got {src}"
 
