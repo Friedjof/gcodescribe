@@ -24,12 +24,22 @@ printf '▶ Installing into staging venv…\n'
 python3.12 -m venv "$VENV"
 "$VENV/bin/pip" install --quiet .
 
+# Launcher wrappers invoke the venv's python *binary* directly rather than the
+# generated console scripts: a venv is not relocatable, so those scripts bake
+# the build-time path into their shebang (#!/src/staging/...) and break once the
+# tree is installed elsewhere. The python binary is a symlink with no baked path,
+# and venv site-packages are resolved relative to the interpreter at runtime.
 mkdir -p "$STAGING/usr/bin"
-for cmd in gcodescribe gcodescribe-web gcodescribe-desktop; do
-  printf '#!/bin/sh\nexec /usr/lib/gcodescribe/bin/%s "$@"\n' "$cmd" \
-    > "$STAGING/usr/bin/$cmd"
-  chmod +x "$STAGING/usr/bin/$cmd"
-done
+emit_wrapper() {  # $1 = command name, $2 = module providing main()
+  cat > "$STAGING/usr/bin/$1" <<EOF
+#!/bin/sh
+exec /usr/lib/gcodescribe/bin/python3 -c "from $2 import main; main()" "\$@"
+EOF
+  chmod +x "$STAGING/usr/bin/$1"
+}
+emit_wrapper gcodescribe         plotter.cli
+emit_wrapper gcodescribe-web     plotter.web.server
+emit_wrapper gcodescribe-desktop plotter.desktop.app
 
 install -Dm644 packaging/flatpak/info.noweck.gcodescribe.desktop \
   "$STAGING/usr/share/applications/info.noweck.gcodescribe.desktop"
@@ -76,8 +86,14 @@ case "$FORMAT" in
     cp packaging/flatpak/info.noweck.gcodescribe.desktop AppDir/gcodescribe.desktop
     # Icon filename must match the Icon= field in the desktop file
     cp packaging/flatpak/info.noweck.gcodescribe.svg AppDir/info.noweck.gcodescribe.svg
-    printf '#!/bin/sh\nexec "$APPDIR/usr/lib/gcodescribe/bin/gcodescribe-desktop" "$@"\n' \
-      > AppDir/AppRun
+    # Resolve our own location: $APPDIR is set by the AppImage runtime, but fall
+    # back to the script dir so `./AppDir/AppRun` also works when run unpacked.
+    cat > AppDir/AppRun <<'EOF'
+#!/bin/sh
+HERE="${APPDIR:-$(dirname "$(readlink -f "$0")")}"
+exec "$HERE/usr/lib/gcodescribe/bin/python3" \
+  -c "from plotter.desktop.app import main; main()" "$@"
+EOF
     chmod +x AppDir/AppRun
 
     ARCH=x86_64 VERSION="$VERSION" \
