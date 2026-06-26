@@ -14,7 +14,8 @@ if [ ! -f plotter/web/static/index.html ]; then
   (cd frontend && npm ci --silent && npm run build)
 fi
 
-rm -rf staging AppDir appimagetool-x86_64.AppImage
+rm -rf staging AppDir appimagetool-x86_64.AppImage \
+  "GCodeScribe-${VERSION}-x86_64.AppImage"
 
 STAGING="$(pwd)/staging"
 VENV="$STAGING/usr/lib/gcodescribe"
@@ -38,6 +39,7 @@ install -Dm644 packaging/flatpak/info.noweck.gcodescribe.metainfo.xml \
   "$STAGING/usr/share/metainfo/info.noweck.gcodescribe.metainfo.xml"
 
 FPM_COMMON=(
+  -f                # overwrite an existing output package instead of aborting
   -n gcodescribe
   --version "$VERSION"
   --description "GCodeScribe — convert documents into pen-plotter G-code"
