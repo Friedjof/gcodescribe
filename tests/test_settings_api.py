@@ -153,7 +153,10 @@ def test_patch_settings_survives_re_read(client):
 
 
 def test_patch_settings_ignores_computed_flags(client):
-    r = client.patch("/api/settings", json={"settings": {"ai.enabled": True, "ai.api_key_configured": True}})
+    r = client.patch(
+        "/api/settings",
+        json={"settings": {"ai.enabled": True, "ai.api_key_configured": True}},
+    )
     assert r.status_code == 200
     d = client.get("/api/settings/effective").json()
     # ai.enabled must remain false (no real key set)

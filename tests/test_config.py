@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import pytest
-
 from plotter.config import load_settings, load_settings_with_sources
-
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 

@@ -25,7 +25,7 @@ gi.require_version("Gdk", "4.0")
 gi.require_version("Gtk", "4.0")
 gi.require_version("WebKit", "6.0")
 
-from gi.repository import Gdk, GLib, Gio, Gtk, WebKit  # noqa: E402
+from gi.repository import Gdk, Gio, GLib, Gtk, WebKit  # noqa: E402
 
 log = logging.getLogger(__name__)
 
@@ -166,7 +166,7 @@ _LOADING_HTML = """\
 
 
 class MainWindow(Gtk.ApplicationWindow):
-    def __init__(self, application: "App") -> None:
+    def __init__(self, application: App) -> None:
         super().__init__(application=application, title="GCodeScribe")
         self.set_default_size(1400, 900)
 
@@ -311,7 +311,7 @@ class App(Gtk.Application):
         else:
             crashed = self._backend is not None and self._backend.poll() is not None
             msg = (
-                "Backend abgestürzt (Exitcode %d)." % self._backend.returncode
+                f"Backend abgestürzt (Exitcode {self._backend.returncode})."
                 if crashed
                 else f"Backend nicht erreichbar nach {BACKEND_TIMEOUT:.0f} s."
             )

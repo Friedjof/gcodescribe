@@ -73,7 +73,10 @@ def octoprint_check() -> dict:
     cfg = load_settings(load_saved()).printer
     client = OctoPrintClient(base_url=cfg.octoprint_url, api_key=cfg.octoprint_api_key)
     if not client.configured:
-        return {"ok": False, "error": "OctoPrint nicht konfiguriert (URL oder API-Schlüssel fehlt)."}
+        return {
+            "ok": False,
+            "error": "OctoPrint nicht konfiguriert (URL oder API-Schlüssel fehlt).",
+        }
     try:
         resp = client._request("GET", "/api/version")
         data = resp.json()

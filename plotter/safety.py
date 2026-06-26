@@ -16,7 +16,7 @@ def _seg_intersects_obs(a: tuple[float, float], b: tuple[float, float], obs: dic
     p = (-dx, dx, -dy, dy)
     q = (a[0] - x0, x1 - a[0], a[1] - y0, y1 - a[1])
     t0, t1 = 0.0, 1.0
-    for pi, qi in zip(p, q):
+    for pi, qi in zip(p, q, strict=False):
         if abs(pi) < 1e-9:
             if qi < 0:
                 return False

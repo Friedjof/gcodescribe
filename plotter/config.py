@@ -10,46 +10,46 @@ _TRUE = {"1", "true", "yes", "on"}
 
 # ── built-in defaults ────────────────────────────────────────────────────────
 
-_PRINTER_DEFAULTS: dict = dict(
-    octoprint_url="",
-    octoprint_api_key="",
-    octoprint_verify_ssl=True,
-    serial_enabled=False,
-    serial_port="/dev/ttyUSB0",
-    serial_baud=115200,
-    default_backend="",
-)
+_PRINTER_DEFAULTS: dict = {
+    "octoprint_url": "",
+    "octoprint_api_key": "",
+    "octoprint_verify_ssl": True,
+    "serial_enabled": False,
+    "serial_port": "/dev/ttyUSB0",
+    "serial_baud": 115200,
+    "default_backend": "",
+}
 
-_AI_DEFAULTS: dict = dict(
-    fake=False,
-    api_key="",
-    model="gpt-image-2",
-    api_mode="image-api",
-    size="1024x1024",
-    quality="auto",
-    max_input_mb=10,
-    timeout_seconds=90,
-)
+_AI_DEFAULTS: dict = {
+    "fake": False,
+    "api_key": "",
+    "model": "gpt-image-2",
+    "api_mode": "image-api",
+    "size": "1024x1024",
+    "quality": "auto",
+    "max_input_mb": 10,
+    "timeout_seconds": 90,
+}
 
-_STORAGE_DEFAULTS: dict = dict(
-    data_dir="data",
-)
+_STORAGE_DEFAULTS: dict = {
+    "data_dir": "data",
+}
 
-_AUTH_DEFAULTS: dict = dict(
-    session_ttl=14 * 24 * 60 * 60,
-    cookie_secure=False,
-)
+_AUTH_DEFAULTS: dict = {
+    "session_ttl": 14 * 24 * 60 * 60,
+    "cookie_secure": False,
+}
 
-_SERVER_DEFAULTS: dict = dict(
-    host="0.0.0.0",
-    port=8000,
-    redis_url="redis://localhost:6379/0",
-)
+_SERVER_DEFAULTS: dict = {
+    "host": "0.0.0.0",
+    "port": 8000,
+    "redis_url": "redis://localhost:6379/0",
+}
 
-_GALLERY_DEFAULTS: dict = dict(
-    upload_enabled=False,
-    upload_secret="",
-)
+_GALLERY_DEFAULTS: dict = {
+    "upload_enabled": False,
+    "upload_secret": "",
+}
 
 
 # ── typed settings models ────────────────────────────────────────────────────

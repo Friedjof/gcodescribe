@@ -28,7 +28,7 @@ def seg_intersects_obs(a: Point, b: Point, obs: dict, margin: float = 0.0) -> bo
     p = (-dx, dx, -dy, dy)
     q = (a[0] - x0, x1 - a[0], a[1] - y0, y1 - a[1])
     t0, t1 = 0.0, 1.0
-    for pi, qi in zip(p, q):
+    for pi, qi in zip(p, q, strict=False):
         if abs(pi) < 1e-9:
             if qi < 0:
                 return False  # parallel and outside this boundary
