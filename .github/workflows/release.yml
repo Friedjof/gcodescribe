@@ -110,7 +110,7 @@ jobs:
         run: |
           gh release upload "${GITHUB_REF_NAME}" \
             "GCodeScribe-${GITHUB_REF_NAME}.flatpak" \
-            --clobber
+            --repo "${GITHUB_REPOSITORY}" --clobber
 
   # Build deb, rpm and AppImage and attach them to the GitHub release.
   package:
@@ -163,7 +163,7 @@ jobs:
         run: |
           gh release upload "${GITHUB_REF_NAME}" \
             *.deb *.rpm "GCodeScribe-${{ steps.ver.outputs.ver }}-x86_64.AppImage" \
-            --clobber
+            --repo "${GITHUB_REPOSITORY}" --clobber
 
   # Optional: build & publish the Docker image to GHCR. Delete this job if you
   # don't want to publish a container image on release.
