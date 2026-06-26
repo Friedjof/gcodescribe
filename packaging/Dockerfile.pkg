@@ -12,7 +12,7 @@ RUN apt-get update \
         nodejs \
         python3.12 python3.12-venv python3.12-dev \
         ruby ruby-dev rubygems build-essential rpm \
-        libfuse2 wget \
+        libfuse2 wget file \
     && gem install fpm --no-document \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
