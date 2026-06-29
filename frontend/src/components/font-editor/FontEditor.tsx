@@ -499,7 +499,7 @@ export default function FontEditor({ visible }: { visible: boolean }) {
           onSaveAndContinue={saveGlyphAndContinue}
           canSave={canSaveGlyph}
         />
-      )}
+        )}
     </section>
   );
 }
