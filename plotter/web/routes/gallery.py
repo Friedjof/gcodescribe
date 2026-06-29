@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import json
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from ...config import load_settings
 from ...gcode_preview import parse_gcode, parse_gcode_3d_text
+from ...pipeline import PlotterError
+from ...services.errors import ServiceError
 from ...services.gallery import GalleryService
 from ...services.settings_store import load_saved
-from ...services.upload_validation import MAX_UPLOAD_BYTES
+from ...services.upload_validation import MAX_STL_BYTES, MAX_UPLOAD_BYTES
 from ..auth import optional_admin, require_admin
 
 router = APIRouter(tags=["gallery"])
@@ -66,6 +70,39 @@ async def create_submission(
     return service().create(
         file.filename, data, title=title, uploader=uploader, mode=mode, detail=detail
     )
+
+
+def _parse_stl_payload(params: str, layers: str) -> tuple[dict, list[dict]]:
+    try:
+        params_obj = json.loads(params or "{}")
+        layers_obj = json.loads(layers or "[]")
+    except json.JSONDecodeError as exc:
+        raise HTTPException(400, "Ungültige STL-Parameter.") from exc
+    if not isinstance(params_obj, dict) or not isinstance(layers_obj, list):
+        raise HTTPException(400, "Ungültige STL-Parameter.")
+    if not layers_obj:
+        raise HTTPException(422, "Keine Linien-Layer übergeben.")
+    return params_obj, layers_obj
+
+
+@router.post("/gallery/stl")
+async def create_stl_asset(
+    file: UploadFile = File(...),
+    params: str = Form("{}"),
+    layers: str = Form("[]"),
+    title: str = Form(""),
+    _: dict = Depends(require_admin),
+) -> dict:
+    if not file.filename:
+        raise HTTPException(400, "Dateiname fehlt")
+    params_obj, layers_obj = _parse_stl_payload(params, layers)
+    data = await file.read(MAX_STL_BYTES + 1)
+    try:
+        return service().create_stl(file.filename, data, layers_obj, params_obj, title=title)
+    except ServiceError as exc:
+        raise HTTPException(getattr(exc, "status_code", 400), str(exc)) from exc
+    except PlotterError as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 @router.get("/gallery")
@@ -137,6 +174,7 @@ class TitleRequest(BaseModel):
 class RenderRequest(BaseModel):
     mode: str = "auto"
     detail: int = 2
+    continuous: bool = True
 
 
 @router.patch("/gallery/{item_id}/title")
@@ -146,7 +184,33 @@ def set_submission_title(item_id: str, req: TitleRequest, _: dict = Depends(requ
 
 @router.post("/gallery/{item_id}/render")
 def render_submission(item_id: str, req: RenderRequest, _: dict = Depends(require_admin)) -> dict:
-    return service().rerender(item_id, mode=req.mode, detail=req.detail)
+    return service().rerender(
+        item_id, mode=req.mode, detail=req.detail, continuous=req.continuous
+    )
+
+
+@router.get("/gallery/{item_id}/stl-params")
+def stl_params(item_id: str, _: dict = Depends(require_admin)) -> dict:
+    try:
+        return service().stl_params(item_id)
+    except ServiceError as exc:
+        raise HTTPException(getattr(exc, "status_code", 404), str(exc)) from exc
+
+
+@router.post("/gallery/{item_id}/stl")
+def update_stl_asset(
+    item_id: str,
+    params: str = Form("{}"),
+    layers: str = Form("[]"),
+    _: dict = Depends(require_admin),
+) -> dict:
+    params_obj, layers_obj = _parse_stl_payload(params, layers)
+    try:
+        return service().update_stl(item_id, layers_obj, params_obj)
+    except ServiceError as exc:
+        raise HTTPException(getattr(exc, "status_code", 400), str(exc)) from exc
+    except PlotterError as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 @router.post("/gallery/{item_id}/archive")

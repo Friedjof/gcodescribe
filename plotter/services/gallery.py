@@ -27,8 +27,10 @@ from .errors import ServiceError
 from .profiles import ProfileService, profile_meta
 from .upload_validation import (
     MAX_GCODE_BYTES,
+    MAX_STL_BYTES,
     MAX_UPLOAD_BYTES,
     UploadTooLarge,
+    check_stl,
     sniff_asset_kind,
     sniff_kind,
 )
@@ -48,6 +50,7 @@ _ORIGINAL_MIME = {
     "pdf": "application/pdf",
     "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "stl": "model/stl",
 }
 
 
@@ -135,6 +138,7 @@ class GalleryService:
             "status": "active",
             "mode": mode_used,
             "detail": detail,
+            "continuous": True,
             "pages": pages,
             "width": first["width"],
             "height": first["height"],
@@ -185,6 +189,7 @@ class GalleryService:
             "status": "active",
             "mode": "vector" if kind == "svg" else "trace",
             "detail": 2,
+            "continuous": True,
             "pages": [
                 {"n": 1, "file": _SVG_FILE, "width": width, "height": height, "lines": lines}
             ],
@@ -196,7 +201,123 @@ class GalleryService:
             **evaluate_gcode(gcode, MAX_GCODE_BYTES),
         }
 
-    def rerender(self, item_id: str, *, mode: str, detail: int) -> dict:
+    # -- STL assets (client-rendered, server-stored) ---------------------------
+
+    def create_stl(
+        self,
+        filename: str,
+        stl_bytes: bytes,
+        layers: list[dict],
+        params: dict,
+        title: str = "",
+    ) -> dict:
+        """Store an STL plus its client-rendered colour layers.
+
+        The 3D→2D projection happens in the browser; here we persist the source
+        ``.stl`` (so it can be re-opened and re-rendered with a new orientation)
+        and one SVG page per pen colour, then build the usual previews.
+        """
+        if len(stl_bytes) > MAX_STL_BYTES:
+            raise UploadTooLarge(
+                f"STL zu groß — maximal {MAX_STL_BYTES // (1024 * 1024)} MB."
+            )
+        name = Path(filename).name
+        check_stl(name, stl_bytes)
+        title = title.strip()[:MAX_TITLE_LEN]
+        item_id = uuid.uuid4().hex[:12]
+        item_dir = self.root / item_id
+        item_dir.mkdir(parents=True)
+        try:
+            original = item_dir / "original.stl"
+            original.write_bytes(stl_bytes)
+            pages = self._write_stl_layers(item_dir, layers)
+            (item_dir / "params.json").write_text(json.dumps(params))
+            meta = {
+                "id": item_id,
+                "title": title,
+                "filename": name,
+                "kind": "stl",
+                "uploader": "admin",
+                "created": time.time(),
+                "status": "active",
+                "mode": "stl",
+                "detail": 2,
+                "continuous": True,
+                "pages": pages,
+                "width": max(p["width"] for p in pages),
+                "height": max(p["height"] for p in pages),
+                "lines": sum(p["lines"] for p in pages),
+                "stl_params": params,
+                "original": self._original_meta(name, "original.stl", "stl", len(stl_bytes)),
+            }
+        except Exception:
+            shutil.rmtree(item_dir, ignore_errors=True)
+            raise
+        (item_dir / "meta.json").write_text(json.dumps(meta, indent=2))
+        return meta
+
+    def update_stl(self, item_id: str, layers: list[dict], params: dict) -> dict:
+        """Replace an STL item's colour layers + params; the original .stl stays."""
+        meta = self.get(item_id)
+        if meta.get("kind") != "stl":
+            raise ServiceError("Eintrag ist kein STL-Modell.")
+        item_dir = self.root / item_id
+        with tempfile.TemporaryDirectory(prefix=f"gallery-stl-{item_id}-") as tmp_raw:
+            tmp = Path(tmp_raw)
+            pages = self._write_stl_layers(tmp, layers)  # validate everything first
+            self._clear_derived(item_dir)
+            for page in pages:
+                shutil.copy(tmp / page["file"], item_dir / page["file"])
+        (item_dir / "params.json").write_text(json.dumps(params))
+        meta.update(
+            {
+                "pages": pages,
+                "width": max(p["width"] for p in pages),
+                "height": max(p["height"] for p in pages),
+                "lines": sum(p["lines"] for p in pages),
+                "stl_params": params,
+            }
+        )
+        (item_dir / "meta.json").write_text(json.dumps(meta, indent=2))
+        return meta
+
+    def stl_params(self, item_id: str) -> dict:
+        meta = self.get(item_id)
+        if meta.get("kind") != "stl":
+            raise ServiceError("Eintrag ist kein STL-Modell.")
+        return meta.get("stl_params") or {}
+
+    def _write_stl_layers(self, dst_dir: Path, layers: list[dict]) -> list[dict]:
+        """Write each colour layer as page-NNNN.svg; return page metadata."""
+        pages: list[dict] = []
+        order = 0
+        for layer in sorted(layers, key=lambda d: d.get("order", 0)):
+            svg_text = layer.get("svg") or ""
+            svg_bytes = svg_text.encode("utf-8")
+            sniff_kind("layer.svg", svg_bytes)  # defence-in-depth content check
+            order += 1
+            file = f"page-{order:04d}.svg"
+            (dst_dir / file).write_bytes(svg_bytes)
+            drawing = load_svg_drawing(dst_dir / file, quantization_mm=0.25)
+            if drawing.is_empty():
+                continue
+            pages.append({
+                "n": order,
+                "file": file,
+                "width": round(drawing.width, 3),
+                "height": round(drawing.height, 3),
+                "lines": len(drawing.polylines),
+                "color": layer.get("color", "black"),
+                "role": layer.get("role", "visible"),
+                "order": order,
+            })
+        if not pages:
+            raise PlotterError("Das STL-Rendering enthält keine plottbaren Linien.")
+        return pages
+
+    def rerender(
+        self, item_id: str, *, mode: str, detail: int, continuous: bool = True
+    ) -> dict:
         """Rebuild derived pages/previews from the stored original, in-place.
 
         The original file and stable item identity are preserved. All derived
@@ -220,9 +341,13 @@ class GalleryService:
                 shutil.copy(original, source)
             pages, mode_used = build_pages(source, tmp, suffix, mode, detail)
             if meta.get("uploader") == "admin":
-                updated = self._rerender_asset(meta, item_dir, tmp, pages, mode_used, detail)
+                updated = self._rerender_asset(
+                    meta, item_dir, tmp, pages, mode_used, detail, continuous
+                )
             else:
-                updated = self._rerender_submission(meta, item_dir, tmp, pages, mode_used, detail)
+                updated = self._rerender_submission(
+                    meta, item_dir, tmp, pages, mode_used, detail, continuous
+                )
         updated["original"] = {**original_info, "size": original.stat().st_size}
         (item_dir / "meta.json").write_text(json.dumps(updated, indent=2))
         return updated
@@ -235,6 +360,7 @@ class GalleryService:
         pages: list[dict],
         mode: str,
         detail: int,
+        continuous: bool = True,
     ) -> dict:
         self._clear_derived(item_dir)
         for page in pages:
@@ -251,6 +377,7 @@ class GalleryService:
             {
                 "mode": mode,
                 "detail": detail,
+                "continuous": continuous,
                 "pages": pages,
                 "width": first["width"],
                 "height": first["height"],
@@ -267,6 +394,7 @@ class GalleryService:
         pages: list[dict],
         mode: str,
         detail: int,
+        continuous: bool = True,
     ) -> dict:
         page = pages[0]
         rendered = tmp / page["file"]
@@ -278,7 +406,7 @@ class GalleryService:
         active_meta = profile_meta(profile)
         cal = Calibration().merged(profile["calibration"])
         gcode = profile_comment(active_meta) + self._fitted_gcode(
-            drawing, cal, name=meta.get("filename") or meta["id"]
+            drawing, cal, name=meta.get("filename") or meta["id"], continuous=continuous
         )
         if len(gcode.encode()) > MAX_GCODE_BYTES:
             raise UploadTooLarge(
@@ -298,6 +426,7 @@ class GalleryService:
             {
                 "mode": mode,
                 "detail": detail,
+                "continuous": continuous,
                 "pages": [
                     {"n": 1, "file": _SVG_FILE, "width": width, "height": height, "lines": lines}
                 ],
@@ -346,7 +475,9 @@ class GalleryService:
         }
 
     @staticmethod
-    def _fitted_gcode(drawing, cal: Calibration, *, name: str) -> str:
+    def _fitted_gcode(
+        drawing, cal: Calibration, *, name: str, continuous: bool = True
+    ) -> str:
         """G-code with the drawing scaled to fill the calibrated plot area."""
         bx0, by0, bx1, by1 = drawing.bounds()
         bw, bh = bx1 - bx0, by1 - by0
@@ -354,7 +485,8 @@ class GalleryService:
             raise PlotterError("Das Bild enthält keine plottbare Fläche.")
         scale = min(cal.plot_width / bw, cal.plot_height / bh)
         return placed_gcode(
-            drawing, cal, x=cal.origin_x, y=cal.origin_y, width=bw * scale, name=name
+            drawing, cal, x=cal.origin_x, y=cal.origin_y, width=bw * scale,
+            name=name, continuous=continuous,
         )
 
     # -- queries ---------------------------------------------------------------
@@ -401,6 +533,7 @@ class GalleryService:
             }]
         meta.setdefault("mode", "vector" if meta.get("kind") == "svg" else "trace")
         meta.setdefault("detail", 2)
+        meta.setdefault("continuous", True)
         meta.setdefault("original", GalleryService._legacy_original_meta(meta))
 
     @staticmethod

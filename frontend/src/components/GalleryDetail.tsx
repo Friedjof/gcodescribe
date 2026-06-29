@@ -1,8 +1,12 @@
 import { useEffect, useState } from "react";
-import { api, type GalleryItem, type GalleryPreview, type GcodePreview3D } from "../api";
+import { api, type Calibration, type GalleryItem, type GalleryPreview, type GcodePreview3D } from "../api";
 import { fmtBytes, fmtDuration } from "../format";
 import { useI18n } from "../i18n";
 import { galleryItemObject } from "../paint/insertAsset";
+import { polylinesObject } from "../games/utils";
+import { parseStl, prepareMesh, resultToSvgLayers, type EdgeModel, type Mesh, type StlParams } from "../stl";
+import StlEditor from "./StlEditor";
+import StlView3D from "./StlView3D";
 import Gcode3D from "./Gcode3D";
 import type { Gcode3DView } from "./Gcode3D";
 import Gcode3DOverlay from "./Gcode3DOverlay";
@@ -51,23 +55,57 @@ export default function GalleryDetail({
   const [resetToken, setResetToken] = useState(0);
   const [renderMode, setRenderMode] = useState<RenderMode>((item.mode || "auto") as RenderMode);
   const [renderDetail, setRenderDetail] = useState(item.detail || 2);
+  const [renderContinuous, setRenderContinuous] = useState(item.continuous !== false);
   const [gcode3dView, setGcode3dView] = useState<Gcode3DView>({ yaw: -0.7, pitch: 1.0, zoom: 1, panX: 0, panY: 0 });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [stlEdit, setStlEdit] = useState<{ buf: ArrayBuffer; params?: StlParams; cal: Calibration } | null>(null);
+  const [stlSaving, setStlSaving] = useState(false);
+  const [stlSpin, setStlSpin] = useState<{ mesh: Mesh; model: EdgeModel } | null>(null);
   const { confirm, ConfirmNode } = useConfirm();
   const { prompt, PromptNode } = usePrompt();
 
   const fail = (e: any) => setErr(String(e.message ?? e));
 
+  const openStlEditor = () => {
+    if (busy) return;
+    setBusy(true);
+    setErr(null);
+    const url = api.galleryOriginalUrl(item.id);
+    Promise.all([api.getCalibration(), fetch(url).then((r) => r.arrayBuffer())])
+      .then(([cal, buf]) =>
+        setStlEdit({ buf, cal, params: (item.stl_params as unknown as StlParams) ?? undefined })
+      )
+      .catch(fail)
+      .finally(() => setBusy(false));
+  };
+
   useEffect(() => {
     setSvg(null);
     setGcode(null);
+    setStlSpin(null);
     setRenderMode((item.mode || "auto") as RenderMode);
     setRenderDetail(item.detail || 2);
+    setRenderContinuous(item.continuous !== false);
     // Page-1 preview works for every kind (single-image submissions and
     // multi-page admin assets alike); `/svg` only exists for image.svg items.
     api.galleryPreview(item.id, 1).then(setSvg).catch(fail);
-  }, [item.id, item.mode, item.detail, item.lines]);
+  }, [item.id, item.mode, item.detail, item.continuous, item.lines]);
+
+  // Load the original STL once, to show a slowly auto-rotating 3D preview.
+  useEffect(() => {
+    if (item.kind !== "stl" || view !== "original" || stlSpin) return;
+    let alive = true;
+    fetch(api.galleryOriginalUrl(item.id))
+      .then((r) => r.arrayBuffer())
+      .then((buf) => {
+        if (!alive) return;
+        const mesh = parseStl(buf);
+        if (mesh.triangles.length) setStlSpin({ mesh, model: prepareMesh(mesh) });
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [item.kind, item.id, view, stlSpin]);
 
   useEffect(() => {
     if (view === "3d" && !gcode) api.galleryGcode3D(item.id).then(setGcode).catch(fail);
@@ -126,7 +164,7 @@ export default function GalleryDetail({
     setBusy(true);
     setErr(null);
     api
-      .galleryRender(item.id, renderMode, renderDetail)
+      .galleryRender(item.id, renderMode, renderDetail, renderContinuous)
       .then(() => {
         setSvg(null);
         setGcode(null);
@@ -168,6 +206,7 @@ export default function GalleryDetail({
       paper_corners: {},
       paper_margin: 0,
       obstacles: [],
+      merge_tolerance: 0.5,
     };
     return {
       cal,
@@ -286,7 +325,27 @@ export default function GalleryDetail({
         <div className="gallery-detail">
           <div className="gallery-stage">
             {view === "original" ? (
-              originalUrl && item.original ? (
+              item.kind === "stl" ? (
+                stlSpin ? (
+                  <StlView3D
+                    mesh={stlSpin.mesh}
+                    model={stlSpin.model}
+                    azimuth={(item.stl_params?.azimuth as number) ?? Math.PI / 4}
+                    elevation={(item.stl_params?.elevation as number) ?? Math.PI / 6}
+                    fov={(item.stl_params?.fov as number) ?? (45 * Math.PI) / 180}
+                    up={((item.stl_params?.up as "z" | "y") ?? "z")}
+                    distanceFactor={(item.stl_params?.distanceFactor as number) ?? 2.6}
+                    featureAngleDeg={(item.stl_params?.featureAngleDeg as number) ?? 25}
+                    showTriangles={false}
+                    shading
+                    opacity={1}
+                    showBox={false}
+                    autoRotate
+                  />
+                ) : (
+                  <p className="muted">{t("common.loading")}</p>
+                )
+              ) : originalUrl && item.original ? (
                 <div className="gallery-original">
                   {originalPreviewable ? (
                     <img src={originalUrl} alt={item.original.filename} />
@@ -315,6 +374,14 @@ export default function GalleryDetail({
               <p className="muted">{t("common.loading")}</p>
             )}
           </div>
+          {item.kind === "stl" ? (
+            <div className="gallery-render-controls">
+              <span className="muted">{t("stl.title")}</span>
+              <button className="primary" disabled={busy || !item.original} onClick={openStlEditor}>
+                {t("stl.reedit")}
+              </button>
+            </div>
+          ) : (
           <div className="gallery-render-controls">
             <span className="muted">{t("gallery.renderMode")}</span>
             <Segmented<RenderMode>
@@ -342,10 +409,19 @@ export default function GalleryDetail({
                 ]}
               />
             )}
+            <Segmented<string>
+              value={renderContinuous ? "continuous" : "faithful"}
+              onChange={(v) => setRenderContinuous(v === "continuous")}
+              options={[
+                { value: "continuous", label: t("slice.continuous") },
+                { value: "faithful", label: t("slice.faithful") },
+              ]}
+            />
             <button className="primary" disabled={busy || !item.original} onClick={rerender}>
               {busy ? t("common.loading") : t("gallery.rerender")}
             </button>
           </div>
+          )}
           {m && item.score && (
             <dl className="gallery-metrics">
               <dt>{t("gallery.m.duration")}</dt>
@@ -373,6 +449,34 @@ export default function GalleryDetail({
       </Modal>
       {fullscreen && gcode && (
         <Gcode3DOverlay data={gcode} showTravels={showTravels} viewState={gcode3dView} onViewChange={setGcode3dView} onClose={() => setFullscreen(false)} />
+      )}
+      {stlEdit && (
+        <StlEditor
+          cal={stlEdit.cal}
+          saving={stlSaving}
+          initialStl={stlEdit.buf}
+          initialParams={stlEdit.params}
+          initialName={item.filename}
+          onClose={() => setStlEdit(null)}
+          onInsert={(template, coloring) => {
+            setBusy(true);
+            api.createPage(template.name)
+              .then((page) => api.savePage(page.id, {
+                objects: [polylinesObject(template.lines)],
+                ...(coloring ? { coloring } : {}),
+              }))
+              .then(() => { setStlEdit(null); onOpenPaint(); })
+              .catch(fail)
+              .finally(() => setBusy(false));
+          }}
+          onSaveGallery={({ params, result }) => {
+            setStlSaving(true);
+            api.galleryUpdateStl(item.id, params, resultToSvgLayers(result))
+              .then(() => { setStlEdit(null); toast.success(t("stl.saved")); onChanged(); })
+              .catch(fail)
+              .finally(() => setStlSaving(false));
+          }}
+        />
       )}
       {ConfirmNode}
       {PromptNode}

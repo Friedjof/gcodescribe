@@ -7,6 +7,7 @@ from ..pipeline import OFFICE_EXTENSIONS
 from .errors import ServiceError
 
 MAX_UPLOAD_BYTES = 15 * 1024 * 1024
+MAX_STL_BYTES = 20 * 1024 * 1024  # STL meshes are bulkier than 2D art
 MAX_GCODE_BYTES = 25 * 1024 * 1024
 MAX_IMAGE_PIXELS = 40_000_000  # decompression-bomb guard for PNG/JPEG
 
@@ -20,7 +21,12 @@ _OLE_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"  # legacy doc/xls/ppt
 DOCUMENT_EXTENSIONS = {"pdf"} | {ext.lstrip(".") for ext in OFFICE_EXTENSIONS}
 # Constructs we never accept in an SVG, even though previews are rendered
 # from extracted polylines only (defence in depth against XXE / script).
-_SVG_FORBIDDEN = re.compile(rb"<!DOCTYPE|<!ENTITY|<script|javascript:", re.IGNORECASE)
+# A bare `<!DOCTYPE svg PUBLIC ...>` (as emitted by Inkscape, city-roads, …) is
+# harmless — only a DOCTYPE carrying an internal subset (`[ … ]`) can smuggle
+# entities, and `<!ENTITY` is rejected outright regardless.
+_SVG_FORBIDDEN = re.compile(
+    rb"<!DOCTYPE[^>]*\[|<!ENTITY|<script|javascript:", re.IGNORECASE
+)
 
 
 class UploadTooLarge(ServiceError):
@@ -77,10 +83,30 @@ def sniff_asset_kind(filename: str, data: bytes) -> str:
     )
 
 
+def check_stl(filename: str, data: bytes) -> None:
+    """Validate an STL upload by extension *and* content (ASCII or binary).
+
+    ASCII STL starts with ``solid`` and contains ``facet`` records; binary STL is
+    an 80-byte header + uint32 triangle count + 50 bytes per triangle.
+    """
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if ext != "stl":
+        raise UnsupportedUpload("Nur STL-Dateien werden akzeptiert.")
+    if data[:5].lower() == b"solid" and b"facet" in data[:2048].lower():
+        return
+    if len(data) >= 84:
+        count = struct.unpack("<I", data[80:84])[0]
+        if 84 + count * 50 == len(data):
+            return
+    raise UnsupportedUpload("Die Datei ist kein gültiges STL.")
+
+
 def _check_svg(data: bytes) -> None:
     head = data[:4096]
     if _SVG_FORBIDDEN.search(data):
-        raise UnsupportedUpload("Das SVG enthält unzulässige Inhalte (Script/DOCTYPE).")
+        raise UnsupportedUpload(
+            "Das SVG enthält unzulässige Inhalte (Script, Entities oder DOCTYPE-Subset)."
+        )
     if b"<svg" not in head:
         raise UnsupportedUpload("Die Datei ist kein gültiges SVG.")
     try:

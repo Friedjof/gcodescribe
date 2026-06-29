@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { api, type GalleryItem, type GallerySvg, type GalleryUploader } from "../api";
+import { api, type Calibration, type GalleryItem, type GallerySvg, type GalleryUploader } from "../api";
 import { useI18n } from "../i18n";
+import { polylinesObject } from "../games/utils";
+import { resultToSvgLayers } from "../stl";
 import GalleryAccessDialog from "./GalleryAccessDialog";
 import GalleryDetail from "./GalleryDetail";
+import StlEditor from "./StlEditor";
 import { useLiveRegistryState } from "../stream/liveRegistry";
 import PolylinePreview from "./PolylinePreview";
 import ScoreBadge from "./ScoreBadge";
@@ -11,9 +14,10 @@ import { useToasts } from "./Toasts";
 
 type UploaderFilter = "all" | GalleryUploader;
 const MAX_UPLOAD_MB = 15;
+const MAX_STL_MB = 20;
 const ALLOWED = /\.(svg|png|jpe?g|pdf|odt|ods|odp|docx?|xlsx?|pptx?)$/i;
 const ACCEPT =
-  ".svg,.png,.jpg,.jpeg,.pdf,.odt,.ods,.odp,.doc,.docx,.xls,.xlsx,.ppt,.pptx";
+  ".svg,.png,.jpg,.jpeg,.pdf,.odt,.ods,.odp,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.stl";
 
 // Thumbnails are tiny polyline sets; cache them across tab switches.
 const thumbCache = new Map<string, GallerySvg>();
@@ -32,6 +36,8 @@ export default function Gallery({ visible = true, onOpenPaint, onOpenAiDesigner,
   const [accessOpen, setAccessOpen] = useState(false);
   const globalLive = useLiveRegistryState();
   const [err, setErr] = useState<string | null>(null);
+  const [stlNew, setStlNew] = useState<{ buf: ArrayBuffer; filename: string; cal: Calibration } | null>(null);
+  const [stlSaving, setStlSaving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   // Bump to re-render once batched thumbnails have landed in the cache.
   const [, setThumbTick] = useState(0);
@@ -67,8 +73,25 @@ export default function Gallery({ visible = true, onOpenPaint, onOpenAiDesigner,
     if (err) toast.error(err);
   }, [err, toast]);
 
+  const resetFileInput = () => { if (fileRef.current) fileRef.current.value = ""; };
+
+  // An STL doesn't upload directly — it opens the editor so the model can be
+  // oriented and turned into SVG line layers, then saved (keeping the .stl).
+  const openStl = (file: File) => {
+    if (file.size > MAX_STL_MB * 1024 * 1024) {
+      resetFileInput();
+      return setErr(t("stl.errorTooLarge", { mb: String(MAX_STL_MB) }));
+    }
+    setErr(null);
+    Promise.all([api.getCalibration(), file.arrayBuffer()])
+      .then(([cal, buf]) => setStlNew({ buf, filename: file.name, cal }))
+      .catch((e) => setErr(String(e.message ?? e)))
+      .finally(resetFileInput);
+  };
+
   const upload = (file: File | undefined | null) => {
     if (!file || uploading) return;
+    if (/\.stl$/i.test(file.name)) return openStl(file);
     if (!ALLOWED.test(file.name)) return setErr(t("upload.badType"));
     if (file.size > MAX_UPLOAD_MB * 1024 * 1024) {
       return setErr(t("upload.tooLarge", { mb: String(MAX_UPLOAD_MB) }));
@@ -81,7 +104,7 @@ export default function Gallery({ visible = true, onOpenPaint, onOpenAiDesigner,
       .catch((e) => setErr(String(e.message ?? e)))
       .finally(() => {
         setUploading(false);
-        if (fileRef.current) fileRef.current.value = "";
+        resetFileInput();
       });
   };
 
@@ -179,6 +202,29 @@ export default function Gallery({ visible = true, onOpenPaint, onOpenAiDesigner,
         />
       )}
       {accessOpen && <GalleryAccessDialog onClose={() => setAccessOpen(false)} />}
+
+      {stlNew && (
+        <StlEditor
+          cal={stlNew.cal}
+          saving={stlSaving}
+          initialStl={stlNew.buf}
+          initialName={stlNew.filename}
+          onClose={() => setStlNew(null)}
+          onInsert={(template) => {
+            api.createPage(template.name)
+              .then((page) => api.savePage(page.id, { objects: [polylinesObject(template.lines)] }))
+              .then(() => { setStlNew(null); onOpenPaint(); })
+              .catch((e) => setErr(String(e.message ?? e)));
+          }}
+          onSaveGallery={({ stl, filename, params, result }) => {
+            setStlSaving(true);
+            api.galleryCreateStl(stl, filename, params, resultToSvgLayers(result), filename.replace(/\.stl$/i, ""))
+              .then((item) => { setStlNew(null); toast.success(t("stl.saved")); refresh(); setSelectedId(item.id); })
+              .catch((e) => setErr(String(e.message ?? e)))
+              .finally(() => setStlSaving(false));
+          }}
+        />
+      )}
     </div>
   );
 }

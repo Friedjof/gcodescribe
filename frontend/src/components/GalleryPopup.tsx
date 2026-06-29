@@ -10,8 +10,11 @@ import {
   type SceneObject,
 } from "../api";
 import { galleryPageObject } from "../paint/insertAsset";
+import { polylinesObject } from "../games/utils";
+import { resultToSvgLayers } from "../stl";
 import { useI18n } from "../i18n";
 import Modal from "./Modal";
+import StlEditor from "./StlEditor";
 import Segmented from "./Segmented";
 import PolylinePreview from "./PolylinePreview";
 import ScoreBadge from "./ScoreBadge";
@@ -21,10 +24,12 @@ type UploaderFilter = "all" | GalleryUploader;
 type RenderMode = "auto" | "vector" | "trace" | "edges" | "hatch" | "lines" | "dots" | "handwriting";
 
 const MAX_UPLOAD_MB = 15;
-// Admin popup accepts the full asset library: images/SVG plus PDF/Office.
+const MAX_STL_MB = 20;
+// Admin popup accepts the full asset library: images/SVG plus PDF/Office, and
+// STL (which opens the orientation editor instead of uploading directly).
 const ALLOWED = /\.(svg|png|jpe?g|pdf|odt|ods|odp|docx?|xlsx?|pptx?)$/i;
 const ACCEPT =
-  ".svg,.png,.jpg,.jpeg,.pdf,.odt,.ods,.odp,.doc,.docx,.xls,.xlsx,.ppt,.pptx";
+  ".svg,.png,.jpg,.jpeg,.pdf,.odt,.ods,.odp,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.stl";
 
 /** Designer popup over the unified gallery: upload, search/filter, browse and
  * insert an item (or one page of a multi-page asset) as an image object into
@@ -54,6 +59,7 @@ export default function GalleryPopup({
   // old Place import: mode + detail. `vector` ignores detail.
   const [mode, setMode] = useState<RenderMode>("auto");
   const [detail, setDetail] = useState(2);
+  const [continuous, setContinuous] = useState(true);
   const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -61,6 +67,8 @@ export default function GalleryPopup({
   // When a multi-page asset is opened, the grid is replaced by a page picker.
   const [picker, setPicker] = useState<GalleryItem | null>(null);
   const [pagePreviews, setPagePreviews] = useState<Record<number, GalleryPreview>>({});
+  const [stlNew, setStlNew] = useState<{ buf: ArrayBuffer; filename: string } | null>(null);
+  const [stlSaving, setStlSaving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const online = !!status?.online;
 
@@ -88,8 +96,17 @@ export default function GalleryPopup({
       (!q || i.title.toLowerCase().includes(q) || i.filename.toLowerCase().includes(q))
   );
 
+  const openStl = (file: File) => {
+    if (file.size > MAX_STL_MB * 1024 * 1024) return setErr(t("stl.errorTooLarge", { mb: String(MAX_STL_MB) }));
+    setErr(null);
+    file.arrayBuffer()
+      .then((buf) => setStlNew({ buf, filename: file.name }))
+      .catch(fail);
+  };
+
   const upload = (file: File | undefined | null) => {
     if (!file || busy) return;
+    if (/\.stl$/i.test(file.name)) return openStl(file);
     if (!ALLOWED.test(file.name)) return setErr(t("upload.badType"));
     if (file.size > MAX_UPLOAD_MB * 1024 * 1024) return setErr(t("upload.tooLarge", { mb: String(MAX_UPLOAD_MB) }));
     setBusy(true);
@@ -107,7 +124,7 @@ export default function GalleryPopup({
     setErr(null);
     setMsg(null);
     api
-      .galleryRender(item.id, mode, detail)
+      .galleryRender(item.id, mode, detail, continuous)
       .then(() => Promise.all([load(), loadThumbs()]))
       .then(() => setMsg(t("gallery.rendered")))
       .catch(fail)
@@ -253,6 +270,14 @@ export default function GalleryPopup({
                 />
               </>
             )}
+            <label className="gallery-continuous-toggle" title={t("paint.image.continuousDesc")}>
+              <input
+                type="checkbox"
+                checked={continuous}
+                onChange={(e) => setContinuous(e.target.checked)}
+              />
+              {t("paint.image.continuous")}
+            </label>
           </div>
 
           <div
@@ -306,6 +331,24 @@ export default function GalleryPopup({
             {visible.length === 0 && <p className="muted gallery-popup-empty">{t("gallery.empty")}</p>}
           </div>
         </>
+      )}
+      {stlNew && (
+        <StlEditor
+          cal={cal}
+          saving={stlSaving}
+          initialStl={stlNew.buf}
+          initialName={stlNew.filename}
+          onClose={() => setStlNew(null)}
+          onInsert={(template) => { onInsert(polylinesObject(template.lines)); setStlNew(null); onClose(); }}
+          onSaveGallery={({ stl, filename, params, result }) => {
+            setStlSaving(true);
+            api.galleryCreateStl(stl, filename, params, resultToSvgLayers(result), filename.replace(/\.stl$/i, ""))
+              .then(() => Promise.all([load(), loadThumbs()]))
+              .then(() => { setStlNew(null); setMsg(t("stl.saved")); })
+              .catch(fail)
+              .finally(() => setStlSaving(false));
+          }}
+        />
       )}
     </Modal>
   );
