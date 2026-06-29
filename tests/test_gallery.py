@@ -9,9 +9,11 @@ from plotter.services.gallery import GalleryService
 from plotter.services.profiles import ProfileService
 from plotter.services.upload_validation import (
     MAX_GCODE_BYTES,
+    MAX_STL_BYTES,
     MAX_UPLOAD_BYTES,
     UnsupportedUpload,
     UploadTooLarge,
+    check_stl,
     sniff_asset_kind,
     sniff_kind,
 )
@@ -307,3 +309,87 @@ class TestGalleryService:
         assert svc.set_status(meta["id"], "active")["status"] == "active"
         svc.delete(meta["id"])
         assert svc.list() == []
+
+
+def _binary_stl(n=2) -> bytes:
+    import struct
+    buf = bytearray(b"\x00" * 80)
+    buf += struct.pack("<I", n)
+    for _ in range(n):
+        # normal + 3 vertices + attribute byte count — geometry is irrelevant here.
+        buf += struct.pack("<12fH", 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0)
+    return bytes(buf)
+
+
+def _layer_svg(color: str) -> str:
+    # Mirrors the frontend polylinesToSvg() output shape (decimal mm dimensions,
+    # decimal path coords, stroke-width) so this also guards SVG parsing.
+    return (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="100.000mm" height="60.000mm" '
+        'viewBox="0 0 100.000 60.000">'
+        f'<path d="M10.000,10.000L90.000,10.000L90.000,50.000" fill="none" '
+        f'stroke="{color}" stroke-width="0.3"/>'
+        "</svg>"
+    )
+
+
+class TestStlValidation:
+    def test_accepts_binary_and_ascii(self):
+        check_stl("cube.stl", _binary_stl())
+        check_stl("cube.stl", b"solid c\n facet normal 0 0 1\n outer loop\nendsolid")
+
+    def test_rejects_wrong_extension_or_content(self):
+        with pytest.raises(UnsupportedUpload):
+            check_stl("cube.png", _binary_stl())
+        with pytest.raises(UnsupportedUpload):
+            check_stl("cube.stl", b"not really an stl at all")
+
+
+class TestStlGallery:
+    def _layers(self):
+        return [
+            {"color": "black", "role": "visible", "order": 1, "svg": _layer_svg("#111111")},
+            {"color": "red", "role": "hidden", "order": 2, "svg": _layer_svg("#ff0000")},
+        ]
+
+    def test_create_stores_original_and_layers(self, cal):
+        svc = GalleryService()
+        params = {"azimuth": 0.6, "hidden": "secondColor"}
+        meta = svc.create_stl("cube.stl", _binary_stl(), self._layers(), params, title="Cube")
+        assert meta["kind"] == "stl"
+        assert meta["title"] == "Cube"
+        assert len(meta["pages"]) == 2
+        assert [p["color"] for p in meta["pages"]] == ["black", "red"]
+        assert meta["stl_params"]["hidden"] == "secondColor"
+        item_dir = svc.root / meta["id"]
+        assert (item_dir / "original.stl").exists()
+        assert (item_dir / "page-0001.svg").exists()
+        assert (item_dir / "page-0002.svg").exists()
+        # the source STL is served back for re-rendering
+        path, info = svc.original_path(meta["id"])
+        assert path.name == "original.stl"
+        assert info["mime"] == "model/stl"
+        # thumbnail works through the standard page dispatch
+        assert svc.thumbnail(meta["id"])["polylines"]
+
+    def test_update_replaces_layers_keeps_stl(self, cal):
+        svc = GalleryService()
+        meta = svc.create_stl("cube.stl", _binary_stl(), self._layers(), {"hidden": "remove"})
+        updated = svc.update_stl(
+            meta["id"],
+            [{"color": "blue", "role": "visible", "order": 1, "svg": _layer_svg("#0000ff")}],
+            {"hidden": "remove", "azimuth": 1.2},
+        )
+        assert len(updated["pages"]) == 1
+        assert updated["pages"][0]["color"] == "blue"
+        assert updated["stl_params"]["azimuth"] == 1.2
+        item_dir = svc.root / meta["id"]
+        assert (item_dir / "original.stl").exists()
+        assert not (item_dir / "page-0002.svg").exists()  # old second layer gone
+        assert svc.stl_params(meta["id"])["azimuth"] == 1.2
+
+    def test_rejects_oversize(self, cal):
+        svc = GalleryService()
+        big = _binary_stl() + b"\x00" * (MAX_STL_BYTES + 1)
+        with pytest.raises(UploadTooLarge):
+            svc.create_stl("cube.stl", big, self._layers(), {})
