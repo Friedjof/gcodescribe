@@ -58,6 +58,11 @@ class Calibration:
     # are rejected by the safety checker.
     obstacles: list = field(default_factory=list)
 
+    # Maximum gap (mm) between two stroke endpoints that will be bridged into a
+    # single continuous stroke without a pen lift.  Larger values reduce total
+    # lifts but may silently connect strokes that were meant to be separate.
+    merge_tolerance: float = 0.5
+
     @classmethod
     def path(cls) -> Path:
         return data_dir() / "calibration.json"

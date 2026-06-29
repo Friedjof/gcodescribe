@@ -50,6 +50,7 @@ def calibration_to_xml(cal: Calibration) -> str:
         fitToArea=str(cal.fit_to_area).lower(),
         flipY=str(cal.flip_y).lower(),
     )
+    SubElement(root, "optimize", mergeTolerance=f"{cal.merge_tolerance}")
 
     indent(root)
     return '<?xml version="1.0" encoding="UTF-8"?>\n' + tostring(root, encoding="unicode") + "\n"
@@ -128,6 +129,9 @@ def calibration_from_xml(xml: str, *, base: Calibration | None = None) -> Calibr
     layout = root.find("layout")
     flag(layout, "fitToArea", "fit_to_area")
     flag(layout, "flipY", "flip_y")
+
+    optimize = root.find("optimize")
+    num(optimize, "mergeTolerance", "merge_tolerance")
 
     return cal.merged(updates)
 

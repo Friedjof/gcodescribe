@@ -4,124 +4,26 @@ import math
 import time
 from pathlib import Path
 
+import numpy as np
+
 from .calibration import Calibration
 from .export import calibration_comment
 from .jobmeta import profile_comment, write_job_meta
 from .linemerge import merge_polylines
+from .oneline import continuous_polylines
 from .pipeline import PlotterError
 from .routing import route_travel
 from .safety import GcodeSafetyChecker
+from .scene_geometry import (
+    Point,
+    Polygon,
+    Polyline,
+    apply_masks,
+    is_mask,
+    mask_polygon,
+    transform_point,
+)
 from .storage import jobs_dir
-
-Point = tuple[float, float]
-Polyline = list[Point]
-Polygon = list[Point]
-EPS = 1e-9
-
-
-def _transform_point(point: list | tuple, transform: dict) -> Point:
-    scale = float(transform.get("scale", 1.0))
-    x = float(point[0]) * float(transform.get("scaleX") or scale)
-    y = float(point[1]) * float(transform.get("scaleY") or scale)
-    rot = float(transform.get("rotation", 0.0))
-    cos_r, sin_r = math.cos(rot), math.sin(rot)
-    return (
-        float(transform.get("x", 0.0)) + x * cos_r - y * sin_r,
-        float(transform.get("y", 0.0)) + x * sin_r + y * cos_r,
-    )
-
-
-def _is_mask(obj: dict) -> bool:
-    return obj.get("type") == "mask-rect" or obj.get("data", {}).get("mask") == "erase"
-
-
-def _mask_polygon(obj: dict) -> Polygon | None:
-    transform = obj.get("transform") or {"x": 0, "y": 0, "rotation": 0, "scale": 1}
-    raw = next((line for line in obj.get("cachedPolylines") or [] if len(line) >= 4), None)
-    if raw is None:
-        return None
-    pts = [_transform_point(point, transform) for point in raw]
-    if len(pts) > 1 and math.dist(pts[0], pts[-1]) <= EPS:
-        pts = pts[:-1]
-    return pts if len(pts) >= 3 else None
-
-
-def _inside_convex(p: Point, poly: Polygon) -> bool:
-    signs: list[float] = []
-    for i, a in enumerate(poly):
-        b = poly[(i + 1) % len(poly)]
-        cross = (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0])
-        if abs(cross) > EPS:
-            signs.append(cross)
-    return bool(signs) and (all(s >= 0 for s in signs) or all(s <= 0 for s in signs))
-
-
-def _segment_intersection_t(a: Point, b: Point, c: Point, d: Point) -> float | None:
-    rx, ry = b[0] - a[0], b[1] - a[1]
-    sx, sy = d[0] - c[0], d[1] - c[1]
-    den = rx * sy - ry * sx
-    if abs(den) <= EPS:
-        return None
-    qpx, qpy = c[0] - a[0], c[1] - a[1]
-    t = (qpx * sy - qpy * sx) / den
-    u = (qpx * ry - qpy * rx) / den
-    if -EPS <= t <= 1 + EPS and -EPS <= u <= 1 + EPS:
-        return max(0.0, min(1.0, t))
-    return None
-
-
-def _lerp(a: Point, b: Point, t: float) -> Point:
-    return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
-
-
-def _subtract_polygon_from_segment(a: Point, b: Point, poly: Polygon) -> list[Polyline]:
-    ts = {0.0, 1.0}
-    for i, c in enumerate(poly):
-        d = poly[(i + 1) % len(poly)]
-        t = _segment_intersection_t(a, b, c, d)
-        if t is not None:
-            ts.add(t)
-    ordered = sorted(ts)
-    out: list[Polyline] = []
-    for t0, t1 in zip(ordered, ordered[1:], strict=False):
-        if t1 - t0 <= EPS:
-            continue
-        mid = _lerp(a, b, (t0 + t1) / 2)
-        if _inside_convex(mid, poly):
-            continue
-        p0, p1 = _lerp(a, b, t0), _lerp(a, b, t1)
-        if math.dist(p0, p1) > EPS:
-            out.append([p0, p1])
-    return out
-
-
-def _subtract_polygon(line: Polyline, poly: Polygon) -> list[Polyline]:
-    pieces: list[Polyline] = []
-    current: Polyline = []
-    for a, b in zip(line, line[1:], strict=False):
-        visible = _subtract_polygon_from_segment(a, b, poly)
-        for seg in visible:
-            if current and math.dist(current[-1], seg[0]) <= EPS:
-                current.append(seg[1])
-            else:
-                if len(current) > 1:
-                    pieces.append(current)
-                current = seg[:]
-        if not visible and len(current) > 1:
-            pieces.append(current)
-            current = []
-    if len(current) > 1:
-        pieces.append(current)
-    return pieces
-
-
-def _apply_masks(lines: list[Polyline], masks: list[Polygon]) -> list[Polyline]:
-    for mask in masks:
-        next_lines: list[Polyline] = []
-        for line in lines:
-            next_lines.extend(_subtract_polygon(line, mask))
-        lines = next_lines
-    return lines
 
 
 def page_polylines(page: dict) -> list[Polyline]:
@@ -132,16 +34,16 @@ def page_polylines(page: dict) -> list[Polyline]:
         key=lambda obj: float(obj.get("zOrder", 0.0)),
     )
     for obj in objects:
-        if _is_mask(obj):
-            mask = _mask_polygon(obj)
-            if mask:
-                lines = _apply_masks(lines, [mask])
+        if is_mask(obj):
+            m = mask_polygon(obj)
+            if m:
+                lines = apply_masks(lines, [m])
             continue
         transform = obj.get("transform") or {"x": 0, "y": 0, "rotation": 0, "scale": 1}
         for raw_line in obj.get("cachedPolylines") or []:
             if len(raw_line) < 2:
                 continue
-            line = [_transform_point(point, transform) for point in raw_line]
+            line = [transform_point(point, transform) for point in raw_line]
             if len(line) > 1:
                 lines.append(line)
     return lines
@@ -152,26 +54,23 @@ def page_thumbnail(page: dict, target: float = 100.0) -> dict | None:
 
     Returns ``{"d": svg_path, "w": int, "h": int}`` with coordinates fitted to
     the drawing's bounding box and quantised to a ``target``-unit grid, or
-    ``None`` for an empty page. Quantising + de-duplicating consecutive points
-    keeps the path string small enough to live in the (fully loaded) page index.
+    ``None`` for an empty page.
     """
-    # Unlike page_polylines, the thumbnail shows every object regardless of its
-    # plotted flag — a finished page should still preview its full artwork.
     objects = sorted(
         page.get("objects", []), key=lambda obj: float(obj.get("zOrder", 0.0))
     )
     lines: list[Polyline] = []
     for obj in objects:
-        if _is_mask(obj):
-            mask = _mask_polygon(obj)
-            if mask:
-                lines = _apply_masks(lines, [mask])
+        if is_mask(obj):
+            m = mask_polygon(obj)
+            if m:
+                lines = apply_masks(lines, [m])
             continue
         transform = obj.get("transform") or {"x": 0, "y": 0, "rotation": 0, "scale": 1}
         for raw_line in obj.get("cachedPolylines") or []:
             if len(raw_line) < 2:
                 continue
-            line = [_transform_point(point, transform) for point in raw_line]
+            line = [transform_point(point, transform) for point in raw_line]
             lines.append(line)
     if not lines:
         return None
@@ -190,7 +89,7 @@ def page_thumbnail(page: dict, target: float = 100.0) -> dict | None:
             nx = round((x - min_x) * scale)
             ny = round((y - min_y) * scale)
             if (nx, ny) == last:
-                continue  # collapse points that coincide at thumbnail resolution
+                continue
             last = (nx, ny)
             pts.append(f"{nx},{ny}")
         if len(pts) >= 2:
@@ -201,16 +100,13 @@ def page_thumbnail(page: dict, target: float = 100.0) -> dict | None:
 
 
 def _obs_to_local_polygon(obs: dict, cal: Calibration) -> Polygon:
-    """Convert a bed-coordinate obstacle rect to a local (editor mm, y-down) polygon.
-
-    The inverse of the printer() coordinate transform used in scene_gcode.
-    """
+    """Convert a bed-coordinate obstacle rect to a local (editor mm, y-down) polygon."""
     ox, oy, ow, oh = obs["x"], obs["y"], obs["w"], obs["h"]
     lx0 = ox - cal.origin_x
     lx1 = ox + ow - cal.origin_x
     if cal.flip_y:
-        ly0 = cal.plot_height + cal.origin_y - oy - oh  # upper edge in SVG (small local y)
-        ly1 = cal.plot_height + cal.origin_y - oy       # lower edge in SVG (large local y)
+        ly0 = cal.plot_height + cal.origin_y - oy - oh
+        ly1 = cal.plot_height + cal.origin_y - oy
     else:
         ly0 = oy - cal.origin_y
         ly1 = oy + oh - cal.origin_y
@@ -219,10 +115,10 @@ def _obs_to_local_polygon(obs: dict, cal: Calibration) -> Polygon:
 
 def _sorted_for_travel(polylines: list[Polyline]) -> list[Polyline]:
     if len(polylines) > 4000:
-        return polylines
+        return _sorted_for_travel_large(polylines)
     remaining = list(polylines)
     ordered: list[Polyline] = []
-    cursor = (0.0, 0.0)
+    cursor: Point = (0.0, 0.0)
     while remaining:
         best_i, best_rev, best_d = 0, False, float("inf")
         for i, line in enumerate(remaining):
@@ -240,23 +136,151 @@ def _sorted_for_travel(polylines: list[Polyline]) -> list[Polyline]:
     return ordered
 
 
+def _sorted_for_travel_large(polylines: list[Polyline]) -> list[Polyline]:
+    """KD-tree greedy nearest-neighbour ordering for large stroke counts, so even
+    big non-continuous pages keep their (invisible) pen-up travel short."""
+    from scipy.spatial import cKDTree
+
+    n = len(polylines)
+    pts = np.empty((2 * n, 2))
+    for i, line in enumerate(polylines):
+        pts[2 * i] = line[0]
+        pts[2 * i + 1] = line[-1]
+    tree = cKDTree(pts)
+    used = bytearray(n)
+    ordered: list[Polyline] = []
+    cursor = np.array([0.0, 0.0])
+    for _ in range(n):
+        found = -1
+        kk = 8
+        while found < 0:
+            kk = min(2 * n, kk)
+            _, idx = tree.query(cursor, k=kk)
+            for ix in np.atleast_1d(idx):
+                if not used[ix // 2]:
+                    found = int(ix)
+                    break
+            if found < 0:
+                if kk >= 2 * n:
+                    break
+                kk *= 2
+        if found < 0:
+            break
+        pi = found // 2
+        used[pi] = 1
+        line = polylines[pi]
+        if found % 2 == 1:
+            line = list(reversed(line))
+        ordered.append(line)
+        cursor = np.array([line[-1][0], line[-1][1]])
+    return ordered
+
+
+FeedLine = tuple[Polyline, list[float]]
+
+# Safety band for variable feedrate, relative to the profile's draw feed.
+_VAR_MIN_SCALE = 0.5
+_VAR_MAX_SCALE = 1.4
+
+
+def _is_feed_object(obj: dict) -> bool:
+    """A stroke-font text object that carries per-point feed scales."""
+    feeds = obj.get("cachedFeeds")
+    polys = obj.get("cachedPolylines")
+    return (
+        isinstance(feeds, list)
+        and isinstance(polys, list)
+        and len(polys) > 0
+        and len(feeds) == len(polys)
+    )
+
+
+def _coerce_feeds(raw: object, n: int) -> list[float]:
+    """`n` feed scales from `raw`, defaulting missing/invalid entries to 1.0."""
+    out: list[float] = []
+    for i in range(n):
+        v = raw[i] if isinstance(raw, list) and i < len(raw) else 1.0
+        out.append(float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else 1.0)
+    return out
+
+
+def _feed_lines(page: dict) -> tuple[list[FeedLine], list[Polyline]]:
+    """Variable-feed lines from feed objects, plus fallbacks (feed dropped).
+
+    A feed line keeps its per-point scales only if no higher-z mask alters it;
+    otherwise its (correctly masked) geometry falls back to uniform feed.
+    """
+    objects = sorted(
+        (obj for obj in page.get("objects", []) if not obj.get("plotted")),
+        key=lambda obj: float(obj.get("zOrder", 0.0)),
+    )
+    masks = [
+        (float(obj.get("zOrder", 0.0)), poly)
+        for obj in objects
+        if is_mask(obj) and (poly := mask_polygon(obj)) is not None
+    ]
+    feed_lines: list[FeedLine] = []
+    fallback: list[Polyline] = []
+    for obj in objects:
+        if is_mask(obj) or not _is_feed_object(obj):
+            continue
+        transform = obj.get("transform") or {"x": 0, "y": 0, "rotation": 0, "scale": 1}
+        z = float(obj.get("zOrder", 0.0))
+        later = [poly for mz, poly in masks if mz > z]
+        raw_feeds = obj.get("cachedFeeds") or []
+        for raw_line, raw_feed in zip(obj.get("cachedPolylines") or [], raw_feeds, strict=False):
+            if len(raw_line) < 2:
+                continue
+            line = [transform_point(point, transform) for point in raw_line]
+            feeds = _coerce_feeds(raw_feed, len(line))
+            masked = apply_masks([line], later) if later else [line]
+            if len(masked) == 1 and len(masked[0]) == len(line):
+                feed_lines.append((line, feeds))
+            else:
+                fallback.extend(piece for piece in masked if len(piece) >= 2)
+    return feed_lines, fallback
+
+
 def scene_gcode(page: dict, cal: Calibration) -> str:
-    polylines = page_polylines(page)
-    if not polylines:
+    # Stroke-font text objects carry per-point feed scales and are plotted with
+    # variable feedrate, bypassing merge/continuous so timing survives. Everything
+    # else (and any masked feed line) goes through the unchanged uniform-feed path.
+    if any(_is_feed_object(obj) for obj in page.get("objects", []) if not obj.get("plotted")):
+        non_feed = {
+            **page,
+            "objects": [obj for obj in page.get("objects", []) if not _is_feed_object(obj)],
+        }
+        polylines = page_polylines(non_feed)
+        feed_lines, fallback = _feed_lines(page)
+        polylines.extend(fallback)
+    else:
+        polylines = page_polylines(page)
+        feed_lines = []
+
+    if not polylines and not feed_lines:
         raise PlotterError("Die Seite enthält keine ungeplotteten Linien.")
 
-    # Clip drawing strokes that cross obstacle zones (treat like erase masks).
-    # This stops the pen from drawing through a clamp; the safety checker then
-    # validates that no segment (travel or draw) penetrates any obstacle.
     if cal.obstacles:
         obs_polys = [_obs_to_local_polygon(obs, cal) for obs in cal.obstacles]
-        polylines = _apply_masks(polylines, obs_polys)
-        if not polylines:
+        polylines = apply_masks(polylines, obs_polys)
+        kept: list[FeedLine] = []
+        for line, feeds in feed_lines:
+            masked = apply_masks([line], obs_polys)
+            if len(masked) == 1 and len(masked[0]) == len(line):
+                kept.append((line, feeds))
+            else:
+                polylines.extend(piece for piece in masked if len(piece) >= 2)
+        feed_lines = kept
+        if not polylines and not feed_lines:
             raise PlotterError("Die Seite enthält keine ungeplotteten Linien.")
 
-    # Join pieces that meet end-to-end into continuous strokes, so a wall the
-    # eye reads as one line is plotted without lifting the pen at every segment.
-    polylines = merge_polylines(polylines)
+    polylines = merge_polylines(polylines, tol=cal.merge_tolerance)
+
+    # Draw each connected component in one continuous stroke (retracing existing
+    # lines only — no visible connectors), so the pen barely lifts. ON by default
+    # (set the page's "continuous" to False to opt out); the shape is preserved.
+    if page.get("continuous", True):
+        polylines = continuous_polylines(polylines, cal.merge_tolerance)
 
     pen_up = f"G0 Z{cal.pen_up_z:.3f} F{cal.z_feed:.0f}"
     pen_down = f"G1 Z{cal.pen_down_z:.3f} F{cal.z_feed:.0f}"
@@ -269,18 +293,32 @@ def scene_gcode(page: dict, cal: Calibration) -> str:
         return cal.origin_x + x, cal.origin_y + y
 
     obstacles = cal.obstacles or []
-    cursor: Point = (0.0, 0.0)  # current printer position (home after G28)
+    cursor: Point = (0.0, 0.0)
+    feed_floor = cal.draw_feed * _VAR_MIN_SCALE
+    feed_ceil = min(cal.travel_feed, cal.draw_feed * _VAR_MAX_SCALE)
 
-    for poly in _sorted_for_travel(polylines):
+    def emit(poly: Polyline, feeds: list[float] | None) -> None:
+        nonlocal cursor
         dest = printer(poly[0])
         for wx, wy in route_travel(cursor, dest, obstacles):
             lines.append(f"G0 X{wx:.3f} Y{wy:.3f} F{cal.travel_feed:.0f}")
         lines.append(pen_down)
-        for point in poly[1:]:
+        for i, point in enumerate(poly[1:], start=1):
             x, y = printer(point)
-            lines.append(f"G1 X{x:.3f} Y{y:.3f} F{cal.draw_feed:.0f}")
+            if feeds is None:
+                feed = cal.draw_feed
+            else:
+                scale = feeds[i] if i < len(feeds) else 1.0
+                feed = min(feed_ceil, max(feed_floor, cal.draw_feed * scale))
+            lines.append(f"G1 X{x:.3f} Y{y:.3f} F{feed:.0f}")
         lines.append(pen_up)
         cursor = printer(poly[-1])
+
+    for poly in _sorted_for_travel(polylines):
+        emit(poly, None)
+    # Feed lines keep capture order (natural left-to-right writing order).
+    for poly, feeds in feed_lines:
+        emit(poly, feeds)
 
     if cal.park_after_plot:
         park: Point = (cal.bed_width / 2, cal.bed_height)
@@ -301,14 +339,7 @@ def save_scene_job(
     source_kind: str = "paint_page",
     source_extra: dict | None = None,
 ) -> Path:
-    """Write a G-code job for ``page`` into ``jobs_dir()`` and return its path.
-
-    ``filename_tag`` inserts a stable segment before the timestamp, e.g.
-    ``color-01-schwarz`` -> ``paint-{stem}-color-01-schwarz-{ts}.gcode``; this
-    is how coloring jobs stay recognisable in the job list. ``source_kind`` and
-    ``source_extra`` are merged into the sidecar ``source`` block so callers can
-    tag a job (e.g. as a coloring job carrying its colour and group id).
-    """
+    """Write a G-code job for ``page`` into ``jobs_dir()`` and return its path."""
     cal = cal or Calibration.load()
     gcode = scene_gcode(page, cal)
     if profile is None:

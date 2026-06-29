@@ -22,9 +22,23 @@ import {
   type GuideCandidate,
   type Guide,
 } from "../paint/geometry";
+import {
+  type ViewRotation,
+  type ResizeEdge,
+  rotatePoint,
+  rotatedBounds,
+  signedDeg,
+  displayDeg,
+  snapRotation,
+  worldPoint,
+  screenVectorToRotatedLocal,
+  resizeLocals,
+} from "../paint/viewTransform";
+import { lineNearPath } from "../paint/eraser";
 import { useI18n } from "../i18n";
 
 export type Tool = "select" | "pen" | "line" | "rect" | "maskRect" | "maskCircle" | "circle" | "semicircle" | "text" | "erase" | "eraseLine";
+export type { ViewRotation } from "../paint/viewTransform";
 
 /**
  * Clamp a transform so the object's world bounding box stays within [0,W]×[0,H].
@@ -56,9 +70,6 @@ function clampedTransform(t: Transform, local: Pt[][], W: number, H: number): Tr
   return { ...shrunken, x: shrunken.x + dx, y: shrunken.y + dy };
 }
 
-type ResizeEdge = "tl" | "tc" | "tr" | "ml" | "mr" | "bl" | "bc" | "br";
-export type ViewRotation = 0 | 90 | 180 | 270;
-
 function shapeWorld(tool: Tool, pts: Pt[]): Pt[][] {
   if (tool === "pen") return pts.length > 1 ? [pts] : [];
   const [a, b] = pts;
@@ -86,114 +97,7 @@ const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 48;
 const PEN_SIMPLIFY_EPS = 0.4;
 const PEN_MIN_LENGTH = 0.08;
-const ROTATION_SNAP_DEG = 4;
 const ERASER_RADIUS = 2.5;
-
-function rotatePoint([x, y]: Pt, W: number, H: number, deg: ViewRotation): Pt {
-  const cx = W / 2;
-  const cy = H / 2;
-  const dx = x - cx;
-  const dy = y - cy;
-  if (deg === 90) return [cx - dy, cy + dx];
-  if (deg === 180) return [cx - dx, cy - dy];
-  if (deg === 270) return [cx + dy, cy - dx];
-  return [x, y];
-}
-
-function rotatedBounds(W: number, H: number, deg: ViewRotation): [number, number, number, number] {
-  const pts = [[0, 0], [W, 0], [W, H], [0, H]].map((p) => rotatePoint(p as Pt, W, H, deg));
-  return [
-    Math.min(...pts.map((p) => p[0])),
-    Math.min(...pts.map((p) => p[1])),
-    Math.max(...pts.map((p) => p[0])),
-    Math.max(...pts.map((p) => p[1])),
-  ];
-}
-
-function normalizeDeg(deg: number) {
-  return ((deg % 360) + 360) % 360;
-}
-
-function signedDeg(rad: number) {
-  const deg = (rad * 180) / Math.PI;
-  return ((deg + 180) % 360 + 360) % 360 - 180;
-}
-
-function displayDeg(rad: number) {
-  const raw = (rad * 180) / Math.PI;
-  const normalized = normalizeDeg(raw);
-  return normalized === 0 && raw > 0.0001 ? 360 : normalized;
-}
-
-function snapRotation(rad: number) {
-  const deg = normalizeDeg((rad * 180) / Math.PI);
-  const snapTargets = [0, 90, 180, 270, 360];
-  const target = snapTargets.find((a) => Math.abs(deg - a) <= ROTATION_SNAP_DEG);
-  return target == null ? rad : (target * Math.PI) / 180;
-}
-
-function worldPoint(local: Pt, t: Transform): Pt {
-  const cos = Math.cos(t.rotation), sin = Math.sin(t.rotation);
-  const sx = t.scaleX ?? t.scale;
-  const sy = t.scaleY ?? t.scale;
-  const x = local[0] * sx;
-  const y = local[1] * sy;
-  return [t.x + x * cos - y * sin, t.y + x * sin + y * cos];
-}
-
-function screenVectorToRotatedLocal(delta: Pt, rotation: number): Pt {
-  const cos = Math.cos(rotation), sin = Math.sin(rotation);
-  return [delta[0] * cos + delta[1] * sin, -delta[0] * sin + delta[1] * cos];
-}
-
-function resizeLocals(edge: ResizeEdge, b: [number, number, number, number]): { anchor: Pt; handle: Pt } {
-  const [x0, y0, x1, y1] = b;
-  const cx = (x0 + x1) / 2;
-  const cy = (y0 + y1) / 2;
-  const map: Record<ResizeEdge, { anchor: Pt; handle: Pt }> = {
-    tl: { anchor: [x1, y1], handle: [x0, y0] },
-    tc: { anchor: [cx, y1], handle: [cx, y0] },
-    tr: { anchor: [x0, y1], handle: [x1, y0] },
-    ml: { anchor: [x1, cy], handle: [x0, cy] },
-    mr: { anchor: [x0, cy], handle: [x1, cy] },
-    bl: { anchor: [x1, y0], handle: [x0, y1] },
-    bc: { anchor: [cx, y0], handle: [cx, y1] },
-    br: { anchor: [x0, y0], handle: [x1, y1] },
-  };
-  return map[edge];
-}
-
-function pointSegmentDistance(p: Pt, a: Pt, b: Pt) {
-  const dx = b[0] - a[0];
-  const dy = b[1] - a[1];
-  const len2 = dx * dx + dy * dy;
-  if (len2 === 0) return Math.hypot(p[0] - a[0], p[1] - a[1]);
-  const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2));
-  return Math.hypot(p[0] - (a[0] + dx * t), p[1] - (a[1] + dy * t));
-}
-
-function segmentsDistance(a0: Pt, a1: Pt, b0: Pt, b1: Pt) {
-  const cross = (a: Pt, b: Pt, c: Pt) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
-  const intersects =
-    Math.sign(cross(a0, a1, b0)) !== Math.sign(cross(a0, a1, b1)) &&
-    Math.sign(cross(b0, b1, a0)) !== Math.sign(cross(b0, b1, a1));
-  if (intersects) return 0;
-  return Math.min(
-    pointSegmentDistance(a0, b0, b1),
-    pointSegmentDistance(a1, b0, b1),
-    pointSegmentDistance(b0, a0, a1),
-    pointSegmentDistance(b1, a0, a1)
-  );
-}
-
-function lineNearPath(line: Pt[], path: Pt[], radius: number) {
-  for (let i = 1; i < line.length; i++) {
-    for (let j = 1; j < path.length; j++) {
-      if (segmentsDistance(line[i - 1], line[i], path[j - 1], path[j]) <= radius) return true;
-    }
-  }
-  return false;
-}
 
 export default function PaintCanvas({
   cal,

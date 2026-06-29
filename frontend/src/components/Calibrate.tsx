@@ -17,6 +17,7 @@ const FIELDS: { key: keyof Calibration; labelKey: string; unit: string; groupKey
   { key: "travel_feed", labelKey: "calibrate.travelFeed", unit: "mm/min", groupKey: "calibrate.groupSpeed" },
   { key: "draw_feed", labelKey: "calibrate.drawFeed", unit: "mm/min", groupKey: "calibrate.groupSpeed" },
   { key: "z_feed", labelKey: "calibrate.zFeed", unit: "mm/min", groupKey: "calibrate.groupSpeed" },
+  { key: "merge_tolerance", labelKey: "calibrate.mergeTolerance", unit: "mm", groupKey: "calibrate.groupOptimize" },
 ];
 
 export default function Calibrate() {

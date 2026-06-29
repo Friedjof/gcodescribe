@@ -114,6 +114,9 @@ class SaveRequest(BaseModel):
     # Per-page coloring session (assignments keyed by line geometry hash +
     # colour order), so the coloring editor restores its state per page.
     coloring: dict | None = None
+    # Plot the page as one continuous stroke per connected component (eulerised,
+    # invisible retraces) — far fewer pen lifts. Auto-on for OSM map pages.
+    continuous: bool | None = None
 
 
 class TextPreviewRequest(BaseModel):
@@ -432,6 +435,17 @@ def page_preview_3d(page_id: str, req: SceneRequest) -> dict:
 
 @router.post("/paint/text-polylines")
 def paint_text_polylines(req: TextPreviewRequest) -> dict:
+    # Stroke fonts (kind == "stroke") render via their own engine; classic file
+    # fonts keep the existing FontTools/single-line path untouched.
+    if req.font.startswith("stroke-"):
+        from ...services.stroke_fonts import StrokeFontService
+
+        result = StrokeFontService().render(req.font, req.text, req.size)
+        return {
+            "polylines": result.polylines,
+            "feeds": result.feeds,
+            "missing": result.missing,
+        }
     return {
         "polylines": text_polylines(
             req.text, font=req.font, size=req.size, connect_spaces=req.connect_spaces

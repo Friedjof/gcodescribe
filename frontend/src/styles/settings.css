@@ -11,9 +11,11 @@
 .settings-btn:hover { background: var(--panel-2); color: var(--text); }
 
 .settings-modal {
-  width: min(900px, 96vw);
-  height: min(600px, 90vh);
-  max-height: min(600px, 90vh);
+  /* Larger in every direction; the backdrop centres it so the top/bottom and
+     left/right gaps stay symmetric. */
+  width: min(1200px, 94vw);
+  height: min(880px, 92vh);
+  max-height: min(880px, 92vh);
 }
 .settings-modal .modal-body {
   padding: 0;
@@ -139,6 +141,59 @@
 }
 
 .settings-err { color: var(--err); font-size: 13px; }
+
+/* Font management */
+.settings-font-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 14px 0 18px;
+}
+.settings-font-block > input,
+.settings-font-block > select {
+  width: 100%;
+  box-sizing: border-box;
+}
+.settings-font-block input[type="file"] {
+  color: var(--muted);
+  font-size: 13px;
+}
+.settings-font-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.settings-font-row > input[type="file"] {
+  flex: 1 1 200px;
+  min-width: 0;
+  width: auto;
+}
+.settings-font-row > .settings-font-mode-select {
+  flex: 0 0 auto;
+  width: auto;
+  max-width: 200px;
+}
+.settings-font-row > .primary {
+  flex: 0 0 auto;
+}
+.settings-font-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.settings-font-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.settings-font-item:last-child { border-bottom: none; }
+.settings-font-name { flex: 1; min-width: 0; }
 
 /* Serial port picker */
 .settings-serial-dd { flex-direction: column; align-items: flex-start; gap: 6px; }
