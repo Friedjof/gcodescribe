@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useId, type ReactNode } from "react";
 import { useI18n } from "../i18n";
 
 /** Centered overlay dialog. Closes on backdrop click or Escape. */
@@ -20,6 +20,7 @@ export default function Modal({
   bodyClassName?: string;
 }) {
   const { t } = useI18n();
+  const titleId = useId();
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -32,10 +33,11 @@ export default function Modal({
         className={`modal ${className}`.trim()}
         role="dialog"
         aria-modal="true"
+        aria-labelledby={titleId}
         onPointerDown={(e) => e.stopPropagation()}
       >
         <header className="modal-head">
-          <h2>{title}</h2>
+          <h2 id={titleId}>{title}</h2>
           {headerActions && <div className="modal-head-actions">{headerActions}</div>}
           <button className="modal-close" onClick={onClose} aria-label={t("common.close")}>
             ✕
