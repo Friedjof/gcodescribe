@@ -1,21 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
 
-OsmLayer = Literal["streets", "paths", "buildings", "waterways", "water", "rail", "transit"]
-
-VALID_LAYERS: tuple[OsmLayer, ...] = (
-    "streets",
-    "paths",
-    "buildings",
-    "waterways",
-    "water",
-    "rail",
-    "transit",
-)
-
-MAX_BBOX_SPAN_DEG = 0.25
+# Cap for a free bbox selection (boundary-area requests are not bbox-limited).
+MAX_BBOX_SPAN_DEG = 0.5
 
 
 @dataclass(frozen=True)
@@ -33,17 +21,32 @@ class BBox:
         if self.south >= self.north or self.west >= self.east:
             raise ValueError("Bounding box must use south < north and west < east.")
         if self.north - self.south > MAX_BBOX_SPAN_DEG or self.east - self.west > MAX_BBOX_SPAN_DEG:
-            raise ValueError("Map area is too large. Zoom in and select a smaller section.")
+            raise ValueError("Map area is too large. Search a place to use its boundary.")
 
 
 @dataclass(frozen=True)
 class OsmMapRequest:
     bbox: BBox
-    layers: tuple[OsmLayer, ...]
     width: float
     height: float
     detail: float = 0.5
     include_frame: bool = False
+    # When set, roads are queried within this OSM area (whole city/boundary,
+    # city-roads style) instead of the bbox rectangle.
+    area_id: int | None = None
+
+
+@dataclass(frozen=True)
+class GeocodeResult:
+    name: str
+    lat: float
+    lon: float
+    bbox: BBox
+    osm_type: str
+    osm_id: int
+    # Overpass area id derived from the OSM object (None for nodes, which have
+    # no enclosing area). relation: +3_600_000_000, way: +2_400_000_000.
+    area_id: int | None
 
 
 @dataclass(frozen=True)
@@ -53,13 +56,3 @@ class OsmMapResult:
     view_box: str
     lines: list[list[tuple[float, float]]]
     metadata: dict[str, object]
-
-
-def parse_layers(value: str) -> tuple[OsmLayer, ...]:
-    layers = tuple(dict.fromkeys(part.strip() for part in value.split(",") if part.strip()))
-    if not layers:
-        raise ValueError("Select at least one map layer.")
-    invalid = [layer for layer in layers if layer not in VALID_LAYERS]
-    if invalid:
-        raise ValueError(f"Unknown map layer: {', '.join(invalid)}")
-    return layers  # type: ignore[return-value]

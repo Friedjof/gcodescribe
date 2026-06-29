@@ -1,4 +1,12 @@
 from .generate import generate_osm_map
-from .types import BBox, OsmLayer, OsmMapRequest, OsmMapResult, parse_layers
+from .geocode import geocode
+from .types import BBox, GeocodeResult, OsmMapRequest, OsmMapResult
 
-__all__ = ["BBox", "OsmLayer", "OsmMapRequest", "OsmMapResult", "generate_osm_map", "parse_layers"]
+__all__ = [
+    "BBox",
+    "GeocodeResult",
+    "OsmMapRequest",
+    "OsmMapResult",
+    "generate_osm_map",
+    "geocode",
+]

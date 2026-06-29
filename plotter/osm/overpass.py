@@ -1,51 +1,44 @@
 from __future__ import annotations
 
+from functools import lru_cache
+
 import httpx
 
-from .types import BBox, OsmLayer
+from .types import BBox
 
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 
-OVERPASS_TIMEOUT = 20.0
+OVERPASS_TIMEOUT = 90.0
 
 OVERPASS_HEADERS = {
-    "User-Agent": "GCodeScribe/0.2 (+https://github.com/friedjof/gcodescribe)",
+    "User-Agent": "GCodeScribe/0.3 (+https://github.com/friedjof/gcodescribe)",
     "Accept": "application/json",
 }
 
-
-LAYER_QUERIES: dict[OsmLayer, tuple[str, ...]] = {
-    "streets": (
-        'way["highway"~"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|service)$"]',
-    ),
-    "paths": (
-        'way["highway"~"^(footway|path|cycleway|pedestrian|track|steps|bridleway)$"]',
-    ),
-    "buildings": ('way["building"]',),
-    "waterways": ('way["waterway"~"^(river|stream|canal|ditch|drain)$"]',),
-    "water": (
-        'way["natural"="water"]',
-        'way["water"]',
-        'way["landuse"="reservoir"]',
-    ),
-    "rail": ('way["railway"~"^(rail|tram|subway|light_rail|narrow_gauge)$"]',),
-    # Full bus/tram route relations need member ordering and de-duplication. For
-    # this first data pipeline, transit maps to the physical rail-like network.
-    "transit": (
-        'way["railway"~"^(rail|tram|subway|light_rail|narrow_gauge)$"]',
-        'way["public_transport"="platform"]',
-    ),
-}
+# Roads only, city-roads style. "RoadStrict" (after anvaka/city-roads): the
+# drawable road network — includes *_link ramps, excludes way-areas.
+ROADS_SELECTOR = (
+    'way["highway"~"^(((motorway|trunk|primary|secondary|tertiary)(_link)?)'
+    '|unclassified|residential|living_street|pedestrian|service|track)$"]["area"!="yes"]'
+)
 
 
-def build_overpass_query(bbox: BBox, layers: tuple[OsmLayer, ...]) -> str:
-    bbox_part = f"({bbox.south:.7f},{bbox.west:.7f},{bbox.north:.7f},{bbox.east:.7f})"
-    selectors = [
-        f"  {selector}{bbox_part};" for layer in layers for selector in LAYER_QUERIES[layer]
-    ]
-    return "\n".join(["[out:json][timeout:20];", "(", *selectors, ");", "out geom;"])
+def build_overpass_query(bbox: BBox, area_id: int | None = None) -> str:
+    """Overpass query for every road, either inside an OSM area (whole city,
+    city-roads style) or within a bbox rectangle."""
+    if area_id is not None:
+        timeout = int(OVERPASS_TIMEOUT)
+        header = [f"[out:json][timeout:{timeout}];", f"area({area_id})->.searchArea;"]
+        scope = "(area.searchArea)"
+    else:
+        header = ["[out:json][timeout:30];"]
+        scope = f"({bbox.south:.7f},{bbox.west:.7f},{bbox.north:.7f},{bbox.east:.7f})"
+    return "\n".join([*header, "(", f"  {ROADS_SELECTOR}{scope};", ");", "out geom;"])
 
 
+# Cache recent responses so changing only the detail slider re-renders from the
+# already-fetched roads instead of hitting Overpass again (a big latency win).
+@lru_cache(maxsize=6)
 def fetch_overpass(query: str) -> dict:
     try:
         response = httpx.post(
@@ -57,7 +50,7 @@ def fetch_overpass(query: str) -> dict:
         response.raise_for_status()
     except httpx.HTTPError as exc:
         raise ValueError(
-            "OSM data could not be loaded. Try a smaller area or fewer layers."
+            "OSM data could not be loaded. Try a smaller place or try again."
         ) from exc
     data = response.json()
     if not isinstance(data, dict):

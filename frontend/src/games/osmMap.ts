@@ -7,11 +7,6 @@ function metadataNumber(metadata: Record<string, unknown>, key: string) {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
-function formatLayerList(metadata: Record<string, unknown>) {
-  const layers = metadata.layers;
-  return Array.isArray(layers) ? layers.map(String).join(", ") : "-";
-}
-
 export function buildOsmMapTemplate(map: OsmMapResponse, t: Translator): TemplateSpec {
   const lines = map.lines as Pt[][];
   return {
@@ -20,8 +15,7 @@ export function buildOsmMapTemplate(map: OsmMapResponse, t: Translator): Templat
     width: map.width,
     height: map.height,
     details: [
-      { label: t("games.osm.layers"), value: formatLayerList(map.metadata) },
-      { label: t("games.osm.lines"), value: String(metadataNumber(map.metadata, "line_count") || lines.length) },
+      { label: t("games.osm.roads"), value: String(metadataNumber(map.metadata, "line_count") || lines.length) },
       { label: t("games.osm.points"), value: String(metadataNumber(map.metadata, "point_count")) },
     ],
   };

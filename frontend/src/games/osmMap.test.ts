@@ -14,7 +14,6 @@ describe("buildOsmMapTemplate", () => {
         [[10, 10], [20, 10], [20, 20], [10, 10]],
       ],
       metadata: {
-        layers: ["streets", "buildings"],
         line_count: 2,
         point_count: 7,
       },
@@ -25,8 +24,7 @@ describe("buildOsmMapTemplate", () => {
     expect(template.height).toBe(120);
     expect(template.lines).toHaveLength(2);
     expect(template.details).toEqual([
-      { label: "games.osm.layers", value: "streets, buildings" },
-      { label: "games.osm.lines", value: "2" },
+      { label: "games.osm.roads", value: "2" },
       { label: "games.osm.points", value: "7" },
     ]);
   });

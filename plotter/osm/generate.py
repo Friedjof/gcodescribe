@@ -3,68 +3,68 @@ from __future__ import annotations
 import math
 from collections.abc import Callable
 
+from ..linemerge import merge_polylines
 from .overpass import build_overpass_query, fetch_overpass
 from .types import OsmMapRequest, OsmMapResult
 
 Point = tuple[float, float]
 Polyline = list[Point]
+Projector = Callable[[float, float], Point]
 
-MAX_LINES = 6000
-MAX_POINTS = 120000
+MAX_LINES = 9000
+MAX_POINTS = 200000
 
-# Endpoint snap distance (plotter mm) used to stitch OSM ways into continuous
-# polylines. Shared OSM nodes project to identical coordinates, so a small grid
-# is enough to absorb rounding noise.
-SNAP_TOLERANCE = 0.05
+# Endpoint snap distance (plotter mm) used to stitch OSM road fragments into
+# continuous strokes. OSM splits roads at every junction; merging picks the
+# straightest continuation through each junction, so a road becomes one long
+# line instead of dozens of stubs — far fewer pen lifts and a much more
+# plottable, map-like result.
+SNAP_TOLERANCE = 0.2
 
-# Categories whose open ways form a connected network and may be merged
-# end-to-end. Closed footprints (buildings, water) are kept as separate loops.
-MERGEABLE_CATEGORIES = frozenset({"highway", "waterway", "railway"})
-
-# When many buildings would each render smaller than this (mm), individual
-# footprints turn into confetti. Instead we aggregate them into the outline of
-# the built-up area so the result reads like a map rather than scattered dots.
-BUILDING_REF_M = 14.0
-FOOTPRINT_MIN_MM = 2.5
-BLOCK_MIN_BUILDINGS = 200
-BLOCK_CELL_MIN_MM = 1.5
-BLOCK_CELL_MAX_MM = 5.0
+# Blank margin (mm) kept around the map so it sits centred on the page.
+MARGIN_MM = 4.0
 
 
 def generate_osm_map(
     req: OsmMapRequest, fetcher: Callable[[str], dict] | None = None
 ) -> OsmMapResult:
-    """Load OSM ways and convert them into plotter-space polylines."""
+    """Load every road in the area and convert it to plotter-space polylines.
 
-    req.bbox.validate()
-    query = build_overpass_query(req.bbox, req.layers)
+    Roads-only, city-roads style: Web-Mercator projection, aspect-correct fit,
+    fragments chained into continuous lines, then simplified to a point budget.
+    """
+    # In boundary mode the bbox is only a hint, so skip the span cap.
+    if req.area_id is None:
+        req.bbox.validate()
+    query = build_overpass_query(req.bbox, req.area_id)
     data = (fetcher or fetch_overpass)(query)
-    osm_lines, extra_meta = _overpass_lines(data, req)
-    lines: list[list[tuple[float, float]]] = []
+
+    project, out_w, out_h, frame_rect = _build_projector(data, req)
+    osm_lines = _road_lines(data, req, project)
+
+    lines: list[Polyline] = []
     if req.include_frame:
-        lines.append(
-            [(0.0, 0.0), (req.width, 0.0), (req.width, req.height), (0.0, req.height), (0.0, 0.0)]
-        )
+        fx0, fy0, fx1, fy1 = frame_rect
+        lines.append([(fx0, fy0), (fx1, fy0), (fx1, fy1), (fx0, fy1), (fx0, fy0)])
     lines.extend(osm_lines)
+
     protected_count = 1 if req.include_frame else 0
     lines, detail_reduced = _fit_detail_budget(lines, protected_count)
     point_count = sum(len(line) for line in lines)
-    elements = data.get("elements", [])
+    elements = data.get("elements", []) if isinstance(data, dict) else []
     return OsmMapResult(
-        width=req.width,
-        height=req.height,
-        view_box=f"0 0 {req.width:g} {req.height:g}",
+        width=out_w,
+        height=out_h,
+        view_box=f"0 0 {out_w:g} {out_h:g}",
         lines=lines,
         metadata={
             "source": "osm",
             "status": "loaded",
-            "layers": list(req.layers),
             "detail": req.detail,
             "detail_reduced": detail_reduced,
             "line_count": len(lines),
             "point_count": point_count,
             "osm_elements": len(elements) if isinstance(elements, list) else 0,
-            **extra_meta,
             "bbox": {
                 "south": req.bbox.south,
                 "west": req.bbox.west,
@@ -75,45 +75,36 @@ def generate_osm_map(
     )
 
 
-def _overpass_lines(data: dict, req: OsmMapRequest) -> tuple[list[Polyline], dict[str, object]]:
+def _road_lines(data: dict, req: OsmMapRequest, project: Projector) -> list[Polyline]:
     elements = data.get("elements", [])
     if not isinstance(elements, list):
         raise ValueError("OSM returned an unexpected element list.")
 
-    # Project every way first, but defer simplification. OSM splits roads at
-    # each junction, so simplifying per way collapses every fragment to a 2-point
-    # stub. Mergeable open ways are stitched into continuous polylines so a long
-    # straight road becomes one line that Douglas-Peucker can keep straight.
-    open_by_category: dict[str, list[Polyline]] = {}
-    buildings: list[Polyline] = []
-    standalone: list[Polyline] = []
+    ways: list[Polyline] = []
     for element in elements:
         if not isinstance(element, dict) or element.get("type") != "way":
             continue
         geometry = element.get("geometry")
         if not isinstance(geometry, list):
             continue
-        raw = [_project_point(point, req) for point in geometry if _has_lat_lon(point)]
+        raw = [
+            project(float(point["lon"]), float(point["lat"]))
+            for point in geometry
+            if _has_lat_lon(point)
+        ]
         line = _dedupe_consecutive(raw)
-        if len(line) < 2:
-            continue
-        category = _category(element)
-        is_closed = len(line) >= 3 and line[0] == line[-1]
-        if category == "building":
-            buildings.append(line)
-        elif category in MERGEABLE_CATEGORIES and not is_closed:
-            open_by_category.setdefault(category, []).append(line)
-        else:
-            standalone.append(line)
+        if len(line) >= 2:
+            ways.append(line)
 
-    merged: list[Polyline] = []
-    for group in open_by_category.values():
-        merged.extend(_chain_lines(group, SNAP_TOLERANCE))
-    merged.extend(standalone)
-    building_lines, building_mode = _render_buildings(buildings, req)
-    merged.extend(building_lines)
+    # Merge fragments into long continuous strokes (straightest continuation at
+    # junctions) — this is what makes the result plottable.
+    merged = merge_polylines(ways, tol=SNAP_TOLERANCE)
 
-    # Simplify after merging so straight runs collapse to their endpoints.
+    # Join every separate component into one connected network with the shortest
+    # possible links, so the map can be plotted as a single continuous stroke
+    # (no pen lifts between islands).
+    merged = _connect_components(merged, SNAP_TOLERANCE)
+
     tolerance = _simplify_tolerance(req.detail)
     lines: list[Polyline] = []
     seen: set[tuple[Point, ...]] = set()
@@ -122,192 +113,222 @@ def _overpass_lines(data: dict, req: OsmMapRequest) -> tuple[list[Polyline], dic
         if len(line) < 2:
             continue
         key = tuple((round(x, 3), round(y, 3)) for x, y in line)
-        rev_key = tuple(reversed(key))
-        if key in seen or rev_key in seen:
+        if key in seen or tuple(reversed(key)) in seen:
             continue
         seen.add(key)
         lines.append(line)
-    return lines, {"building_mode": building_mode}
+    return lines
 
 
-def _render_buildings(buildings: list[Polyline], req: OsmMapRequest) -> tuple[list[Polyline], str]:
-    """Draw real footprints when buildings are big enough, otherwise aggregate.
+# ---- connectivity ----------------------------------------------------------
 
-    At wide extents each footprint shrinks to sub-millimeter confetti. There we
-    rasterize building coverage and trace the outline of the built-up area, which
-    reads like a printed map instead of scattered dots.
+class _UnionFind:
+    def __init__(self, n: int) -> None:
+        self.parent = list(range(n))
+
+    def find(self, a: int) -> int:
+        while self.parent[a] != a:
+            self.parent[a] = self.parent[self.parent[a]]
+            a = self.parent[a]
+        return a
+
+    def union(self, a: int, b: int) -> bool:
+        ra, rb = self.find(a), self.find(b)
+        if ra == rb:
+            return False
+        self.parent[ra] = rb
+        return True
+
+
+def _connect_components(lines: list[Polyline], tol: float) -> list[Polyline]:
+    """Join all separate components into ONE connected network.
+
+    Components that share endpoints are already one piece; the rest are linked at
+    their **nearest points** (the touched stroke is split there) with the
+    shortest possible connectors, chosen via a KD-tree + Kruskal MST. The result
+    can be drawn as a single continuous stroke with no pen lifts between islands.
     """
-    if not buildings:
-        return [], "none"
-    scale = _mm_per_meter(req)
-    if (
-        len(buildings) < BLOCK_MIN_BUILDINGS
-        or scale <= 0
-        or BUILDING_REF_M * scale >= FOOTPRINT_MIN_MM
-    ):
-        return buildings, "footprints"
-    return _building_blocks(buildings, req), "blocks"
+    import numpy as np
+    from scipy.spatial import cKDTree
 
-
-def _mm_per_meter(req: OsmMapRequest) -> float:
-    bbox = req.bbox
-    mid_lat = math.radians((bbox.north + bbox.south) / 2)
-    span_m = (bbox.east - bbox.west) * 111_320.0 * math.cos(mid_lat)
-    if span_m <= 0:
-        return 0.0
-    return req.width / span_m
-
-
-def _building_blocks(buildings: list[Polyline], req: OsmMapRequest) -> list[Polyline]:
-    cell = _clamp(
-        BLOCK_CELL_MIN_MM + (1.0 - req.detail) * 3.0,
-        BLOCK_CELL_MIN_MM,
-        BLOCK_CELL_MAX_MM,
-    )
-    cols = max(1, math.ceil(req.width / cell))
-    rows = max(1, math.ceil(req.height / cell))
-    filled: set[tuple[int, int]] = set()
-    for poly in buildings:
-        _rasterize_polygon(poly, filled, cols, rows, cell)
-    if not filled:
-        return []
-
-    # Emit each cell edge that borders the empty side; chaining stitches them
-    # into the silhouette of the built-up blocks.
-    edges: list[Polyline] = []
-    for i, j in filled:
-        x0, y0 = i * cell, j * cell
-        x1, y1 = min((i + 1) * cell, req.width), min((j + 1) * cell, req.height)
-        if (i - 1, j) not in filled:
-            edges.append([(x0, y0), (x0, y1)])
-        if (i + 1, j) not in filled:
-            edges.append([(x1, y0), (x1, y1)])
-        if (i, j - 1) not in filled:
-            edges.append([(x0, y0), (x1, y0)])
-        if (i, j + 1) not in filled:
-            edges.append([(x0, y1), (x1, y1)])
-
-    chained = _chain_lines(edges, SNAP_TOLERANCE)
-    return [_simplify(line, cell) for line in chained]
-
-
-def _rasterize_polygon(
-    poly: Polyline, filled: set[tuple[int, int]], cols: int, rows: int, cell: float
-) -> None:
-    pts = poly if poly[0] == poly[-1] else [*poly, poly[0]]
-    ys = [p[1] for p in pts]
-    j_min = max(0, int(min(ys) // cell))
-    j_max = min(rows - 1, int(max(ys) // cell))
-    for j in range(j_min, j_max + 1):
-        yc = (j + 0.5) * cell
-        crossings: list[float] = []
-        for (x1, y1), (x2, y2) in zip(pts, pts[1:], strict=False):
-            if (y1 <= yc < y2) or (y2 <= yc < y1):
-                crossings.append(x1 + (yc - y1) / (y2 - y1) * (x2 - x1))
-        crossings.sort()
-        for xa, xb in zip(crossings[0::2], crossings[1::2], strict=False):
-            i_a = max(0, math.ceil(xa / cell - 0.5))
-            i_b = min(cols - 1, math.floor(xb / cell - 0.5))
-            for i in range(i_a, i_b + 1):
-                filled.add((i, j))
-
-
-def _category(element: dict) -> str:
-    tags = element.get("tags")
-    if not isinstance(tags, dict):
-        return "other"
-    if "highway" in tags:
-        return "highway"
-    if "waterway" in tags:
-        return "waterway"
-    if "railway" in tags:
-        return "railway"
-    if "building" in tags:
-        return "building"
-    return "other"
-
-
-def _snap_key(point: Point, snap: float) -> tuple[int, int]:
-    return (round(point[0] / snap), round(point[1] / snap))
-
-
-def _chain_lines(lines: list[Polyline], snap: float) -> list[Polyline]:
-    """Stitch open ways that share an endpoint into maximal polylines.
-
-    Walks through pass-through nodes (exactly two way-ends meet) and stops at
-    real junctions (degree != 2) so the network topology is preserved.
-    """
     if len(lines) <= 1:
-        return list(lines)
-    ends: dict[tuple[int, int], list[tuple[int, int]]] = {}
-    for idx, line in enumerate(lines):
-        ends.setdefault(_snap_key(line[0], snap), []).append((idx, 0))
-        ends.setdefault(_snap_key(line[-1], snap), []).append((idx, 1))
-    used = [False] * len(lines)
-    result: list[Polyline] = []
-    for start_idx in range(len(lines)):
-        if used[start_idx]:
+        return lines
+
+    uf = _UnionFind(len(lines))
+    inv = 1.0 / tol if tol > 0 else 1e9
+    seen_node: dict[tuple[int, int], int] = {}
+    for i, line in enumerate(lines):
+        for end in (line[0], line[-1]):
+            key = (round(end[0] * inv), round(end[1] * inv))
+            other = seen_node.get(key)
+            if other is None:
+                seen_node[key] = i
+            else:
+                uf.union(i, other)
+
+    if len({uf.find(i) for i in range(len(lines))}) <= 1:
+        return lines
+
+    # Every vertex, tagged with its owning stroke, for nearest-point linking.
+    pts: list[Point] = []
+    owner: list[tuple[int, int]] = []
+    for i, line in enumerate(lines):
+        for j, p in enumerate(line):
+            pts.append(p)
+            owner.append((i, j))
+    coords = np.asarray(pts, dtype=float)
+    tree = cKDTree(coords)
+    k = min(len(pts), 8)
+    dists, idxs = tree.query(coords, k=k)
+    if k == 1:  # degenerate
+        idxs = idxs.reshape(-1, 1)
+        dists = dists.reshape(-1, 1)
+
+    candidates: list[tuple[float, int, int]] = []
+    for a in range(len(pts)):
+        ra = uf.find(owner[a][0])
+        for d, b in zip(dists[a][1:], idxs[a][1:], strict=False):
+            if uf.find(owner[int(b)][0]) != ra:
+                candidates.append((float(d), a, int(b)))
+    candidates.sort(key=lambda t: t[0])
+
+    splits: dict[int, set[int]] = {}
+    connectors: list[Polyline] = []
+    for _, a, b in candidates:
+        la, pa = owner[a]
+        lb, pb = owner[b]
+        if uf.union(la, lb):
+            splits.setdefault(la, set()).add(pa)
+            splits.setdefault(lb, set()).add(pb)
+            connectors.append([pts[a], pts[b]])
+
+    # Close any components the k-NN candidates missed (rare): link via nearest
+    # endpoints among the few remaining roots.
+    roots = {uf.find(i) for i in range(len(lines))}
+    while len(roots) > 1:
+        by_root: dict[int, list[int]] = {}
+        for i in range(len(lines)):
+            by_root.setdefault(uf.find(i), []).append(i)
+        root_list = list(by_root)
+        base = root_list[0]
+        best = None  # (dist, line_a, end_a_point, line_b, end_b_point)
+        base_ends = [(i, e) for i in by_root[base] for e in (lines[i][0], lines[i][-1])]
+        for other in root_list[1:]:
+            for j in by_root[other]:
+                for q in (lines[j][0], lines[j][-1]):
+                    for i, p in base_ends:
+                        d = math.dist(p, q)
+                        if best is None or d < best[0]:
+                            best = (d, i, p, j, q)
+        if best is None:
+            break
+        _, i, p, j, q = best
+        uf.union(i, j)
+        connectors.append([p, q])
+        roots = {uf.find(x) for x in range(len(lines))}
+
+    if not splits and not connectors:
+        return lines
+
+    out: list[Polyline] = []
+    for i, line in enumerate(lines):
+        cuts = sorted(splits.get(i, ()))
+        if not cuts:
+            out.append(line)
             continue
-        used[start_idx] = True
-        chain: Polyline = list(lines[start_idx])
-        _extend_chain(chain, lines, ends, used, snap, at_tail=True)
-        _extend_chain(chain, lines, ends, used, snap, at_tail=False)
-        result.append(chain)
-    return result
+        prev = 0
+        for c in cuts:
+            piece = line[prev:c + 1]
+            if len(piece) >= 2:
+                out.append(piece)
+            prev = c
+        tail = line[prev:]
+        if len(tail) >= 2:
+            out.append(tail)
+    out.extend(connectors)
+    return out
 
 
-def _extend_chain(
-    chain: Polyline,
-    lines: list[Polyline],
-    ends: dict[tuple[int, int], list[tuple[int, int]]],
-    used: list[bool],
-    snap: float,
-    at_tail: bool,
-) -> None:
-    while True:
-        node = _snap_key(chain[-1] if at_tail else chain[0], snap)
-        entries = ends.get(node, ())
-        if len(entries) != 2:
-            break
-        nxt = next(((i, e) for i, e in entries if not used[i]), None)
-        if nxt is None:
-            break
-        idx, end = nxt
-        used[idx] = True
-        seg = lines[idx]
-        outward = seg if end == 0 else list(reversed(seg))
-        new_points = outward[1:]
-        if not new_points:
-            break
-        if at_tail:
-            chain.extend(new_points)
-        else:
-            chain[:0] = list(reversed(new_points))
+# ---- projection ------------------------------------------------------------
 
+def _mercator(lon: float, lat: float) -> Point:
+    lat = _clamp(lat, -85.05, 85.05)
+    return (math.radians(lon), math.log(math.tan(math.pi / 4 + math.radians(lat) / 2)))
+
+
+def _build_projector(
+    data: dict, req: OsmMapRequest
+) -> tuple[Projector, float, float, tuple[float, float, float, float]]:
+    """Web-Mercator projector that fits the roads into ``req.width × req.height``
+    preserving aspect ratio and **centring** them on the page (city-roads style).
+
+    Returns ``(project, page_w, page_h, frame_rect)`` where the page is the full
+    requested box and ``frame_rect`` is the centred content rectangle.
+    """
+    page_w, page_h = req.width, req.height
+    full = (0.0, 0.0, page_w, page_h)
+    elements = data.get("elements", []) if isinstance(data, dict) else []
+    min_x = min_y = math.inf
+    max_x = max_y = -math.inf
+    if isinstance(elements, list):
+        for element in elements:
+            if not isinstance(element, dict):
+                continue
+            geometry = element.get("geometry")
+            if not isinstance(geometry, list):
+                continue
+            for point in geometry:
+                if not _has_lat_lon(point):
+                    continue
+                mx, my = _mercator(float(point["lon"]), float(point["lat"]))
+                min_x, max_x = min(min_x, mx), max(max_x, mx)
+                min_y, max_y = min(min_y, my), max(max_y, my)
+
+    span_x = max_x - min_x
+    span_y = max_y - min_y
+    if span_x <= 0 or span_y <= 0:
+        return (lambda lon, lat: (page_w / 2, page_h / 2)), page_w, page_h, full
+
+    avail_w = max(1.0, page_w - 2 * MARGIN_MM)
+    avail_h = max(1.0, page_h - 2 * MARGIN_MM)
+    scale = min(avail_w / span_x, avail_h / span_y)
+    content_w = span_x * scale
+    content_h = span_y * scale
+    off_x = (page_w - content_w) / 2
+    off_y = (page_h - content_h) / 2
+
+    def project(lon: float, lat: float) -> Point:
+        mx, my = _mercator(lon, lat)
+        x = off_x + (mx - min_x) * scale
+        y = off_y + (max_y - my) * scale  # flip: north on top
+        return (round(x, 4), round(y, 4))
+
+    frame_rect = (
+        round(off_x, 4),
+        round(off_y, 4),
+        round(off_x + content_w, 4),
+        round(off_y + content_h, 4),
+    )
+    return project, page_w, page_h, frame_rect
+
+
+# ---- detail budget ---------------------------------------------------------
 
 def _fit_detail_budget(lines: list[Polyline], protected_count: int) -> tuple[list[Polyline], bool]:
-    if len(lines) <= MAX_LINES and sum(len(line) for line in lines) <= MAX_POINTS:
+    """Keep the point count within budget by simplifying harder — never by
+    dropping whole strokes, which would re-introduce islands. Connectivity is
+    preserved (Douglas-Peucker keeps endpoints)."""
+    if sum(len(line) for line in lines) <= MAX_POINTS:
         return lines, False
 
     protected = lines[:protected_count]
     candidates = lines[protected_count:]
     reduced = candidates
-    for tolerance in (2.5, 4.0, 6.0, 8.0, 12.0):
+    for tolerance in (2.5, 4.0, 6.0, 8.0, 12.0, 18.0, 26.0):
         reduced = [_simplify(line, tolerance) for line in reduced]
         reduced = [line for line in reduced if len(line) >= 2]
-        if (
-            len(protected) + len(reduced) <= MAX_LINES
-            and _point_count(protected, reduced) <= MAX_POINTS
-        ):
+        if _point_count(protected, reduced) <= MAX_POINTS:
             return protected + reduced, True
-
-    max_candidates = max(0, MAX_LINES - len(protected))
-    if len(reduced) > max_candidates:
-        reduced = _sample_evenly(reduced, max_candidates)
-
-    while reduced and _point_count(protected, reduced) > MAX_POINTS:
-        reduced = _sample_evenly(reduced, max(1, len(reduced) * 3 // 4))
-
     return protected + reduced, True
 
 
@@ -315,17 +336,7 @@ def _point_count(protected: list[Polyline], candidates: list[Polyline]) -> int:
     return sum(len(line) for line in protected) + sum(len(line) for line in candidates)
 
 
-def _sample_evenly(lines: list[Polyline], limit: int) -> list[Polyline]:
-    if limit <= 0:
-        return []
-    if len(lines) <= limit:
-        return lines
-    if limit == 1:
-        return [lines[0]]
-    last = len(lines) - 1
-    indexes = {round(i * last / (limit - 1)) for i in range(limit)}
-    return [line for index, line in enumerate(lines) if index in indexes]
-
+# ---- geometry helpers ------------------------------------------------------
 
 def _has_lat_lon(value: object) -> bool:
     return (
@@ -333,13 +344,6 @@ def _has_lat_lon(value: object) -> bool:
         and isinstance(value.get("lat"), int | float)
         and isinstance(value.get("lon"), int | float)
     )
-
-
-def _project_point(point: dict, req: OsmMapRequest) -> Point:
-    bbox = req.bbox
-    x = (float(point["lon"]) - bbox.west) / (bbox.east - bbox.west) * req.width
-    y = (bbox.north - float(point["lat"])) / (bbox.north - bbox.south) * req.height
-    return (round(_clamp(x, 0.0, req.width), 4), round(_clamp(y, 0.0, req.height), 4))
 
 
 def _dedupe_consecutive(line: Polyline) -> Polyline:
