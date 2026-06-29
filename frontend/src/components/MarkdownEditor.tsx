@@ -1,7 +1,8 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { api, type Calibration, type GallerySvg, type PageScore, type SceneObject } from "../api";
 import { transformPolylines } from "../paint/geometry";
-import { TEXT_FONTS, type TextFont } from "../paint/text";
+import { type TextFont } from "../paint/text";
+import { fontLabel, useTextFonts } from "../paint/useTextFonts";
 import { parseMarkdown, type Block, type InlineToken } from "../markdown/parse";
 import { layoutMarkdown, placeObjects, type LayoutOptions } from "../markdown/layout";
 import { useI18n } from "../i18n";
@@ -47,6 +48,7 @@ export default function MarkdownEditor({
   onInsert: (objects: SceneObject[], markdown: string) => void;
 }) {
   const { t } = useI18n();
+  const { fonts } = useTextFonts();
   const [source, setSource] = useState(initialMarkdown || t("paint.md.sample"));
   const [font, setFont] = useState<TextFont>("sans");
   const [baseSize, setBaseSize] = useState(5);
@@ -127,8 +129,8 @@ export default function MarkdownEditor({
             <label className="field">
               {t("paint.font")}
               <select value={font} onChange={(e) => setFont(e.target.value as TextFont)}>
-                {TEXT_FONTS.map((f) => (
-                  <option key={f.value} value={f.value}>{t(f.labelKey)}</option>
+                {fonts.map((f) => (
+                  <option key={f.id} value={f.id}>{fontLabel(f, t)}</option>
                 ))}
               </select>
             </label>

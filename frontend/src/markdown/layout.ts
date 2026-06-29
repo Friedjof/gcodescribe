@@ -109,7 +109,7 @@ export async function layoutMarkdown(
     const size = blockSize(opts.baseSize, block.kind);
     const text = blockLines(block, opts).join("\n");
     const mode = "single-line";
-    const { local } = await textGeometryAsync(text, size, opts.font, fallbackText, opts.connectSpaces);
+    const { local, feeds } = await textGeometryAsync(text, size, opts.font, fallbackText, opts.connectSpaces);
     // localize() centers geometry on its centroid, so bounds are symmetric.
     const [x0, y0, x1, y1] = localBounds(local);
     const halfW = (x1 - x0) / 2;
@@ -120,6 +120,7 @@ export async function layoutMarkdown(
       type: "text",
       data: { text, mode, size, font: opts.font, basePolylines: local, style: DEFAULT_VECTOR_STYLE },
       cachedPolylines: local,
+      cachedFeeds: feeds,
       transform: { x: halfW, y: yCursor + halfH, rotation: 0, scale: 1 },
       groupId,
       plotted: false,

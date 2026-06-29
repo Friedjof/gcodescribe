@@ -1,6 +1,7 @@
 from . import (
     auth,
     calibration,
+    fonts,
     jobs,
     osm_map,
     pages,
@@ -9,12 +10,14 @@ from . import (
     settings,
     sources,
     stream,
+    stroke_fonts,
     sudoku,
 )
 
 __all__ = [
     "auth",
     "calibration",
+    "fonts",
     "jobs",
     "osm_map",
     "pages",
@@ -23,5 +26,6 @@ __all__ = [
     "settings",
     "sources",
     "stream",
+    "stroke_fonts",
     "sudoku",
 ]

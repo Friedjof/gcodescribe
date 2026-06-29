@@ -3,6 +3,7 @@ import { api, type AiImageStatus, type AuthSession, type AuthSetupStart, type Ef
 import AiImageDesigner from "./components/AiImageDesigner";
 import Convert from "./components/Convert";
 import Paint from "./components/Paint";
+import FontEditor from "./components/font-editor/FontEditor";
 import Games from "./components/Games";
 import Gallery from "./components/Gallery";
 import Calibrate from "./components/Calibrate";
@@ -13,7 +14,7 @@ import SettingsDialog from "./components/SettingsDialog";
 import { useToasts } from "./components/Toasts";
 import { useI18n } from "./i18n";
 
-type Tab = "paint" | "games" | "gallery" | "ai" | "convert" | "paper" | "calibrate" | "control";
+type Tab = "paint" | "games" | "gallery" | "ai" | "convert" | "paper" | "calibrate" | "control" | "font";
 
 export default function App() {
   return (
@@ -26,7 +27,7 @@ export default function App() {
 // Heavy, stateful tabs: mount once on first visit and keep them alive (hidden)
 // so switching back is instant instead of refetching + rebuilding the canvas.
 // The lighter list/state tabs stay unmount-on-switch so they reflect fresh data.
-const KEEP_ALIVE: Tab[] = ["paint", "games", "gallery", "ai", "convert", "paper", "calibrate"];
+const KEEP_ALIVE: Tab[] = ["paint", "games", "gallery", "ai", "convert", "paper", "calibrate", "font"];
 const PLOT_PROGRESS_THRESHOLDS = [25, 50, 90, 100];
 
 function AdminApp() {
@@ -162,6 +163,7 @@ function AdminApp() {
     { value: "paint", label: t("tabs.paint") },
     ...(aiStatus?.enabled ? [{ value: "ai" as Tab, label: t("tabs.ai") }] : []),
     { value: "games", label: t("tabs.games") },
+    { value: "font", label: t("tabs.fontEditor") },
     { value: "gallery", label: t("tabs.gallery") },
     { value: "convert", label: t("tabs.jobs") },
     { value: "paper", label: t("tabs.paper") },
@@ -233,6 +235,7 @@ function AdminApp() {
                 <Convert status={status} onAction={refreshStatus} visible={tab === "convert"} />
               )}
               {value === "calibrate" && <Calibrate />}
+              {value === "font" && <FontEditor visible={tab === "font"} />}
             </div>
           ) : null
         )}

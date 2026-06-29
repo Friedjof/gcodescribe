@@ -16,6 +16,7 @@ from .routes import (
     auth,
     calibration,
     coloring_pages,
+    fonts,
     gallery,
     jobs,
     maze,
@@ -27,6 +28,7 @@ from .routes import (
     settings,
     sources,
     stream,
+    stroke_fonts,
     sudoku,
 )
 
@@ -57,6 +59,7 @@ def create_app() -> FastAPI:
         ai_images,
         calibration,
         coloring_pages,
+        fonts,
         jobs,
         maze,
         osm_map,
@@ -66,6 +69,7 @@ def create_app() -> FastAPI:
         profiles,
         settings,
         sources,
+        stroke_fonts,
         sudoku,
     )
     for module in protected_modules:

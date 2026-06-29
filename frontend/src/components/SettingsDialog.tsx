@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
-import { api, type EffectiveSettings, type SerialPortCandidate } from "../api";
+import { useEffect, useRef, useState } from "react";
+import { api, type EffectiveSettings, type FontItem, type SerialPortCandidate } from "../api";
 import Modal from "./Modal";
 import { useI18n } from "../i18n";
+import { fontLabel, useTextFonts } from "../paint/useTextFonts";
 
-type Section = "printer" | "ai" | "storage" | "auth" | "server";
-const SECTIONS: Section[] = ["printer", "ai", "storage", "auth", "server"];
+type Section = "printer" | "ai" | "fonts" | "storage" | "auth" | "server";
+const SECTIONS: Section[] = ["printer", "ai", "fonts", "storage", "auth", "server"];
 
 // Computed server-side flags — rendered read-only, never patchable.
 const READONLY_FIELDS = new Set(["ai.enabled"]);
@@ -130,6 +131,8 @@ function SectionView({
   onReset: (section: string, field: string) => void;
 }) {
   const { t } = useI18n();
+  if (section === "fonts") return <FontSettingsSection />;
+
   const rawSection = data[section] as Record<string, unknown>;
 
   return (
@@ -202,6 +205,138 @@ function SectionView({
       </dl>
 
       {section === "printer" && <OctoPrintCheckSection />}
+    </section>
+  );
+}
+
+function FontSettingsSection() {
+  const { t } = useI18n();
+  const { fonts, loading, error, reload, setFonts } = useTextFonts();
+  const [label, setLabel] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [mode, setMode] = useState<"plotter" | "normal">("plotter");
+  const [busy, setBusy] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const importRef = useRef<HTMLInputElement>(null);
+
+  const exportStrokeFont = (font: FontItem) => {
+    setLocalError(null);
+    api.exportStrokeFont(font.id, font.label).catch((e) => setLocalError(String(e.message ?? e)));
+  };
+
+  const importStrokeFont = (importFile: File | null) => {
+    if (!importFile || busy) return;
+    setBusy(true);
+    setLocalError(null);
+    api.importStrokeFont(importFile)
+      .then(() => reload())
+      .catch((e) => setLocalError(String(e.message ?? e)))
+      .finally(() => {
+        setBusy(false);
+        if (importRef.current) importRef.current.value = "";
+      });
+  };
+
+  const add = () => {
+    if (!file || busy) return;
+    setBusy(true);
+    setLocalError(null);
+    api.uploadFont(label || file.name.replace(/\.[^.]+$/, ""), file, mode)
+      .then((res) => {
+        setFonts(res.fonts);
+        setLabel("");
+        setFile(null);
+        if (fileRef.current) fileRef.current.value = "";
+      })
+      .catch((e) => setLocalError(String(e.message ?? e)))
+      .finally(() => setBusy(false));
+  };
+
+  const remove = (font: FontItem) => {
+    if (font.builtin || busy) return;
+    setBusy(true);
+    setLocalError(null);
+    api.deleteFont(font.id)
+      .then((res) => setFonts(res.fonts))
+      .catch((e) => setLocalError(String(e.message ?? e)))
+      .finally(() => setBusy(false));
+  };
+
+  return (
+    <section className="settings-section">
+      <h3 className="settings-section-heading">{t("settings.fonts.heading")}</h3>
+      <p className="muted">{t("settings.fonts.help")}</p>
+      {(error || localError) && <p className="settings-err">{localError ?? error}</p>}
+
+      <div className="settings-font-block">
+        <span className="muted">{t("settings.fonts.uploadHint")}</span>
+        <input
+          type="text"
+          className="settings-input"
+          value={label}
+          placeholder={t("settings.fonts.labelPlaceholder")}
+          onChange={(e) => setLabel(e.target.value)}
+        />
+        <div className="settings-font-row">
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".otf,.ttf,font/otf,font/ttf"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          />
+          <select
+            className="settings-input settings-font-mode-select"
+            value={mode}
+            onChange={(e) => setMode(e.target.value as "plotter" | "normal")}
+          >
+            <option value="plotter">{t("settings.fonts.mode.plotter")}</option>
+            <option value="normal">{t("settings.fonts.mode.normal")}</option>
+          </select>
+          <button className="primary" disabled={!file || busy} onClick={add}>
+            {busy ? t("settings.fonts.saving") : t("settings.fonts.add")}
+          </button>
+        </div>
+      </div>
+
+      <div className="settings-font-block">
+        <span className="muted">{t("settings.fonts.importHint")}</span>
+        <input
+          ref={importRef}
+          type="file"
+          accept=".gcsfont,application/json"
+          disabled={busy}
+          onChange={(e) => importStrokeFont(e.target.files?.[0] ?? null)}
+        />
+      </div>
+
+      <ul className="settings-font-list">
+        {fonts.map((font) => (
+          <li key={font.id} className="settings-font-item">
+            <span className="settings-font-name">{fontLabel(font, t)}</span>
+            <span className="settings-source settings-source-default">
+              {font.builtin ? t("settings.fonts.builtin") : t("settings.fonts.custom")}
+            </span>
+            <span className={`settings-source ${font.mode === "plotter" ? "settings-source-saved" : "settings-source-default"}`}>
+              {font.mode === "plotter"
+                ? t("settings.fonts.optimized")
+                : t("settings.fonts.normal")}
+            </span>
+            {font.kind === "stroke" && (
+              <button className="ghost" disabled={busy} onClick={() => exportStrokeFont(font)}>
+                {t("settings.fonts.export")}
+              </button>
+            )}
+            {!font.builtin && (
+              <button className="ghost" disabled={busy} onClick={() => remove(font)}>
+                {t("settings.fonts.remove")}
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+      {loading && <p className="muted">{t("common.loading")}</p>}
+      <button className="ghost" disabled={loading || busy} onClick={reload}>{t("settings.fonts.reload")}</button>
     </section>
   );
 }

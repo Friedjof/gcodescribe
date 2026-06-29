@@ -1,0 +1,1217 @@
+.font-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  /* Fill the viewport below the header + tab nav; the inner body absorbs the
+     remaining space so the page itself never scrolls vertically. */
+  height: calc(100dvh - 122px);
+  min-height: 0;
+}
+
+/* Header: create + load on the left, current font + save on the right. */
+.fe-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.fe-header-create,
+.fe-header-current {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fe-name-input {
+  min-width: 220px;
+}
+
+.fe-current-label {
+  font-weight: 600;
+}
+
+.fe-dirty-badge {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.fe-dirty-badge.is-dirty {
+  color: #ffcc66;
+  border-color: rgba(255, 204, 102, 0.4);
+}
+
+.fe-dirty-badge.is-saved {
+  color: #5fd08a;
+  border-color: rgba(95, 208, 138, 0.35);
+}
+
+/* Three-column body: glyph list | writing area | tools. */
+.fe-body {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr) 320px;
+  gap: 12px;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+  scrollbar-width: none;
+}
+
+.fe-sidebar,
+.fe-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.fe-sidebar-title,
+.fe-toolbar-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.fe-sidebar-empty {
+  margin: 4px 0 0;
+}
+
+.fe-glyph-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+}
+
+.fe-glyph-item {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  text-align: left;
+  background: var(--panel-2);
+  border: 1px solid transparent;
+}
+
+.fe-glyph-item.is-active {
+  border-color: var(--accent);
+}
+
+.fe-glyph-key {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.fe-glyph-type {
+  font-size: 11px;
+}
+
+/* Writing area with metric guide lines (drawing arrives in Phase 3). */
+.fe-canvas {
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  min-height: 0;
+  overflow: hidden;
+  /* Drawing must never select the guide labels/hint text underneath. */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.fe-canvas-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.fe-strokes path {
+  fill: none;
+  stroke: var(--text);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.fe-stroke-active {
+  stroke: var(--accent);
+}
+
+.fe-stroke.is-selected {
+  stroke: var(--accent);
+}
+
+/* Tool cursors. */
+.fe-canvas-svg.fe-tool-erase {
+  cursor: cell;
+}
+.fe-canvas-svg.fe-tool-move {
+  cursor: move;
+}
+
+/* Tool modes: icon + short label, sharing one row. */
+.fe-tool-modes {
+  display: flex;
+  gap: 4px;
+}
+.fe-tool-mode {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 2px;
+  font-size: 11px;
+}
+.fe-tool-mode-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+.fe-tool-mode-label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fe-tool-mode.is-active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Compact icon row for undo/redo/reset/play/delete. */
+.fe-tool-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+.fe-tool-icon {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  font-size: 15px;
+  line-height: 1;
+}
+.fe-tool-icon.danger {
+  color: var(--err);
+}
+.fe-tool-divider {
+  flex: 0 0 1px;
+  align-self: stretch;
+  margin: 3px 1px;
+  background: var(--border);
+}
+
+/* Dialog buttons share a row. */
+.fe-tool-panels {
+  display: flex;
+  gap: 4px;
+}
+.fe-tool-panels .fe-tool-btn {
+  flex: 1;
+  justify-content: center;
+}
+
+.fe-tool-btn.is-active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.fe-guide line {
+  stroke: var(--border);
+  stroke-width: 1.5;
+}
+
+.fe-guide-baseline line {
+  stroke: var(--accent);
+  stroke-opacity: 0.5;
+}
+
+.fe-guide text {
+  fill: var(--muted);
+  font-size: 22px;
+}
+
+/* Guides never intercept drawing. */
+.fe-guide,
+.fe-guide-grid {
+  pointer-events: none;
+}
+
+/* Faint vertical width grid (quarter-em steps). */
+.fe-guide-grid {
+  stroke: var(--border);
+  stroke-opacity: 0.4;
+  stroke-width: 1;
+}
+
+/* Prominent left margin (glyph origin). */
+.fe-guide-margin line {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+}
+
+/* Default advance — where the next character would start. */
+.fe-guide-advance line {
+  stroke: var(--accent);
+  stroke-opacity: 0.45;
+  stroke-width: 1.5;
+  stroke-dasharray: 16 12;
+}
+
+.fe-canvas-hint {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 12px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  pointer-events: none;
+}
+
+/* Reset zoom + scroll (bottom-right of the canvas). */
+.fe-canvas-reset {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  z-index: 3;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.fe-canvas-reset:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Guide-line legend dropdown (top-right of the canvas). */
+.fe-canvas-info {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 3;
+  user-select: none;
+}
+
+.fe-info-btn {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--muted);
+  font-family: Georgia, "Times New Roman", serif;
+  font-style: italic;
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+.fe-info-btn:hover,
+.fe-info-btn.is-open {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.fe-info-btn.is-open {
+  transform: rotate(360deg);
+}
+
+.fe-info-panel {
+  position: absolute;
+  top: 38px;
+  right: 0;
+  width: 286px;
+  padding: 12px 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  transform-origin: top right;
+  opacity: 0;
+  transform: scale(0.9) translateY(-8px);
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.24s cubic-bezier(0.34, 1.3, 0.5, 1);
+}
+.fe-info-panel.is-open {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+  pointer-events: auto;
+}
+
+.fe-info-panel h4 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.fe-info-group-label {
+  margin: 10px 0 5px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.fe-info-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.fe-info-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.fe-info-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+.fe-info-text b {
+  font-size: 12px;
+  font-weight: 600;
+}
+.fe-info-text small {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* Line samples matching the canvas guides. */
+.fe-info-swatch {
+  position: relative;
+  flex: 0 0 26px;
+  height: 12px;
+}
+.fe-info-swatch::before {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: 50%;
+  border-top: 3px solid var(--border);
+}
+.fe-info-swatch.baseline::before {
+  border-color: var(--accent);
+  opacity: 0.6;
+}
+.fe-info-swatch.margin::before {
+  border-color: var(--accent);
+}
+.fe-info-swatch.advance::before {
+  border-top: 2px dashed var(--accent);
+  opacity: 0.7;
+}
+.fe-info-swatch.grid::before {
+  border-color: var(--border);
+  opacity: 0.45;
+}
+
+.fe-toolbar {
+  align-items: stretch;
+}
+
+.fe-tool-btn {
+  justify-content: flex-start;
+}
+
+.fe-tool-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+
+.fe-align-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fe-align-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-areas:
+    ". up ."
+    "left . right"
+    ". down .";
+  gap: 4px;
+}
+
+.fe-align-up { grid-area: up; }
+.fe-align-left { grid-area: left; }
+.fe-align-right { grid-area: right; }
+.fe-align-down { grid-area: down; }
+
+.fe-align-grid button {
+  min-width: 0;
+  padding-inline: 0;
+}
+
+.fe-align-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+
+.fe-align-advance {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.fe-align-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Empty state when no font is open. */
+.fe-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 0;
+  flex: 1;
+  background: var(--panel);
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+}
+
+.fe-empty-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* Key / meaning bar at the bottom. */
+.fe-keybar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.fe-key-label {
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.fe-key-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.fe-key-input.is-invalid {
+  border-color: var(--err);
+}
+
+.fe-key-error {
+  font-size: 12px;
+  color: var(--err);
+  white-space: nowrap;
+}
+
+/* Coverage row in the sidebar. */
+.fe-coverage {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+/* Symbol picker grid + overview grid. */
+.fe-symbols {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(520px, 82vw);
+}
+
+.fe-symbol-group-title {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.fe-symbol-grid,
+.fe-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+  gap: 6px;
+}
+
+.fe-symbol-cell,
+.fe-overview-cell {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+}
+
+.fe-symbol-cell.is-captured,
+.fe-overview-cell.is-captured {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.fe-overview-cell.is-missing {
+  color: var(--muted);
+}
+
+.fe-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(560px, 84vw);
+}
+
+.fe-overview-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.fe-overview-filters .fe-search {
+  flex: 1;
+  min-width: 140px;
+}
+
+.fe-overview-seg {
+  display: flex;
+  gap: 4px;
+}
+
+.fe-overview-grid {
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+/* Load dialog. */
+.fe-font-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.fe-font-list-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fe-font-open {
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+  background: var(--panel-2);
+}
+
+.fe-font-name {
+  font-weight: 600;
+}
+
+/* Stabilization dialog. */
+.fe-stab {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(440px, 80vw);
+}
+
+.fe-stab-presets {
+  display: flex;
+  gap: 6px;
+}
+
+.fe-stab-presets button {
+  flex: 1;
+}
+
+.fe-stab-advanced {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fe-stab-row {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr auto;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.fe-stab-value {
+  min-width: 36px;
+  text-align: right;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.fe-stab-check {
+  grid-template-columns: auto 1fr;
+}
+
+.fe-stab-foot {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Writing-test dialog. */
+.fe-writing-modal {
+  width: min(1480px, 98vw);
+  max-height: 94vh;
+}
+
+.fe-writing-modal-body {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.fe-writing-scrub {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 36px;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.fe-writing-scrub-range {
+  flex: 1;
+  min-width: 0;
+}
+
+.fe-writing-scrub-pct {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.fe-writing-test {
+  display: grid;
+  grid-template-columns: minmax(260px, 330px) minmax(420px, 1fr) minmax(205px, 235px);
+  gap: 12px;
+  width: 100%;
+  height: min(760px, calc(94vh - 86px));
+  min-width: 0;
+  min-height: 0;
+}
+
+.fe-writing-input-panel,
+.fe-writing-preview-panel,
+.fe-writing-tools {
+  min-width: 0;
+  min-height: 0;
+}
+
+.fe-writing-preview-panel {
+  position: relative;
+}
+
+.fe-writing-input-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  background:
+    radial-gradient(circle at 18% 0%, rgba(120, 180, 255, 0.12), transparent 30%),
+    var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-sizing: border-box;
+  animation: fe-writing-rise 0.22s ease-out both;
+}
+
+.fe-writing-label {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.fe-writing-input {
+  width: 100%;
+  flex: 1;
+  min-height: 210px;
+  box-sizing: border-box;
+  resize: vertical;
+  line-height: 1.45;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+
+.fe-writing-input:focus {
+  box-shadow: 0 0 0 3px rgba(120, 180, 255, 0.16);
+}
+
+.fe-writing-note {
+  margin: 0;
+}
+
+.fe-writing-missing {
+  margin: 0;
+  color: #ffcc66;
+}
+
+.fe-writing-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.fe-writing-toggle-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.fe-writing-slider {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 3px 8px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.fe-writing-slider input {
+  grid-column: 1 / -1;
+}
+
+.fe-writing-slider span:last-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.fe-writing-preview {
+  position: relative;
+  height: 100%;
+  min-width: 0;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.035), transparent 35%),
+    var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  box-sizing: border-box;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.015), 0 18px 44px rgba(0, 0, 0, 0.22);
+  animation: fe-writing-rise 0.28s 0.03s ease-out both;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  cursor: grab;
+}
+
+.fe-writing-preview::-webkit-scrollbar {
+  display: none;
+}
+
+.fe-writing-preview.is-panning {
+  cursor: grabbing;
+}
+
+.fe-writing-preview:hover {
+  border-color: rgba(120, 180, 255, 0.32);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02), 0 20px 54px rgba(0, 0, 0, 0.28);
+}
+
+.fe-writing-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-sizing: border-box;
+  overflow: visible;
+  animation: fe-writing-rise 0.24s 0.06s ease-out both;
+}
+
+.fe-writing-tool-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent),
+    var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-sizing: border-box;
+  transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.fe-writing-tool-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(120, 180, 255, 0.28);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.18);
+}
+
+.fe-writing-play-btn,
+.fe-writing-savebox .primary {
+  width: 100%;
+  justify-content: center;
+}
+
+.fe-writing-button-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+
+.fe-writing-button-row button {
+  min-width: 0;
+  padding: 3px 5px;
+  font-size: 11px;
+}
+
+.fe-writing-align-card {
+  flex: 1 1 auto;
+}
+
+.fe-writing-tools .fe-align-panel {
+  gap: 3px;
+}
+
+.fe-writing-tools .fe-align-panel .fe-toolbar-title {
+  margin: 0;
+  font-size: 11px;
+}
+
+.fe-writing-tools .fe-align-grid {
+  gap: 4px;
+}
+
+.fe-writing-tools .fe-align-actions {
+  gap: 3px;
+}
+
+.fe-writing-tools .fe-align-actions button,
+.fe-writing-tools .fe-align-panel .fe-tool-btn {
+  min-width: 0;
+  padding: 6px 7px;
+  font-size: 12px;
+}
+
+.fe-writing-tools .fe-align-advance {
+  gap: 2px;
+  padding-top: 1px;
+  font-size: 11px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.fe-writing-tools .fe-align-grid button {
+  padding-block: 0;
+  min-height: 38px;
+  font-size: 17px;
+  border-radius: 9px;
+}
+
+.fe-writing-tools .fe-writing-play-btn,
+.fe-writing-tools .fe-writing-savebox .primary {
+  padding-block: 5px;
+}
+
+.fe-writing-tools .fe-writing-savebox span {
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.fe-writing-view-actions {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: minmax(150px, 192px) 32px 32px;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  opacity: 0.68;
+  transition: opacity 0.14s ease;
+}
+
+.fe-writing-view-actions:hover,
+.fe-writing-view-actions:focus-within {
+  opacity: 1;
+}
+
+.fe-writing-view-zoom {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.fe-writing-view-zoom input {
+  min-width: 0;
+}
+
+.fe-writing-view-actions button {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.78);
+  background: transparent;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
+  transition: transform 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+}
+
+.fe-writing-view-actions button:hover {
+  transform: translateY(-1px) scale(1.04);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.fe-writing-preview svg {
+  display: block;
+  transition: width 0.16s ease, height 0.16s ease;
+}
+
+.fe-writing-hitboxes {
+  pointer-events: all;
+}
+
+.fe-writing-instance {
+  fill: transparent;
+  stroke: transparent;
+  stroke-width: 2;
+  cursor: pointer;
+}
+
+.fe-writing-instance:hover,
+.fe-writing-instance.is-selected {
+  fill: rgba(255, 255, 255, 0.04);
+  stroke: var(--accent);
+  stroke-dasharray: 12 8;
+}
+
+.fe-writing-instance:hover {
+  animation: fe-writing-dash 0.9s linear infinite;
+}
+
+.fe-writing-hover-key {
+  pointer-events: none;
+  filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.45));
+}
+
+.fe-writing-hover-key rect {
+  fill: rgba(20, 22, 28, 0.86);
+  stroke: rgba(255, 255, 255, 0.18);
+  stroke-width: 1.5;
+}
+
+.fe-writing-hover-key text {
+  fill: #fff;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.fe-writing-inspector {
+  pointer-events: none;
+}
+
+.fe-writing-inspector rect {
+  fill: rgba(93, 196, 255, 0.045);
+  stroke: rgba(93, 196, 255, 0.72);
+  stroke-width: 2;
+  stroke-dasharray: 12 8;
+}
+
+.fe-writing-inspector line {
+  stroke: rgba(255, 204, 102, 0.62);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 8;
+}
+
+.fe-writing-inspector circle {
+  fill: rgba(255, 204, 102, 0.2);
+  stroke: rgba(255, 204, 102, 0.95);
+  stroke-width: 2;
+}
+
+.fe-writing-inspector path {
+  fill: none;
+  stroke: rgba(255, 204, 102, 0.95);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.fe-writing-pending path {
+  fill: none;
+  stroke: #555;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.fe-writing-pending .fe-writing-travel {
+  stroke: #4a4a4a;
+  stroke-dasharray: 14 14;
+  stroke-width: 7;
+}
+
+.fe-writing-written {
+  fill: none;
+  stroke: #fff;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.fe-writing-written.fe-writing-travel {
+  stroke: rgba(255, 255, 255, 0.75);
+  stroke-dasharray: 14 14;
+  stroke-width: 7;
+}
+
+.fe-writing-labels {
+  pointer-events: none;
+}
+
+.fe-writing-labels text {
+  fill: var(--muted);
+  font-size: 18px;
+  opacity: 0.65;
+}
+
+@keyframes fe-writing-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes fe-writing-dash {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+
+/* Unsaved glyph discard dialog. */
+.fe-discard-modal {
+  width: min(420px, 90vw);
+}
+
+.fe-discard-message {
+  margin: 0;
+  color: var(--text);
+}
+
+@media (max-width: 1120px) {
+  .fe-writing-modal-body {
+    overflow-y: auto;
+  }
+  .fe-writing-test {
+    grid-template-columns: minmax(260px, 320px) minmax(360px, 1fr);
+    height: auto;
+  }
+  .fe-writing-tools {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .fe-writing-align-card {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 860px) {
+  /* Stacked layout can exceed the viewport — allow normal page scrolling. */
+  .app.tab-font {
+    height: auto;
+    overflow: visible;
+  }
+  .font-editor {
+    height: auto;
+  }
+  .fe-body {
+    grid-template-columns: 1fr;
+    overflow: visible;
+  }
+  .fe-writing-test {
+    grid-template-columns: 1fr;
+  }
+  .fe-writing-tools {
+    grid-template-columns: 1fr;
+  }
+  .fe-writing-align-card {
+    grid-column: auto;
+  }
+  .fe-writing-preview {
+    min-height: 320px;
+  }
+  .fe-canvas {
+    min-height: 320px;
+  }
+}

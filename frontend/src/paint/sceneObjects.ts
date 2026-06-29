@@ -13,6 +13,7 @@ export const cloneObjects = (objects: SceneObject[]) =>
     data: obj.data ? { ...obj.data } : undefined,
     transform: obj.transform ? { ...obj.transform } : undefined,
     cachedPolylines: obj.cachedPolylines?.map((line) => line.map((pt) => [...pt])),
+    cachedFeeds: obj.cachedFeeds?.map((line) => [...line]),
   }));
 
 export function basePolylines(obj: SceneObject): Pt[][] {
@@ -25,6 +26,10 @@ export function objectStyle(obj: SceneObject): VectorStyle {
   return normalizeStyle(obj.data?.style);
 }
 
+export function keepsStrokeFeeds(style: VectorStyle): boolean {
+  return style.stroke.mode === "solid" && !style.fill.enabled;
+}
+
 export function withStyledCache(obj: SceneObject): SceneObject {
   const base = basePolylines(obj);
   const style = objectStyle(obj);
@@ -32,11 +37,12 @@ export function withStyledCache(obj: SceneObject): SceneObject {
     ...obj,
     data: { ...(obj.data ?? {}), basePolylines: base, style },
     cachedPolylines: buildStyledPolylines(base, style),
+    cachedFeeds: keepsStrokeFeeds(style) ? obj.cachedFeeds : undefined,
   };
 }
 
 export function textGeometry(text: string, size: number, _font: TextFont, fallbackText = "Text") {
-  return localize(textWorld(text || fallbackText, [0, 0], size));
+  return { ...localize(textWorld(text || fallbackText, [0, 0], size)), feeds: undefined, missing: undefined };
 }
 
 // Single-line server fonts are rendered by the backend; the local 5x7 "block"
@@ -50,5 +56,5 @@ export async function textGeometryAsync(
 ) {
   if (!isServerFont(font)) return textGeometry(text, size, font, fallbackText);
   const res = await api.textPolylines(text || fallbackText, font, size, connectSpaces);
-  return localize(res.polylines as Pt[][]);
+  return { ...localize(res.polylines as Pt[][]), feeds: res.feeds, missing: res.missing };
 }

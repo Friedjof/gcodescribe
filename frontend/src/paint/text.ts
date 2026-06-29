@@ -3,19 +3,22 @@ import type { Pt } from "./geometry";
 // Plottable fonts. "sans" is a real single-line (single-stroke) font rendered
 // by the backend from a vendored OTF/TTF — one thin centreline per glyph, ideal
 // for plotting. "block" is the legacy client-side 5x7 fallback.
-export type TextFont = "sans" | "hand" | "script" | "block";
+export type TextFont = string;
 
-export const TEXT_FONTS: { value: TextFont; labelKey: string }[] = [
-  { value: "sans", labelKey: "font.sans" },
-  { value: "hand", labelKey: "font.hand" },
-  { value: "script", labelKey: "font.script" },
-  { value: "block", labelKey: "font.drawnBlock" },
+export const DEFAULT_TEXT_FONTS: { id: TextFont; labelKey: string; label: string; builtin: boolean }[] = [
+  { id: "sans", labelKey: "font.sans", label: "Sans", builtin: true },
+  { id: "hand", labelKey: "font.hand", label: "Handwriting", builtin: true },
+  { id: "script", labelKey: "font.script", label: "Cursive", builtin: true },
+  { id: "block", labelKey: "font.drawnBlock", label: "Block", builtin: true },
 ];
+
+export const BUILTIN_FONT_LABEL_KEYS: Record<string, string> = Object.fromEntries(
+  DEFAULT_TEXT_FONTS.map((font) => [font.id, font.labelKey])
+);
 
 // Fonts rendered on the backend (vendored single-line files) vs. the local
 // 5x7 generator. Server fonts go through api.textPolylines.
-const SERVER_FONTS = new Set<TextFont>(["sans", "hand", "script"]);
-export const isServerFont = (font: TextFont) => SERVER_FONTS.has(font);
+export const isServerFont = (font: TextFont) => font !== "block";
 
 // 5x7 stroke bitmap. Each glyph is drawn as merged horizontal/vertical runs so
 // the plotter follows single strokes rather than filling outlines.
