@@ -2,9 +2,15 @@
 @import "./styles/layout.css";
 @import "./styles/toasts.css";
 @import "./styles/control.css";
+@import "./styles/jobs.css";
 @import "./styles/modals.css";
 @import "./styles/games.css";
+@import "./styles/games-modal.css";
+@import "./styles/stl.css";
 @import "./styles/paint.css";
+@import "./styles/paint-canvas.css";
 @import "./styles/gallery.css";
+@import "./styles/gallery-extras.css";
 @import "./styles/ai.css";
 @import "./styles/settings.css";
+@import "./styles/font-editor.css";

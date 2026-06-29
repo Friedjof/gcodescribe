@@ -1,0 +1,132 @@
+/* ---- Markdown editor ----------------------------------------------------- */
+.paint-md-btn { width: 100%; margin: 8px 0 4px; justify-content: center; }
+.md-editor { width: min(1600px, 96vw); height: 94vh; max-height: 94vh; }
+.md-editor-body { padding: 0; flex-direction: column; flex: 1; min-height: 0; }
+.md-split { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; }
+.md-source-wrap {
+  position: relative;
+  min-height: 360px;
+  border-right: 1px solid var(--border);
+  background: var(--panel);
+  overflow: hidden;
+}
+/* The textarea sits transparently on top of a coloured mirror (.md-highlight);
+   both must share identical metrics so caret and colours line up exactly. */
+.md-highlight,
+.md-source {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 16px 18px;
+  border: 0;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  overflow: auto;
+}
+.md-highlight { color: var(--text); pointer-events: none; }
+.md-source {
+  resize: none;
+  border-radius: 0;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--text);
+}
+.md-source:focus { outline: none; }
+.hl-marker { color: var(--muted); }
+.hl-h1, .hl-h2, .hl-h3 { color: #7aa2ff; font-weight: 600; }
+.hl-strong { color: #f0a868; font-weight: 600; }
+.hl-em { color: #c792ea; font-style: italic; }
+.hl-code { color: #6fcf97; }
+.hl-link { color: #4fc3f7; }
+.md-preview { display: flex; flex-direction: column; min-height: 0; }
+.md-preview-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.md-preview-seg { width: auto; margin-bottom: 0; min-width: 240px; }
+.md-render { flex: 1; overflow: auto; padding: 16px 20px; }
+.md-render h1 { font-size: 22px; margin: 0 0 10px; }
+.md-render h2 { font-size: 18px; margin: 14px 0 8px; }
+.md-render h3 { font-size: 15px; margin: 12px 0 6px; }
+.md-render p { margin: 0 0 10px; line-height: 1.5; white-space: pre-wrap; }
+.md-render .md-li { margin: 2px 0; padding-left: 4px; line-height: 1.5; white-space: pre-wrap; }
+.md-render code {
+  background: var(--panel-2);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+.md-plot { position: relative; flex: 1; min-height: 0; display: flex; padding: 16px; }
+.md-plot .poly-preview { width: 100%; height: 100%; }
+.md-footer { display: flex; flex-direction: column; gap: 12px; width: 100%; }
+.md-options { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+.md-options .field { min-width: 130px; }
+.md-check { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.md-check input { width: auto; }
+.md-debug-toggle { display: flex; align-items: center; gap: 6px; margin-left: auto; padding: 0 8px; font-size: 12px; color: var(--muted); }
+.md-debug-toggle input { width: auto; }
+.md-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.md-err { margin: 0 18px 14px; }
+
+/* Printer backend switcher (OctoPrint <-> USB/Serial) */
+.backend-switch { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.backend-opt {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--border, #ccc); background: transparent;
+  font-size: 0.9em;
+}
+.backend-opt.on { background: var(--accent, #2d7); color: #fff; border-color: transparent; }
+.backend-opt:disabled { cursor: default; opacity: 0.8; }
+.backend-opt .dot { width: 8px; height: 8px; border-radius: 50%; background: #b33; }
+.backend-opt .dot[data-online="true"] { background: #2c2; }
+
+/* Printer overview (Steuerung): one card per configured backend */
+.printer-overview { margin-bottom: 16px; }
+.printer-overview-head { font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+.printer-cards { display: flex; flex-wrap: wrap; gap: 10px; }
+.printer-card {
+  flex: 1 1 160px; min-width: 150px;
+  border: 1px solid var(--border); border-radius: 10px;
+  padding: 10px 12px; background: rgba(255, 255, 255, 0.02);
+}
+.printer-card.active { border-color: var(--ok); background: rgba(48, 209, 88, 0.06); }
+.printer-card-top { display: flex; align-items: center; gap: 7px; }
+.printer-card-activity { font-size: 0.85em; margin-top: 4px; }
+.printer-card-job { font-size: 0.8em; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.printer-card .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: 0 0 auto; }
+.printer-card .dot[data-online="true"] { background: var(--ok); }
+.printer-activate { margin-top: 8px; font-size: 0.85em; padding: 4px 10px; }
+
+/* Serial port discovery hint */
+.serial-port-hint { margin-top: 10px; }
+.serial-port-list { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-direction: column; gap: 6px; }
+.serial-port-list li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 0.85em; }
+
+
+/* Gallery upload access dialog */
+.gallery-access-btn { font-size: 0.85em; }
+.gallery-access-dialog { display: flex; flex-direction: column; gap: 18px; }
+.gallery-access-toggle { display: flex; align-items: center; gap: 10px; font-weight: 600; cursor: pointer; user-select: none; }
+.gallery-access-toggle input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
+.gallery-access-secret { display: flex; flex-direction: column; gap: 6px; }
+.gallery-access-secret label { font-weight: 600; }
+.gallery-access-secret-hint { display: block; font-weight: 400; font-size: 0.82em; color: var(--muted); margin-top: 2px; }
+.gallery-access-secret-row { display: flex; gap: 8px; }
+.gallery-access-secret-row input { flex: 1; font-family: monospace; font-size: 0.9em; }
+.gallery-access-share { display: flex; flex-direction: column; gap: 10px; padding-top: 4px; border-top: 1px solid var(--border); }
+.gallery-access-share-title { font-weight: 600; margin: 0; }
+.gallery-access-qr { display: block; border-radius: 6px; }
+.gallery-access-link-row { display: flex; gap: 8px; align-items: center; }
+.gallery-access-link { flex: 1; font-family: monospace; font-size: 0.82em; }
+
+/* Upload locked state */
+.upload-locked { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 24px 0; text-align: center; }
+.upload-locked-icon { font-size: 2.5em; }
