@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from plotter.drawing import Drawing, placed_gcode
 from plotter.calibration import Calibration
+from plotter.drawing import Drawing, placed_gcode
 from plotter.oneline import continuous_path
 
 
