@@ -24,6 +24,7 @@ const cal: Calibration = {
   paper_corners: {},
   paper_margin: 0,
   obstacles: [],
+  merge_tolerance: 0.5,
 };
 
 const t = (key: string) => key;

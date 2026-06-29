@@ -13,11 +13,13 @@ export const SUPPORTED_GAMES = new Set<GameId>([
   "bingo",
   "coloringMandala",
   "coloringPattern",
+  "curveMorph",
+  "noodles",
   "osmMap",
   "cityCountryRiver",
 ]);
 
-export const SEEDED_GAMES = new Set<GameId>(["dotsBoxes", "maze", "sudoku", "bingo", "coloringMandala", "coloringPattern"]);
+export const SEEDED_GAMES = new Set<GameId>(["dotsBoxes", "maze", "sudoku", "bingo", "coloringMandala", "coloringPattern", "curveMorph", "noodles"]);
 
 export const GAME_GROUPS: { key: string; games: GameDef[] }[] = [
   {
@@ -42,6 +44,8 @@ export const GAME_GROUPS: { key: string; games: GameDef[] }[] = [
     games: [
       { id: "coloringMandala", group: "coloring" },
       { id: "coloringPattern", group: "coloring" },
+      { id: "curveMorph", group: "coloring" },
+      { id: "noodles", group: "coloring" },
     ],
   },
   {

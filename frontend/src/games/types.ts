@@ -11,6 +11,8 @@ export type GameId =
   | "bingo"
   | "coloringMandala"
   | "coloringPattern"
+  | "curveMorph"
+  | "noodles"
   | "osmMap"
   | "cityCountryRiver";
 
@@ -39,6 +41,22 @@ export type ColoringPatternMode =
   | "stained_glass"
   | "bubbles"
   | "spiral";
+
+export type CurveMorphSettings = {
+  seed: number;
+  curves: number;
+  complexity: number;
+  snapToGrid: boolean;
+};
+
+export type NoodlesSettings = {
+  seed: number;
+  columns: number;
+  thickness: number;
+  fill: number;
+  rounded: boolean;
+  maxLength: number;
+};
 
 export type TemplateDetail = {
   label: string;

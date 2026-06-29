@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { Calibration } from "../api";
 import { buildDotsBoxesTemplate } from "./dotsBoxes";
 import { buildSudokuTemplate } from "./sudoku";
+import { buildCurveMorphTemplate } from "./curveMorph";
+import { buildNoodlesTemplate } from "./noodles";
 
 const cal: Calibration = {
   bed_width: 220,
@@ -24,10 +26,15 @@ const cal: Calibration = {
   paper_corners: {},
   paper_margin: 0,
   obstacles: [],
+  merge_tolerance: 0.5,
 };
 
 const t = (key: string) => key;
-type GeneratedTemplate = ReturnType<typeof buildDotsBoxesTemplate> | ReturnType<typeof buildSudokuTemplate>;
+type GeneratedTemplate =
+  | ReturnType<typeof buildDotsBoxesTemplate>
+  | ReturnType<typeof buildSudokuTemplate>
+  | ReturnType<typeof buildCurveMorphTemplate>
+  | ReturnType<typeof buildNoodlesTemplate>;
 
 const signature = (template: GeneratedTemplate) => JSON.stringify({
   lines: template.lines,
@@ -56,6 +63,39 @@ describe("seeded game templates", () => {
       .toBe(signature(buildSudokuTemplate(cal, t, settings)));
     expect(signature(buildSudokuTemplate(cal, t, settings)))
       .not.toBe(signature(buildSudokuTemplate(cal, t, otherSeed)));
+  });
+
+  it("builds identical curve-morph patterns for the same seed and settings", () => {
+    const settings = { seed: 12345, curves: 12, complexity: 0.4, snapToGrid: true } as const;
+    const otherSeed = { ...settings, seed: 54321 };
+
+    expect(signature(buildCurveMorphTemplate(cal, t, settings)))
+      .toBe(signature(buildCurveMorphTemplate(cal, t, settings)));
+    expect(signature(buildCurveMorphTemplate(cal, t, settings)))
+      .not.toBe(signature(buildCurveMorphTemplate(cal, t, otherSeed)));
+  });
+
+  it("builds identical noodles for the same seed and settings", () => {
+    const settings = { seed: 12345, columns: 8, thickness: 0.9, fill: 0.7, rounded: true, maxLength: 12 } as const;
+    const otherSeed = { ...settings, seed: 54321 };
+
+    expect(signature(buildNoodlesTemplate(cal, t, settings)))
+      .toBe(signature(buildNoodlesTemplate(cal, t, settings)));
+    expect(signature(buildNoodlesTemplate(cal, t, settings)))
+      .not.toBe(signature(buildNoodlesTemplate(cal, t, otherSeed)));
+  });
+
+  it("produces non-empty closed noodle outlines with finite coordinates", () => {
+    const tpl = buildNoodlesTemplate(cal, t, { seed: 777, columns: 8, thickness: 0.9, fill: 0.7, rounded: true, maxLength: 12 });
+    expect(tpl.lines.length).toBeGreaterThan(0);
+    for (const loop of tpl.lines) {
+      expect(loop.length).toBeGreaterThanOrEqual(3);
+      expect(loop[0]).toEqual(loop[loop.length - 1]); // closed
+      for (const [x, y] of loop) {
+        expect(Number.isFinite(x)).toBe(true);
+        expect(Number.isFinite(y)).toBe(true);
+      }
+    }
   });
 
 });

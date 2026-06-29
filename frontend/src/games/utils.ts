@@ -158,3 +158,16 @@ export function templateObject(gameId: GameId, lines: Pt[][]): SceneObject {
     plotted: false,
   };
 }
+
+/** Generic page object from arbitrary polylines (e.g. an imported STL render). */
+export function polylinesObject(lines: Pt[][], kind = "stl"): SceneObject {
+  const { local, cx, cy } = localize(lines);
+  return {
+    id: crypto.randomUUID(),
+    type: `import-${kind}`,
+    data: { import: kind },
+    cachedPolylines: local,
+    transform: { x: cx, y: cy, rotation: 0, scale: 1 },
+    plotted: false,
+  };
+}
