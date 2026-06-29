@@ -1,9 +1,9 @@
 # GCodeScribe
 
-A browser-based pen-plotter studio for turning PDF, SVG, image, and Office
-documents — plus generated templates, maps, Markdown layouts, and optional
-AI-assisted artwork — into safe G-code for an **Anycubic i3 Mega S**, any
-OctoPrint-backed printer, or a direct USB-serial Marlin setup.
+A browser-based pen-plotter studio for turning PDF, SVG, image, Office and STL
+files — plus generated templates, city maps, Markdown layouts, handwriting
+fonts, and optional AI-assisted artwork — into safe G-code for an **Anycubic i3
+Mega S**, any OctoPrint-backed printer, or a direct USB-serial Marlin setup.
 
 <table>
   <tr>
@@ -13,30 +13,30 @@ OctoPrint-backed printer, or a direct USB-serial Marlin setup.
 </table>
 
 GCodeScribe combines document conversion, an interactive designer, an asset
-gallery, AI image redrawing, OpenStreetMap plotting, browser-side generators,
-live paper calibration, G-code preview, and printer control in one small web
-app. Bring in an existing file or generate something new, place it on the
-virtual bed, preview the mapped toolpaths, and send it to the printer from the
-same interface.
+gallery, AI image redrawing, OpenStreetMap city-road plotting, browser-side
+generators, STL edge projection, handwriting font capture, live paper
+calibration, G-code preview, and printer control in one small web app. Bring in
+an existing file or generate something new, place it on the virtual bed, preview
+the mapped toolpaths, and send it to the printer from the same interface.
 
 ## Highlights
 
 <table>
   <tr>
     <td width="50%"><img src="media/images/ai-designer-preview.png" alt="AI Designer with generated line art and plotter-line preview"></td>
-    <td width="50%"><img src="media/images/galerie-view.png" alt="Gallery view with reusable uploaded and generated assets"></td>
+    <td width="50%"><img src="media/images/stl-editor.png" alt="STL editor projecting a 3D mesh into plotter-ready visible and hidden edge layers"></td>
   </tr>
   <tr>
     <td align="center"><strong>AI Designer</strong></td>
-    <td align="center"><strong>Gallery Asset Library</strong></td>
+    <td align="center"><strong>STL Edge Projection</strong></td>
   </tr>
   <tr>
-    <td width="50%"><img src="media/images/coloring.png" alt="Coloring editor for assigning linework to multiple pen colors"></td>
-    <td width="50%"><img src="media/images/gcode-preview.png" alt="G-code preview mapped onto the printer bed and paper"></td>
+    <td width="50%"><img src="media/images/font-editor-preview.png" alt="Handwriting font editor showing captured glyphs and a writing-test preview"></td>
+    <td width="50%"><img src="media/images/map-designer.png" alt="City road map generator with OpenStreetMap place search and plot preview"></td>
   </tr>
   <tr>
-    <td align="center"><strong>Coloring Editor</strong></td>
-    <td align="center"><strong>G-code Preview</strong></td>
+    <td align="center"><strong>Handwriting Fonts</strong></td>
+    <td align="center"><strong>City Road Maps</strong></td>
   </tr>
 </table>
 
@@ -44,18 +44,36 @@ same interface.
 
 ### Convert, generate & remix
 
+<table>
+  <tr>
+    <td width="50%"><img src="media/images/games-view.png" alt="Generator gallery with puzzles, games, maps and drawing templates"></td>
+    <td width="50%"><img src="media/images/map-designer_editor.png" alt="Map editor previewing continuous road-line G-code and plottability metrics"></td>
+  </tr>
+</table>
+
 - Convert PDF, SVG, raster images, and Office documents into plotter-ready
   G-code with [vpype](https://vpype.readthedocs.io).
 - Trace image-only PDFs and scans with OpenCV while preserving vector paths
   from vector PDFs. Auto mode chooses the best conversion path automatically.
+- Import STL meshes in the browser, orient them in 3D, choose visible/hidden
+  edge rendering, add dimensions or a bounding box, and save the result as a
+  re-editable gallery asset or insert it directly into the designer.
 - Generate printable artwork directly in the browser — no source file needed:
   - **Puzzles:** mazes (classic, masked, hex, polar) and sudoku.
   - **Games:** dots &amp; boxes, tic-tac-toe, meta tic-tac-toe, connect four,
     battleships, bingo, and city/country/river sheets.
   - **Coloring pages:** mandalas and geometric pattern generators.
-  - **Maps:** select a live OpenStreetMap viewport, choose streets, paths,
-    buildings, waterways, water, rail, or transit layers, and turn the result
-    into plotter-ready vector linework.
+  - **Line art generators:** curve morphs and noodle-style path patterns.
+  - **Maps:** search for a city or place, use its OSM boundary when available,
+    and turn the road network into continuous, plotter-friendly vector linework.
+
+<table>
+  <tr>
+    <td width="50%"><img src="media/images/ai-designer-empty.png" alt="AI Designer prompt and image upload screen before generation"></td>
+    <td width="50%"><img src="media/images/galerie-view.png" alt="Gallery view with reusable uploaded and generated assets"></td>
+  </tr>
+</table>
+
 - Use the optional **AI Designer** to turn a text prompt, photo, or sketch into
   plotter-ready black-on-white line art. Tune trace mode, detail, aspect
   ratio, effect, and lettering; create feedback-driven variants; and re-render
@@ -66,7 +84,21 @@ same interface.
   archiving, plottability scores, and one-click reuse or insertion into the
   designer.
 
+<table>
+  <tr>
+    <td width="70%"><img src="media/images/stl-editor.png" alt="STL editor with mesh preview, projection controls and line-layer preview"></td>
+    <td width="30%"><img src="media/images/automaticchickenfeeder-plot.png" alt="Example mechanical STL-derived line drawing prepared for plotting"></td>
+  </tr>
+</table>
+
 ### Design, score & color
+
+<table>
+  <tr>
+    <td width="50%"><img src="media/images/design-and-plot.png" alt="Design and Plot tab with artwork placed on the virtual plot bed"></td>
+    <td width="50%"><img src="media/images/coloring.png" alt="Coloring editor for assigning linework to multiple pen colors"></td>
+  </tr>
+</table>
 
 - Place documents visually in the **Design &amp; Plot** tab: upload to the
   gallery, insert any page onto the bed preview, then drag, rotate, scale,
@@ -75,6 +107,9 @@ same interface.
 - Draw from scratch on the paint canvas: place shapes and text, scale and
   arrange them, cover lower lines with mask rectangles, pan/zoom/rotate the
   canvas view, and turn the result into a plot job.
+- Reduce pen lifts with continuous-stroke plotting: map networks, images and
+  paint pages can be merged into one stroke per connected component, with
+  retraces only on existing lines and a configurable merge tolerance.
 - Lay out plot-friendly notes, cards, and worksheets with the built-in
   Markdown editor, then insert them as vector text into the designer.
 - See plottability feedback before printing: gallery items, AI outputs, and
@@ -83,10 +118,37 @@ same interface.
 - Use the **Coloring Editor** to assign linework to multiple pen colors and
   generate separate G-code jobs per color for pen-swap workflows.
 
+### Fonts & handwriting
+
+<table>
+  <tr>
+    <td width="50%"><img src="media/images/font-editor.png" alt="Font editor with glyph drawing canvas, guide lines and captured characters"></td>
+    <td width="50%"><img src="media/images/font-settings.png" alt="Settings dialog for managing built-in, custom and handwriting fonts"></td>
+  </tr>
+</table>
+
+- Capture your own handwriting in the **Font Editor**: draw glyphs with mouse,
+  touch or pen, use guide lines for baseline/x-height/cap-height, and preview
+  words in the writing-test player before using the font in artwork.
+- Stabilize strokes while drawing or reprocess glyphs afterwards with smoothing,
+  inertia, simplification and endpoint snapping controls.
+- Manage fonts in settings: keep built-in plotter fonts, upload `.otf`/`.ttf`
+  files, import/export `.gcsfont` handwriting backups, and choose whether custom
+  fonts render as normal outlines or plotter-optimized centerlines.
+- Stroke fonts preserve per-point feed information, so handwritten text can be
+  plotted with more natural speed variation instead of a flat feedrate.
+
 ### Calibrate &amp; plot safely
 
+<table>
+  <tr>
+    <td width="50%"><img src="media/images/calibration.png" alt="Calibration profile editor with plot area, feedrate and optimization settings"></td>
+    <td width="50%"><img src="media/images/live-calibration.png" alt="Live paper calibration wizard showing captured paper corners"></td>
+  </tr>
+</table>
+
 - Calibrate pen-up and pen-down Z heights, plot area, origin offsets, margins,
-  and feedrates from the browser.
+  feedrates, and merge tolerance from the browser.
 - Use the live paper calibration wizard to home the machine, jog to sheet
   corners, capture paper bounds, and map every conversion onto the real sheet.
 - Manage multiple calibration profiles (e.g. "A4 portrait", "postcard front
@@ -105,6 +167,13 @@ same interface.
   G-code job.
 
 ### Preview &amp; control
+
+<table>
+  <tr>
+    <td width="50%"><img src="media/images/gcode-preview.png" alt="G-code preview mapped onto the printer bed and calibrated paper"></td>
+    <td width="50%"><img src="media/images/control.png" alt="Printer control tab with backend status, jogging and job controls"></td>
+  </tr>
+</table>
 
 - Preview generated G-code against the bed and calibrated paper before sending
   it to the printer.
@@ -144,9 +213,9 @@ the network; use HTTPS if the controller is exposed beyond a trusted setup.
 > `pdftoppm` and `pdfinfo`; OpenCV does the tracing). For Office documents,
 > add `libreoffice-core` to the runtime stage in the `Dockerfile`.
 
-> OSM map generation uses the public OpenStreetMap tile service in the browser
-> and the public Overpass API from the backend. Keep selected areas small and
-> layer counts reasonable; the backend rejects overly large bounding boxes.
+> OSM map generation uses Nominatim for place search and the public Overpass API
+> from the backend. Boundary mode can request a whole city area; for very large
+> places, reduce detail or pick a smaller search result to keep generation fast.
 
 ### Production
 
