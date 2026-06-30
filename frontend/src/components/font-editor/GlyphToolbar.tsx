@@ -1,6 +1,7 @@
 import { useI18n } from "../../i18n";
 import type { CanvasTool } from "./GlyphCanvas";
 import GlyphAlignmentPanel from "./GlyphAlignmentPanel";
+import Segmented from "../Segmented";
 
 const TOOLS: { id: CanvasTool; icon: string; labelKey: string; shortKey: string; shortcut: string }[] = [
   { id: "draw", icon: "✏", labelKey: "fontEditor.toolDraw", shortKey: "fontEditor.toolDraw", shortcut: "D" },
@@ -23,6 +24,8 @@ export default function GlyphToolbar({
   onPlayback,
   onStabilization,
   onWritingTest,
+  eraserSize,
+  onEraserSizeChange,
   spacingBefore,
   advance,
   minSpacingBefore,
@@ -49,6 +52,8 @@ export default function GlyphToolbar({
   onPlayback: () => void;
   onStabilization: () => void;
   onWritingTest: () => void;
+  eraserSize: number;
+  onEraserSizeChange: (size: number) => void;
   spacingBefore: number;
   advance: number;
   minSpacingBefore: number;
@@ -67,19 +72,37 @@ export default function GlyphToolbar({
       <h3 className="fe-toolbar-title">{t("fontEditor.tools")}</h3>
 
       {/* Tool modes — icon + short label, one shared row. */}
-      <div className="fe-tool-modes">
-        {TOOLS.map((m) => (
-          <button
-            key={m.id}
-            className={`fe-tool-mode ${tool === m.id ? "is-active" : ""}`}
-            onClick={() => onToolChange(m.id)}
-            title={`${t(m.labelKey)} (${m.shortcut})`}
-          >
-            <span className="fe-tool-mode-icon">{m.icon}</span>
-            <span className="fe-tool-mode-label">{t(m.shortKey)}</span>
-          </button>
-        ))}
-      </div>
+      <Segmented<CanvasTool>
+        className="fe-tool-modes"
+        value={tool}
+        onChange={onToolChange}
+        options={TOOLS.map((m) => ({
+          value: m.id,
+          title: `${t(m.labelKey)} (${m.shortcut})`,
+          label: (
+            <span className="fe-tool-mode-label-wrap">
+              <span className="fe-tool-mode-icon">{m.icon}</span>
+              <span className="fe-tool-mode-label">{t(m.shortKey)}</span>
+            </span>
+          ),
+        }))}
+      />
+
+      {tool === "erase" && (
+        <div className="fe-eraser-sizes" aria-label={t("fontEditor.eraserSize")}>
+          <span className="fe-toolbar-title">{t("fontEditor.eraserSize")}</span>
+          <Segmented<number>
+            className="fe-eraser-size-row"
+            value={eraserSize}
+            onChange={onEraserSizeChange}
+            options={[0, 1, 2, 3, 4].map((size) => ({
+              value: size,
+              title: t(`fontEditor.eraserSize_${size}`),
+              label: <span className={`fe-eraser-dot fe-eraser-dot-${size}`} />,
+            }))}
+          />
+        </div>
+      )}
 
       {/* History + per-glyph actions — compact icon row. */}
       <div className="fe-tool-actions">

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useI18n } from "../../i18n";
 import Modal from "../Modal";
+import Segmented from "../Segmented";
 import type { StrokeFontDocument } from "../../api";
 import {
   filterEntries,
@@ -39,8 +40,9 @@ export default function GlyphOverviewDialog({
       title={t("fontEditor.overviewTitle")}
       onClose={onClose}
       className="fe-overview-modal"
+      bodyClassName="fe-overview-modal-body"
       headerActions={
-        <span className="muted">
+        <span className="fe-overview-count">
           {t("fontEditor.coverage", { present: cov.present, total: cov.total })}
         </span>
       }
@@ -53,24 +55,18 @@ export default function GlyphOverviewDialog({
             placeholder={t("fontEditor.search")}
             onChange={(e) => setQuery(e.target.value)}
           />
-          <div className="fe-overview-seg">
-            {STATUS.map((s) => (
-              <button
-                key={s}
-                className={status === s ? "primary" : "ghost"}
-                onClick={() => setStatus(s)}
-              >
-                {t(`fontEditor.filter_${s}`)}
-              </button>
-            ))}
-          </div>
-          <div className="fe-overview-seg">
-            {KIND.map((k) => (
-              <button key={k} className={kind === k ? "primary" : "ghost"} onClick={() => setKind(k)}>
-                {t(`fontEditor.kind_${k}`)}
-              </button>
-            ))}
-          </div>
+          <Segmented<StatusFilter>
+            className="fe-overview-seg"
+            value={status}
+            onChange={setStatus}
+            options={STATUS.map((s) => ({ value: s, label: t(`fontEditor.filter_${s}`) }))}
+          />
+          <Segmented<KindFilter>
+            className="fe-overview-seg"
+            value={kind}
+            onChange={setKind}
+            options={KIND.map((k) => ({ value: k, label: t(`fontEditor.kind_${k}`) }))}
+          />
         </div>
 
         {shown.length === 0 ? (

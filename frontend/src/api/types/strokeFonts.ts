@@ -33,6 +33,10 @@ export interface StrokeVariant {
   id: string;
   weight: number;
   strokes: Stroke[];
+  /** Left side bearing for this variant, in em. Falls back to the glyph value. */
+  spacingBefore?: number;
+  /** Horizontal advance for this variant, in em. Falls back to the glyph value. */
+  advance?: number;
   context?: Record<string, unknown>;
   bounds?: Record<string, number>;
   entryPoint?: StrokePoint2D;

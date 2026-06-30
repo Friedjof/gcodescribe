@@ -90,8 +90,21 @@ def render_text(
 
         glyph = glyph_map[token.value]
         variant = _choose_variant(glyph, rng)
-        cursor_x += float(glyph.get("spacingBefore") or 0.0)
-        advance = float(glyph.get("advance") or default_advance)
+        # Side bearings come from the chosen variant, falling back to a
+        # glyph-level value (older fonts) and finally the metric defaults.
+        spacing_before = None
+        advance_val = None
+        if variant is not None:
+            if variant.get("spacingBefore") is not None:
+                spacing_before = variant["spacingBefore"]
+            if variant.get("advance") is not None:
+                advance_val = variant["advance"]
+        if spacing_before is None:
+            spacing_before = glyph.get("spacingBefore") or 0.0
+        if advance_val is None:
+            advance_val = glyph.get("advance") or default_advance
+        cursor_x += float(spacing_before)
+        advance = float(advance_val)
         if variant is not None:
             for stroke in variant.get("strokes") or []:
                 pts = stroke.get("points") or stroke.get("rawPoints") or []

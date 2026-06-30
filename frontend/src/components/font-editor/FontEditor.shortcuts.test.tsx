@@ -221,8 +221,8 @@ describe("FontEditor keyboard shortcuts", () => {
     fireEvent.click(screen.getByRole("button", { name: /save glyph/i }));
 
     await waitFor(() => expect(mocks.save).toHaveBeenCalled());
-    expect(mocks.updateCurrent.mock.calls[0][0].glyphs[0].advance).toBe(420);
-    expect(mocks.save.mock.calls[0][0].glyphs[0].advance).toBe(420);
+    expect(mocks.updateCurrent.mock.calls[0][0].glyphs[0].variants[0].advance).toBe(420);
+    expect(mocks.save.mock.calls[0][0].glyphs[0].variants[0].advance).toBe(420);
   });
 
   it("saves the spacing before a glyph", async () => {
@@ -233,6 +233,6 @@ describe("FontEditor keyboard shortcuts", () => {
     fireEvent.click(screen.getByRole("button", { name: /save glyph/i }));
 
     await waitFor(() => expect(mocks.save).toHaveBeenCalled());
-    expect(mocks.save.mock.calls[0][0].glyphs[0].spacingBefore).toBe(-80);
+    expect(mocks.save.mock.calls[0][0].glyphs[0].variants[0].spacingBefore).toBe(-80);
   });
 });

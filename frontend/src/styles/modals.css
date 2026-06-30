@@ -23,6 +23,7 @@
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 16px;
+  overflow: hidden;
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6);
   animation: modal-pop 0.2s cubic-bezier(0.34, 1.28, 0.46, 1);
 }
@@ -36,7 +37,10 @@
   justify-content: space-between;
   gap: 12px;
   padding: 16px 18px;
+  flex: 0 0 auto;
+  background: #0b0b0d;
   border-bottom: 1px solid var(--border);
+  border-radius: 16px 16px 0 0;
 }
 .modal-head h2 { margin: 0; font-size: 15px; font-weight: 600; min-width: 0; }
 .modal-head h2 .muted { font-weight: 400; }
@@ -65,7 +69,10 @@
   justify-content: flex-end;
   gap: 8px;
   padding: 14px 18px;
+  flex: 0 0 auto;
+  background: var(--panel);
   border-top: 1px solid var(--border);
+  border-radius: 0 0 16px 16px;
 }
 
 /* ---- Confirm / Prompt dialogs -------------------------------------------- */
@@ -197,4 +204,3 @@ kbd {
 
 /* Single centered column (e.g. the job list without the upload panel). */
 .single-col { max-width: 820px; margin: 0 auto; }
-

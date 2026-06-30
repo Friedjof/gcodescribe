@@ -12,6 +12,7 @@ import {
   viewToEm,
   type ViewBox,
 } from "../../fontEditor/strokeGeometry";
+import GlyphDrawingGuideDialog from "./GlyphDrawingGuideDialog";
 
 // Vertical width references (fractions of the em), so the drawn glyph width can
 // be judged against the em square.
@@ -72,7 +73,9 @@ export default function GlyphCanvas({
   onSelectStroke,
   onStrokeComplete,
   onEraseStroke,
+  onEraseArea,
   onMoveStroke,
+  eraserRadius,
   playRequest,
   onPlayingChange,
 }: {
@@ -82,8 +85,10 @@ export default function GlyphCanvas({
   selectedId: string | null;
   onSelectStroke: (id: string | null) => void;
   onStrokeComplete: (raw: StrokePoint[]) => void;
-  onEraseStroke: (id: string) => void;
+  onEraseStroke?: (id: string) => void;
+  onEraseArea?: (center: StrokePoint, radius: number) => void;
   onMoveStroke: (id: string, dx: number, dy: number) => void;
+  eraserRadius?: number;
   playRequest: number;
   onPlayingChange: (playing: boolean) => void;
 }) {
@@ -96,6 +101,7 @@ export default function GlyphCanvas({
   const penWidth = Math.max(6, Math.round(metrics.em * 0.012));
   // Hit-test radius for erase/move, in em (zoom-independent, generous).
   const hitThreshold = metrics.em * 0.045;
+  const effectiveEraserRadius = eraserRadius ?? hitThreshold;
 
   const [vb, setVb] = useState<ViewBox>(() => viewBoxFor(metrics));
   // Live translate preview while dragging a stroke in move mode.
@@ -103,7 +109,9 @@ export default function GlyphCanvas({
   const dragOffsetRef = useRef<{ id: string; dx: number; dy: number } | null>(null);
   const [dragOffset, setDragOffset] = useState<{ id: string; dx: number; dy: number } | null>(null);
   const erasing = useRef(false);
+  const [eraserPreview, setEraserPreview] = useState<StrokePoint | null>(null);
   const [infoOpen, setInfoOpen] = useState(false);
+  const [drawingGuideOpen, setDrawingGuideOpen] = useState(false);
   const infoRef = useRef<HTMLDivElement>(null);
 
   // Close the guide-legend dropdown on outside click or Escape.
@@ -145,6 +153,18 @@ export default function GlyphCanvas({
   );
 
   const input = useStrokeInput(toEm, onStrokeComplete);
+
+  const eraseAt = useCallback(
+    (p: StrokePoint) => {
+      if (onEraseArea) {
+        onEraseArea(p, effectiveEraserRadius);
+        return;
+      }
+      const id = nearestStrokeId(strokes, p, hitThreshold);
+      if (id) onEraseStroke?.(id);
+    },
+    [effectiveEraserRadius, hitThreshold, onEraseArea, onEraseStroke, strokes]
+  );
 
   // ---- Playback ---------------------------------------------------------
   const [reveal, setReveal] = useState<number[] | null>(null);
@@ -205,8 +225,8 @@ export default function GlyphCanvas({
     if (tool === "erase") {
       erasing.current = true;
       const p = toEm(e.clientX, e.clientY);
-      const id = nearestStrokeId(strokes, p, hitThreshold);
-      if (id) onEraseStroke(id);
+      setEraserPreview(p);
+      eraseAt(p);
       return;
     }
     if (tool === "move") {
@@ -232,10 +252,9 @@ export default function GlyphCanvas({
       return;
     }
     if (tool === "erase") {
-      if (!erasing.current) return;
       const p = toEm(e.clientX, e.clientY);
-      const id = nearestStrokeId(strokes, p, hitThreshold);
-      if (id) onEraseStroke(id);
+      setEraserPreview(p);
+      if (erasing.current) eraseAt(p);
       return;
     }
     if (tool === "move") {
@@ -310,6 +329,7 @@ export default function GlyphCanvas({
   const cancelPointer = () => {
     input.cancel();
     erasing.current = false;
+    setEraserPreview(null);
     drag.current = null;
     dragOffsetRef.current = null;
     setDragOffset(null);
@@ -339,6 +359,9 @@ export default function GlyphCanvas({
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={cancelPointer}
+        onPointerLeave={() => {
+          if (!erasing.current) setEraserPreview(null);
+        }}
         onContextMenu={(e) => e.preventDefault()}
       >
         {/* Vertical references: faint width grid, the left margin (origin) and
@@ -392,6 +415,14 @@ export default function GlyphCanvas({
             <path className="fe-stroke fe-stroke-active" d={pointsToPath(input.active, top)} />
           )}
         </g>
+        {tool === "erase" && eraserPreview && (
+          <circle
+            className="fe-eraser-preview"
+            cx={eraserPreview.x}
+            cy={top - eraserPreview.y}
+            r={effectiveEraserRadius}
+          />
+        )}
       </svg>
 
       <div className="fe-canvas-info" ref={infoRef}>
@@ -438,6 +469,16 @@ export default function GlyphCanvas({
         </div>
       </div>
 
+      <button
+        type="button"
+        className="fe-canvas-guide-btn"
+        onClick={() => setDrawingGuideOpen(true)}
+        aria-label={t("fontEditor.drawGuide")}
+        title={t("fontEditor.drawGuide")}
+      >
+        ✍
+      </button>
+
       <div className="fe-canvas-hint">{t("fontEditor.canvasHint")}</div>
 
       <button
@@ -449,6 +490,10 @@ export default function GlyphCanvas({
       >
         ⤢
       </button>
+
+      {drawingGuideOpen && (
+        <GlyphDrawingGuideDialog metrics={metrics} onClose={() => setDrawingGuideOpen(false)} />
+      )}
     </div>
   );
 }

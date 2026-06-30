@@ -1,19 +1,23 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useI18n } from "../../i18n";
 import { useToasts } from "../Toasts";
-import type { StrokePoint } from "../../api";
+import type { Stroke, StrokePoint } from "../../api";
 import { useStrokeFont } from "../../fontEditor/useStrokeFont";
 import { useGlyphEditing } from "../../fontEditor/useGlyphEditing";
 import {
-  glyphStrokes,
-  glyphSpacingBefore,
-  glyphAdvance,
+  glyphVariants,
   hasGlyph,
   newStroke,
   removeGlyph,
+  removeVariant,
   scaleStroke,
+  setVariantWeight,
   translateStroke,
-  upsertGlyph,
+  uid,
+  upsertGlyphVariant,
+  variantAdvance,
+  variantSpacingBefore,
+  variantStrokes,
 } from "../../fontEditor/glyphModel";
 import type { CanvasTool } from "./GlyphCanvas";
 import {
@@ -21,12 +25,13 @@ import {
   stabilize,
   type StabilizationParams,
 } from "../../fontEditor/stabilization";
-import { boundsOf } from "../../fontEditor/strokeGeometry";
+import { boundsOf, nearestStrokeId, pointToSegmentDistance } from "../../fontEditor/strokeGeometry";
 import { capturedKeys, requiredCoverage, validateKey } from "../../fontEditor/coverage";
 import FontEditorHeader from "./FontEditorHeader";
 import FontListDialog from "./FontListDialog";
 import GlyphSidebar from "./GlyphSidebar";
 import GlyphCanvas from "./GlyphCanvas";
+import GlyphVariantStrip from "./GlyphVariantStrip";
 import GlyphToolbar from "./GlyphToolbar";
 import GlyphKeyInput from "./GlyphKeyInput";
 import StabilizationPanel from "./StabilizationPanel";
@@ -37,6 +42,61 @@ import DiscardGlyphDialog from "./DiscardGlyphDialog";
 
 interface PendingDiscardAction {
   run: () => void;
+}
+
+// Mirror of MAX_VARIANTS_PER_GLYPH in plotter/stroke_fonts/model.py.
+const MAX_VARIANTS_PER_GLYPH = 16;
+const ERASER_SIZE_RATIOS = [0.01, 0.022, 0.04, 0.07];
+const ERASER_WHOLE_STROKE = 4;
+const ERASER_WHOLE_STROKE_RATIO = 0.025;
+
+/** Copy strokes with fresh ids, so a duplicated variant can't share ids. */
+function cloneStrokes(strokes: Stroke[]): Stroke[] {
+  return strokes.map((s) => ({ ...s, id: uid("stroke") }));
+}
+
+function eraseStrokeArea(strokes: Stroke[], center: StrokePoint, radius: number): Stroke[] {
+  let changed = false;
+  const next: Stroke[] = [];
+
+  for (const stroke of strokes) {
+    const pts = stroke.points.length ? stroke.points : stroke.rawPoints;
+    if (pts.length === 0) continue;
+
+    const chunks: StrokePoint[][] = [];
+    let chunk: StrokePoint[] = [];
+    for (const point of pts) {
+      const prev = chunk[chunk.length - 1];
+      const pointInside = Math.hypot(point.x - center.x, point.y - center.y) <= radius;
+      const segmentInside = !!prev && pointToSegmentDistance(center, prev, point) <= radius;
+
+      if (pointInside || segmentInside) {
+        if (chunk.length > 0) chunks.push(chunk);
+        chunk = pointInside ? [] : [point];
+        changed = true;
+      } else {
+        chunk.push(point);
+      }
+    }
+    if (chunk.length > 0) chunks.push(chunk);
+
+    if (chunks.length === 1 && chunks[0].length === pts.length && !changed) {
+      next.push(stroke);
+      continue;
+    }
+    if (chunks.length !== 1 || chunks[0].length !== pts.length) changed = true;
+    for (const part of chunks) {
+      if (part.length === 0) continue;
+      next.push({
+        ...stroke,
+        id: part.length === pts.length ? stroke.id : uid("stroke"),
+        points: part,
+        rawPoints: part,
+      });
+    }
+  }
+
+  return changed ? next : strokes;
 }
 
 export default function FontEditor({ visible }: { visible: boolean }) {
@@ -56,6 +116,11 @@ export default function FontEditor({ visible }: { visible: boolean }) {
   const [stabParams, setStabParams] = useState<StabilizationParams>(STABILIZATION_PRESETS.medium);
   const [tool, setTool] = useState<CanvasTool>("draw");
   const [selectedStroke, setSelectedStroke] = useState<string | null>(null);
+  const [eraserSize, setEraserSize] = useState(1);
+  const [activeVariant, setActiveVariant] = useState(0);
+  // The variant a glyph should open at on the next `loadGlyph`. Lets the writing
+  // test jump straight to the clicked variant; defaults to 0 for plain switches.
+  const pendingVariantRef = useRef(0);
   const [activeSpacingBefore, setActiveSpacingBefore] = useState(0);
   const [savedSpacingBefore, setSavedSpacingBefore] = useState(0);
   const [activeAdvance, setActiveAdvance] = useState(560);
@@ -101,6 +166,7 @@ export default function FontEditor({ visible }: { visible: boolean }) {
     setActiveKey("");
     editing.load([]);
     setSelectedStroke(null);
+    setActiveVariant(0);
     const advance = font.current?.metrics.defaultAdvance ?? 560;
     setActiveSpacingBefore(0);
     setSavedSpacingBefore(0);
@@ -110,9 +176,15 @@ export default function FontEditor({ visible }: { visible: boolean }) {
   };
 
   const loadGlyph = (key: string) => {
-    editing.load(glyphStrokes(font.current, key));
-    const spacingBefore = glyphSpacingBefore(font.current, key) ?? 0;
-    const savedAdv = glyphAdvance(font.current, key);
+    // Open at the pending variant (set by the writing test) — 0 for plain
+    // switches. Clamp to what the glyph actually has. The ref is consumed by the
+    // activeKey effect once the load settles.
+    const count = glyphVariants(font.current, key).length;
+    const variant = Math.min(Math.max(pendingVariantRef.current, 0), Math.max(count - 1, 0));
+    setActiveVariant(variant);
+    editing.load(variantStrokes(font.current, key, variant));
+    const spacingBefore = variantSpacingBefore(font.current, key, variant) ?? 0;
+    const savedAdv = variantAdvance(font.current, key, variant);
     const advance = savedAdv ?? font.current?.metrics.defaultAdvance ?? 560;
     setActiveSpacingBefore(spacingBefore);
     setSavedSpacingBefore(spacingBefore);
@@ -131,6 +203,12 @@ export default function FontEditor({ visible }: { visible: boolean }) {
   useEffect(() => {
     if (tool !== "move") setSelectedStroke(null);
   }, [tool]);
+
+  useEffect(() => {
+    if (!visible || font.current) return;
+    font.refreshList().catch(fail);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, font.current?.id]);
 
   const handleCreate = (label: string) => {
     withDiscardedGlyphChanges(() => {
@@ -160,11 +238,30 @@ export default function FontEditor({ visible }: { visible: boolean }) {
     font.remove(id).catch(fail);
   };
 
+  const handleOpenList = () => {
+    font.refreshList().catch(fail).finally(() => setListOpen(true));
+  };
+
   const selectGlyph = (key: string) => {
     if (key === activeKey.trim()) return;
     withDiscardedGlyphChanges(() => {
       setActiveKey(key);
       loadGlyph(key);
+      setSelectedStroke(null);
+    });
+  };
+
+  // Select a glyph at a specific variant (used by the writing test: click a
+  // letter to edit exactly the variant shown there).
+  const selectGlyphVariant = (key: string, variant: number) => {
+    withDiscardedGlyphChanges(() => {
+      pendingVariantRef.current = variant;
+      const sameKey = key === activeKey.trim();
+      if (!sameKey) setActiveKey(key);
+      // Load directly so the dirty guard in the activeKey effect can't skip it;
+      // on a key change the effect re-runs and consumes the ref harmlessly.
+      loadGlyph(key);
+      if (sameKey) pendingVariantRef.current = 0;
       setSelectedStroke(null);
     });
   };
@@ -175,6 +272,7 @@ export default function FontEditor({ visible }: { visible: boolean }) {
   useEffect(() => {
     if (!font.current || currentGlyphDirty) return;
     loadGlyph(activeKey.trim());
+    pendingVariantRef.current = 0;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeKey, font.current?.id]);
 
@@ -182,6 +280,7 @@ export default function FontEditor({ visible }: { visible: boolean }) {
     withDiscardedGlyphChanges(() => {
       setActiveKey("");
       editing.load([]);
+      setActiveVariant(0);
       const advance = font.current?.metrics.defaultAdvance ?? 560;
       setActiveSpacingBefore(0);
       setSavedSpacingBefore(0);
@@ -195,6 +294,16 @@ export default function FontEditor({ visible }: { visible: boolean }) {
 
   const handleEraseStroke = (id: string) => {
     editing.replace(editing.strokes.filter((s) => s.id !== id));
+  };
+
+  const handleEraseArea = (center: StrokePoint, radius: number) => {
+    if (eraserSize === ERASER_WHOLE_STROKE) {
+      const id = nearestStrokeId(editing.strokes, center, radius);
+      if (id) handleEraseStroke(id);
+      return;
+    }
+    const next = eraseStrokeArea(editing.strokes, center, radius);
+    if (next !== editing.strokes) editing.replace(next);
   };
 
   const handleMoveStroke = (id: string, dx: number, dy: number) => {
@@ -242,6 +351,10 @@ export default function FontEditor({ visible }: { visible: boolean }) {
   const maxAdvance = Math.max(Math.round(em * 1.4), Math.round(suggestedAdvance + em * 0.3));
   const minSpacingBefore = -Math.round(em * 0.15);
   const maxSpacingBefore = Math.round(em * 1.4);
+  const eraserRatio = eraserSize === ERASER_WHOLE_STROKE
+    ? ERASER_WHOLE_STROKE_RATIO
+    : ERASER_SIZE_RATIOS[eraserSize] ?? 0.045;
+  const eraserRadius = Math.max(4, Math.round(em * eraserRatio));
 
   // Grow the advance to the drawn width until the user pins it manually, so a
   // word key gets enough trailing room without fiddling with the slider. Only
@@ -256,7 +369,14 @@ export default function FontEditor({ visible }: { visible: boolean }) {
 
   const handleSaveGlyph = async () => {
     if (!font.current || key === "" || editing.strokes.length === 0) return false;
-    const nextDoc = upsertGlyph(font.current, key, editing.strokes, activeAdvance, activeSpacingBefore);
+    const nextDoc = upsertGlyphVariant(
+      font.current,
+      key,
+      activeVariant,
+      editing.strokes,
+      activeAdvance,
+      activeSpacingBefore
+    );
     font.updateCurrent(nextDoc);
     try {
       await font.save(nextDoc);
@@ -275,6 +395,7 @@ export default function FontEditor({ visible }: { visible: boolean }) {
     if (!font.current || !glyphExists) return;
     font.updateCurrent(removeGlyph(font.current, key));
     editing.load([]);
+    setActiveVariant(0);
     const advance = font.current.metrics.defaultAdvance;
     setActiveSpacingBefore(0);
     setSavedSpacingBefore(0);
@@ -282,6 +403,78 @@ export default function FontEditor({ visible }: { visible: boolean }) {
     setSavedAdvance(advance);
     setAdvanceTouched(false);
     setSelectedStroke(null);
+  };
+
+  // --- Variants (alternate shapes of the active glyph) ----------------------
+  // The strip only shows for an already-saved glyph, so font.current/key are set.
+  const variants = glyphVariants(font.current, key);
+
+  // Load a variant's side bearings into the editor state (active == saved, so
+  // the glyph isn't marked dirty just by switching).
+  const applyVariantMetrics = (doc: typeof font.current, vIndex: number) => {
+    const sp = variantSpacingBefore(doc, key, vIndex) ?? 0;
+    const adv = variantAdvance(doc, key, vIndex);
+    const advance = adv ?? doc?.metrics.defaultAdvance ?? 560;
+    setActiveSpacingBefore(sp);
+    setSavedSpacingBefore(sp);
+    setActiveAdvance(advance);
+    setSavedAdvance(advance);
+    setAdvanceTouched(adv !== undefined);
+  };
+
+  // Add a variant (empty, or a copy of the current strokes + its side bearings),
+  // persist it, and switch the canvas to it so the next strokes land on the new
+  // alternate.
+  const addGlyphVariant = (duplicate: boolean) => {
+    withDiscardedGlyphChanges(() => {
+      if (!font.current) return;
+      const base = duplicate ? cloneStrokes(editing.strokes) : [];
+      const newIndex = glyphVariants(font.current, key).length;
+      const adv = duplicate ? activeAdvance : undefined;
+      const sp = duplicate ? activeSpacingBefore : undefined;
+      const nextDoc = upsertGlyphVariant(font.current, key, newIndex, base, adv, sp);
+      font.updateCurrent(nextDoc);
+      font.save(nextDoc).catch(fail);
+      setActiveVariant(newIndex);
+      editing.load(base);
+      if (duplicate) {
+        setSavedSpacingBefore(activeSpacingBefore);
+        setSavedAdvance(activeAdvance);
+        setAdvanceTouched(true);
+      } else {
+        // Empty variant: start at defaults and let the advance auto-track.
+        const def = font.current.metrics.defaultAdvance;
+        setActiveSpacingBefore(0);
+        setSavedSpacingBefore(0);
+        setActiveAdvance(def);
+        setSavedAdvance(def);
+        setAdvanceTouched(false);
+      }
+      setSelectedStroke(null);
+      setTool("draw");
+    });
+  };
+
+  const removeGlyphVariant = (index: number) => {
+    withDiscardedGlyphChanges(() => {
+      if (!font.current) return;
+      const nextDoc = removeVariant(font.current, key, index);
+      font.updateCurrent(nextDoc);
+      font.save(nextDoc).catch(fail);
+      setActiveVariant(0);
+      editing.load(variantStrokes(nextDoc, key, 0));
+      applyVariantMetrics(nextDoc, 0);
+      setSelectedStroke(null);
+    });
+  };
+
+  const changeVariantWeight = (index: number, weight: number) => {
+    if (!font.current) return;
+    font.updateCurrent(setVariantWeight(font.current, key, index, weight));
+  };
+
+  const commitVariantWeight = () => {
+    font.save().catch(fail);
   };
 
   const handleMoveGlyph = (dx: number, dy: number) => {
@@ -365,7 +558,7 @@ export default function FontEditor({ visible }: { visible: boolean }) {
         dirty={font.dirty || currentGlyphDirty}
         busy={font.busy}
         onCreate={handleCreate}
-        onOpenList={() => setListOpen(true)}
+        onOpenList={handleOpenList}
       />
 
       {font.current ? (
@@ -377,18 +570,36 @@ export default function FontEditor({ visible }: { visible: boolean }) {
             onSelect={selectGlyph}
             onOpenOverview={() => setOverviewOpen(true)}
           />
-          <GlyphCanvas
-            metrics={font.current.metrics}
-            strokes={editing.strokes}
-            tool={tool}
-            selectedId={selectedStroke}
-            onSelectStroke={setSelectedStroke}
-            onStrokeComplete={handleStroke}
-            onEraseStroke={handleEraseStroke}
-            onMoveStroke={handleMoveStroke}
-            playRequest={playReq}
-            onPlayingChange={setIsPlaying}
-          />
+          <div className="fe-center">
+            <GlyphCanvas
+              metrics={font.current.metrics}
+              strokes={editing.strokes}
+              tool={tool}
+              selectedId={selectedStroke}
+              onSelectStroke={setSelectedStroke}
+              onStrokeComplete={handleStroke}
+              onEraseArea={handleEraseArea}
+              onMoveStroke={handleMoveStroke}
+              eraserRadius={eraserRadius}
+              playRequest={playReq}
+              onPlayingChange={setIsPlaying}
+            />
+            {glyphExists && (
+              <GlyphVariantStrip
+                variants={variants}
+                activeIndex={activeVariant}
+                activeStrokes={editing.strokes}
+                metrics={font.current.metrics}
+                maxVariants={MAX_VARIANTS_PER_GLYPH}
+                onSelect={(index) => selectGlyphVariant(key, index)}
+                onAddEmpty={() => addGlyphVariant(false)}
+                onDuplicate={() => addGlyphVariant(true)}
+                onRemove={removeGlyphVariant}
+                onWeightChange={changeVariantWeight}
+                onWeightCommit={commitVariantWeight}
+              />
+            )}
+          </div>
           <GlyphToolbar
             tool={tool}
             canUndo={editing.canUndo}
@@ -397,6 +608,8 @@ export default function FontEditor({ visible }: { visible: boolean }) {
             glyphExists={glyphExists}
             isPlaying={isPlaying}
             onToolChange={setTool}
+            eraserSize={eraserSize}
+            onEraserSizeChange={setEraserSize}
             onUndo={editing.undo}
             onRedo={editing.redo}
             onReset={editing.reset}
@@ -421,18 +634,37 @@ export default function FontEditor({ visible }: { visible: boolean }) {
         <div className="fe-empty">
           <p className="fe-empty-title">{t("fontEditor.empty")}</p>
           <p className="muted">{t("fontEditor.emptyHint")}</p>
+          {font.summaries.length === 0 ? (
+            <p className="muted fe-empty-list-empty">{t("fontEditor.listEmpty")}</p>
+          ) : (
+            <div className="fe-empty-fonts" aria-label={t("fontEditor.myFonts")}>
+              {font.summaries.map((summary) => (
+                <button
+                  key={summary.id}
+                  className="fe-empty-font-card"
+                  onClick={() => handleOpen(summary.id)}
+                  disabled={font.busy}
+                >
+                  <span className="fe-empty-font-name">{summary.label}</span>
+                  <span className="muted">{t("fontEditor.glyphCountLabel", { n: summary.glyphCount })}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
-      <GlyphKeyInput
-        value={activeKey}
-        onChange={setActiveKey}
-        onSaveGlyph={handleSaveGlyph}
-        onOpenSymbols={() => setSymbolsOpen(true)}
-        onNewGlyph={handleNewGlyph}
-        canSave={canSaveGlyph}
-        disabled={!font.current}
-      />
+      {font.current && (
+        <GlyphKeyInput
+          value={activeKey}
+          onChange={setActiveKey}
+          onSaveGlyph={handleSaveGlyph}
+          onOpenSymbols={() => setSymbolsOpen(true)}
+          onNewGlyph={handleNewGlyph}
+          canSave={canSaveGlyph}
+          disabled={!font.current}
+        />
+      )}
 
       {listOpen && (
         <FontListDialog
@@ -474,6 +706,7 @@ export default function FontEditor({ visible }: { visible: boolean }) {
           doc={font.current}
           activeKey={key}
           activeStrokes={editing.strokes}
+          activeVariant={activeVariant}
           activeSpacingBefore={activeSpacingBefore}
           activeAdvance={activeAdvance}
           minSpacingBefore={minSpacingBefore}
@@ -485,7 +718,7 @@ export default function FontEditor({ visible }: { visible: boolean }) {
           onAutoAlignGlyph={handleAutoAlignGlyph}
           onSpacingBeforeChange={setActiveSpacingBefore}
           onAdvanceChange={handleAdvanceChange}
-          onSelectGlyph={selectGlyph}
+          onSelectGlyph={selectGlyphVariant}
           onSaveGlyph={handleSaveGlyph}
           canSaveGlyph={canSaveGlyph}
           onClose={() => setWritingTestOpen(false)}

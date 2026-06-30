@@ -41,6 +41,14 @@ export function withStyledCache(obj: SceneObject): SceneObject {
   };
 }
 
+// A stable per-text-object seed: stroke fonts pick a random (weighted) variant
+// per letter, so the same text would otherwise look identical every render. The
+// seed is stored on the object's `data`, keeping preview and plot in sync while
+// giving each text its own random mix.
+export function randomTextSeed(): number {
+  return Math.floor(Math.random() * 0x7fffffff);
+}
+
 export function textGeometry(text: string, size: number, _font: TextFont, fallbackText = "Text") {
   return { ...localize(textWorld(text || fallbackText, [0, 0], size)), feeds: undefined, missing: undefined };
 }
@@ -52,9 +60,10 @@ export async function textGeometryAsync(
   size: number,
   font: TextFont,
   fallbackText = "Text",
-  connectSpaces = false
+  connectSpaces = false,
+  seed = 0
 ) {
   if (!isServerFont(font)) return textGeometry(text, size, font, fallbackText);
-  const res = await api.textPolylines(text || fallbackText, font, size, connectSpaces);
+  const res = await api.textPolylines(text || fallbackText, font, size, connectSpaces, seed);
   return { ...localize(res.polylines as Pt[][]), feeds: res.feeds, missing: res.missing };
 }

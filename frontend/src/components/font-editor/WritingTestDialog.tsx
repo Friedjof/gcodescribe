@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { Stroke, StrokeFontDocument, StrokeGlyph, StrokePoint } from "../../api";
+import type { Stroke, StrokeFontDocument, StrokeGlyph, StrokePoint, StrokeVariant } from "../../api";
 import { useI18n } from "../../i18n";
-import { glyphStrokes, upsertGlyph } from "../../fontEditor/glyphModel";
+import { upsertGlyphVariant } from "../../fontEditor/glyphModel";
 import { boundsOf, metricTop, pointsToPath } from "../../fontEditor/strokeGeometry";
 import Modal from "../Modal";
 import GlyphAlignmentPanel from "./GlyphAlignmentPanel";
@@ -21,6 +21,8 @@ interface RenderedTravel {
 interface GlyphInstance {
   id: string;
   key: string;
+  /** Which variant of `key` this instance was rendered with. */
+  variant: number;
   label: string;
   x: number;
   y: number;
@@ -28,6 +30,7 @@ interface GlyphInstance {
   height: number;
   originX: number;
   originY: number;
+  advanceX: number;
   /** Playback time (ms) at which this glyph starts being written. */
   startMs: number;
 }
@@ -53,6 +56,7 @@ interface PreviewResult {
 }
 
 const PREVIEW_LINE_CHARS = 40;
+const INSPECTOR_METRICS = ["ascender", "capHeight", "xHeight", "baseline", "descender"] as const;
 const DEFAULT_WRITING_TEXT: Record<string, string> = {
   de: "Franz jagt im komplett verwahrlosten Taxi quer durch Bayern.\nZwölf große Boxkämpfer jagen Viktor quer über den Sylter Deich.\nProbe: 0123456789, äöü ÄÖÜ ß!?",
   en: "The quick brown fox jumps over the lazy dog while five dozen quills trace every curve.\nPack my box with five dozen liquor jugs, then write 0123456789 and punctuation!?",
@@ -65,12 +69,53 @@ function strokePoints(stroke: Stroke): StrokePoint[] {
   return stroke.points.length ? stroke.points : stroke.rawPoints;
 }
 
-function glyphAdvance(glyph: StrokeGlyph | undefined, doc: StrokeFontDocument): number {
-  return glyph?.advance ?? doc.metrics.defaultAdvance;
+// Tiny seeded PRNG (mulberry32) so the preview's random variant picks are stable
+// for a given seed and only reshuffle when the user asks.
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
-function glyphSpacingBefore(glyph: StrokeGlyph | undefined): number {
-  return glyph?.spacingBefore ?? 0;
+// Mirror of `_choose_variant` in plotter/stroke_fonts/render.py: weighted random
+// pick over a glyph's variants, so the writing test shows the same variety as
+// the plotted output. Returns the chosen index too, so each rendered instance
+// knows which variant it used (for selection + highlighting).
+function chooseVariant(
+  glyph: StrokeGlyph | undefined,
+  rng: () => number
+): { index: number; variant: StrokeVariant | null } {
+  const variants = glyph?.variants ?? [];
+  if (variants.length === 0) return { index: 0, variant: null };
+  const weights = variants.map((v) => Math.max(v.weight ?? 1, 0));
+  const total = weights.reduce((sum, w) => sum + w, 0);
+  if (total <= 0) return { index: 0, variant: variants[0] };
+  let r = rng() * total;
+  for (let i = 0; i < variants.length; i += 1) {
+    r -= weights[i];
+    if (r <= 0) return { index: i, variant: variants[i] };
+  }
+  const last = variants.length - 1;
+  return { index: last, variant: variants[last] };
+}
+
+// Side bearings of a rendered instance: the chosen variant's value wins, then
+// the glyph-level fallback (older fonts), then the metric defaults.
+function instanceSpacingBefore(variant: StrokeVariant | null, glyph: StrokeGlyph | undefined): number {
+  return variant?.spacingBefore ?? glyph?.spacingBefore ?? 0;
+}
+
+function instanceAdvance(
+  variant: StrokeVariant | null,
+  glyph: StrokeGlyph | undefined,
+  doc: StrokeFontDocument
+): number {
+  return variant?.advance ?? glyph?.advance ?? doc.metrics.defaultAdvance;
 }
 
 function wrapLine(line: string, maxChars: number): string[] {
@@ -144,8 +189,14 @@ function partialPoints(points: StrokePoint[], ratio: number): StrokePoint[] {
   return out;
 }
 
-function renderPreview(doc: StrokeFontDocument, text: string, maxLineChars: number): PreviewResult {
+function renderPreview(
+  doc: StrokeFontDocument,
+  text: string,
+  maxLineChars: number,
+  seed: number
+): PreviewResult {
   const wrappedText = wrapText(text, maxLineChars);
+  const rng = mulberry32(seed);
   const lineCount = wrappedText.split("\n").length;
   const keys = doc.glyphs.map((g) => g.key).filter(Boolean).sort((a, b) => [...b].length - [...a].length);
   const top = metricTop(doc.metrics);
@@ -191,14 +242,15 @@ function renderPreview(doc: StrokeFontDocument, text: string, maxLineChars: numb
     }
 
     const glyph = doc.glyphs.find((g) => g.key === match);
-    const spacingBefore = glyphSpacingBefore(glyph);
-    const advance = glyphAdvance(glyph, doc);
+    const picked = chooseVariant(glyph, rng);
+    const spacingBefore = instanceSpacingBefore(picked.variant, glyph);
+    const advance = instanceAdvance(picked.variant, glyph, doc);
     x += spacingBefore;
     const instanceId = `${match}-${i}`;
     const glyphPoints: StrokePoint[] = [];
     let startMs = elapsed;
     let started = false;
-    for (const stroke of glyphStrokes(doc, match)) {
+    for (const stroke of picked.variant?.strokes ?? []) {
       const points = strokePoints(stroke).map((p) => ({ ...p, x: p.x + x, y: p.y + y }));
       const start = points[0];
       if (previousEnd && start) {
@@ -223,9 +275,11 @@ function renderPreview(doc: StrokeFontDocument, text: string, maxLineChars: numb
     const b = boundsOf(glyphPoints);
     const originX = x;
     const originY = top - y;
+    const advanceX = x + advance;
     instances.push({
       id: instanceId,
       key: match,
+      variant: picked.index,
       label: match,
       x,
       y: top - y - doc.metrics.ascender,
@@ -233,12 +287,14 @@ function renderPreview(doc: StrokeFontDocument, text: string, maxLineChars: numb
       height: lineHeight,
       originX,
       originY,
+      advanceX,
       startMs,
     });
     if (b) {
       instances[instances.length - 1] = {
         id: instanceId,
         key: match,
+        variant: picked.index,
         label: match,
         x: Math.min(x, b.xMin),
         y: top - Math.max(b.yMax, doc.metrics.ascender + y),
@@ -246,6 +302,7 @@ function renderPreview(doc: StrokeFontDocument, text: string, maxLineChars: numb
         height: Math.max(lineHeight, b.yMax - b.yMin),
         originX,
         originY,
+        advanceX,
         startMs,
       };
     }
@@ -270,6 +327,7 @@ export default function WritingTestDialog({
   doc,
   activeKey,
   activeStrokes,
+  activeVariant,
   activeSpacingBefore,
   activeAdvance,
   minSpacingBefore,
@@ -289,6 +347,7 @@ export default function WritingTestDialog({
   doc: StrokeFontDocument;
   activeKey: string;
   activeStrokes: Stroke[];
+  activeVariant: number;
   activeSpacingBefore: number;
   activeAdvance: number;
   minSpacingBefore: number;
@@ -300,7 +359,7 @@ export default function WritingTestDialog({
   onAutoAlignGlyph: () => void;
   onSpacingBeforeChange: (spacingBefore: number) => void;
   onAdvanceChange: (advance: number) => void;
-  onSelectGlyph: (key: string) => void;
+  onSelectGlyph: (key: string, variant: number) => void;
   onSaveGlyph: () => void;
   canSaveGlyph: boolean;
   onClose: () => void;
@@ -312,6 +371,8 @@ export default function WritingTestDialog({
   const [zoom, setZoom] = useState(1);
   const [speed, setSpeed] = useState(1);
   const [maxLineChars, setMaxLineChars] = useState(PREVIEW_LINE_CHARS);
+  // Stable seed for the weighted-random variant picks; reshuffled on demand.
+  const [variantSeed, setVariantSeed] = useState(() => Math.floor(Math.random() * 0x7fffffff));
   const [showTravels, setShowTravels] = useState(false);
   const [showInspector, setShowInspector] = useState(false);
   const [autoFitView, setAutoFitView] = useState(true);
@@ -320,8 +381,16 @@ export default function WritingTestDialog({
   const startRef = useRef<{ wall: number; head: number } | null>(null);
   const previewRef = useRef<HTMLDivElement | null>(null);
   const panRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
-  const previewDoc = activeKey.trim() && activeStrokes.length ? upsertGlyph(doc, activeKey.trim(), activeStrokes, activeAdvance, activeSpacingBefore) : doc;
-  const preview = useMemo(() => renderPreview(previewDoc, text, maxLineChars), [previewDoc, text, maxLineChars]);
+  // Show the in-progress strokes as the variant being edited, without dropping
+  // the glyph's other variants from the preview.
+  const previewDoc =
+    activeKey.trim() && activeStrokes.length
+      ? upsertGlyphVariant(doc, activeKey.trim(), activeVariant, activeStrokes, activeAdvance, activeSpacingBefore)
+      : doc;
+  const preview = useMemo(
+    () => renderPreview(previewDoc, text, maxLineChars, variantSeed),
+    [previewDoc, text, maxLineChars, variantSeed]
+  );
   const top = metricTop(previewDoc.metrics);
   const penWidth = Math.max(6, Math.round(previewDoc.metrics.em * 0.012));
   const viewBox = `0 0 ${preview.width} ${preview.height}`;
@@ -329,6 +398,10 @@ export default function WritingTestDialog({
   const baseSvgHeight = Math.max(1, preview.height);
   const svgHeight = baseSvgHeight * zoom;
   const svgWidth = baseSvgWidth * zoom;
+  const inspectorLineOrigins = useMemo(
+    () => [...new Set(preview.instances.map((instance) => Math.round(instance.originY)))].sort((a, b) => a - b),
+    [preview.instances]
+  );
 
   const setViewZoom = useCallback((next: number) => {
     setAutoFitView(false);
@@ -546,38 +619,73 @@ export default function WritingTestDialog({
             }}
           >
             <svg viewBox={viewBox} preserveAspectRatio="xMinYMin meet" style={{ width: svgWidth, height: svgHeight }}>
-              <g className="fe-writing-hitboxes">
-                {preview.instances.map((instance) => (
-                  <rect
-                    key={instance.id}
-                    className={`fe-writing-instance ${instance.key === activeKey.trim() ? "is-selected" : ""}`}
-                    x={instance.x}
-                    y={instance.y}
-                    width={instance.width}
-                    height={instance.height}
-                    onClick={() => onSelectGlyph(instance.key)}
-                    onPointerEnter={() => setHoveredInstanceId(instance.id)}
-                    onPointerLeave={() => setHoveredInstanceId((current) => (current === instance.id ? null : current))}
-                  >
-                    <title>{instance.label}</title>
-                  </rect>
-                ))}
-              </g>
               {showInspector && (
                 <g className="fe-writing-inspector">
+                  {inspectorLineOrigins.map((originY) => (
+                    <g key={`line-guides-${originY}`}>
+                      {INSPECTOR_METRICS.map((metric) => (
+                        <line
+                          key={`${originY}-${metric}`}
+                          className={`fe-writing-inspector-metric fe-writing-inspector-${metric}`}
+                          x1={0}
+                          y1={originY - previewDoc.metrics[metric]}
+                          x2={preview.width}
+                          y2={originY - previewDoc.metrics[metric]}
+                        />
+                      ))}
+                    </g>
+                  ))}
                   {preview.instances.map((instance) => (
                     <g key={`${instance.id}-inspector`}>
                       <rect x={instance.x} y={instance.y} width={instance.width} height={instance.height} />
-                      <line x1={instance.originX} y1={instance.y} x2={instance.originX} y2={instance.y + instance.height} />
-                      <line x1={instance.x} y1={instance.originY} x2={instance.x + instance.width} y2={instance.originY} />
-                      <circle cx={instance.originX} cy={instance.originY} r={7} />
+                      <line
+                        className="fe-writing-inspector-origin"
+                        x1={instance.originX}
+                        y1={instance.y}
+                        x2={instance.originX}
+                        y2={instance.y + instance.height}
+                      />
+                      <line
+                        className="fe-writing-inspector-advance"
+                        x1={instance.advanceX}
+                        y1={instance.y}
+                        x2={instance.advanceX}
+                        y2={instance.y + instance.height}
+                      />
+                      <line
+                        className="fe-writing-inspector-baseline-local"
+                        x1={instance.x}
+                        y1={instance.originY - previewDoc.metrics.baseline}
+                        x2={instance.x + instance.width}
+                        y2={instance.originY - previewDoc.metrics.baseline}
+                      />
+                      <circle cx={instance.originX} cy={instance.originY - previewDoc.metrics.baseline} r={7} />
                       <path
-                        d={`M ${instance.originX - 12} ${instance.originY} L ${instance.originX + 12} ${instance.originY} M ${instance.originX} ${instance.originY - 12} L ${instance.originX} ${instance.originY + 12}`}
+                        d={`M ${instance.originX - 12} ${instance.originY - previewDoc.metrics.baseline} L ${instance.originX + 12} ${instance.originY - previewDoc.metrics.baseline} M ${instance.originX} ${instance.originY - previewDoc.metrics.baseline - 12} L ${instance.originX} ${instance.originY - previewDoc.metrics.baseline + 12}`}
                       />
                     </g>
                   ))}
                 </g>
               )}
+              <g className="fe-writing-hitboxes">
+                {preview.instances.map((instance) => (
+                  <rect
+                    key={instance.id}
+                    className={`fe-writing-instance ${
+                      instance.key === activeKey.trim() && instance.variant === activeVariant ? "is-selected" : ""
+                    }`}
+                    x={instance.x}
+                    y={instance.y}
+                    width={instance.width}
+                    height={instance.height}
+                    onClick={() => onSelectGlyph(instance.key, instance.variant)}
+                    onPointerEnter={() => setHoveredInstanceId(instance.id)}
+                    onPointerLeave={() => setHoveredInstanceId((current) => (current === instance.id ? null : current))}
+                  >
+                    <title>{instance.label}</title>
+                  </rect>
+                  ))}
+              </g>
               <g className="fe-writing-pending" strokeWidth={penWidth}>
                 {showTravels &&
                   preview.travels.map((travel) => {
@@ -679,8 +787,19 @@ export default function WritingTestDialog({
               <span>{maxLineChars}</span>
             </label>
             <div className="fe-writing-button-row">
-              <button onClick={resetPlayback}>{t("fontEditor.writingTestReset")}</button>
-              <button onClick={showAll}>{t("fontEditor.writingTestShowAll")}</button>
+              <button onClick={resetPlayback} title={t("fontEditor.writingTestReset")} aria-label={t("fontEditor.writingTestReset")}>
+                ↺
+              </button>
+              <button onClick={showAll} title={t("fontEditor.writingTestShowAll")} aria-label={t("fontEditor.writingTestShowAll")}>
+                ◉
+              </button>
+              <button
+                onClick={() => setVariantSeed(Math.floor(Math.random() * 0x7fffffff))}
+                title={t("fontEditor.writingTestShuffle")}
+                aria-label={t("fontEditor.writingTestShuffle")}
+              >
+                ⇄
+              </button>
             </div>
             <div className="fe-writing-toggle-row">
               <label className="fe-writing-check">

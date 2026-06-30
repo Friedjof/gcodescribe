@@ -14,7 +14,12 @@ export default function SymbolPickerDialog({
   const { t } = useI18n();
 
   return (
-    <Modal title={t("fontEditor.symbolsTitle")} onClose={onClose} className="fe-symbols-modal">
+    <Modal
+      title={t("fontEditor.symbolsTitle")}
+      onClose={onClose}
+      className="fe-symbols-modal"
+      bodyClassName="fe-symbols-modal-body"
+    >
       <div className="fe-symbols">
         {SYMBOL_GROUPS.map((group) => (
           <section key={group.id} className="fe-symbol-group">

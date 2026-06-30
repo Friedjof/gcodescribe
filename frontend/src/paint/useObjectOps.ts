@@ -16,6 +16,7 @@ import {
   cloneObjects,
   keepsStrokeFeeds,
   objectStyle,
+  randomTextSeed,
   textGeometryAsync,
   withStyledCache,
   zValue,
@@ -201,9 +202,12 @@ export function useObjectOps(
       mode: "single-line",
       size: Number(obj.data?.size ?? 12),
       font: (obj.data?.font ?? "sans") as TextFont,
+      // Keep a stable variant seed; older objects (and the default font) may not
+      // have one yet, so mint it lazily the first time they are edited.
+      seed: Number(obj.data?.seed ?? randomTextSeed()),
       ...patch,
     };
-    textGeometryAsync(data.text, data.size, data.font, defaultText)
+    textGeometryAsync(data.text, data.size, data.font, defaultText, false, data.seed)
       .then(({ local, feeds, missing }) => {
         if (missing?.length) warnMissingGlyphs(missing);
         const style = objectStyle(obj);

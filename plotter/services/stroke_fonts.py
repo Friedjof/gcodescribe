@@ -35,8 +35,10 @@ class StrokeFontService:
     def delete(self, font_id: str) -> None:
         storage.delete(font_id)
 
-    def render(self, font_id: str, text: str, size: float) -> StrokeRenderResult:
-        return render_text(storage.get(font_id), text, size)
+    def render(
+        self, font_id: str, text: str, size: float, *, seed: int = 0
+    ) -> StrokeRenderResult:
+        return render_text(storage.get(font_id), text, size, seed=seed)
 
     def export(self, font_id: str) -> dict:
         """The ``.gcsfont`` backup payload for a stored font."""

@@ -129,6 +129,14 @@ def _normalize_variant(raw: Any) -> dict:
         "weight": float(weight) if _is_number(weight) else 1.0,
         "strokes": [_normalize_stroke(s) for s in strokes],
     }
+    # Side bearings are stored per variant, so alternates can have their own
+    # width/lead-in. A glyph-level value (older fonts) acts as the fallback.
+    advance = raw.get("advance")
+    if _is_number(advance):
+        variant["advance"] = float(advance)
+    spacing_before = raw.get("spacingBefore")
+    if _is_number(spacing_before):
+        variant["spacingBefore"] = float(spacing_before)
     for opt in ("context", "bounds", "entryPoint", "exitPoint", "capture"):
         if isinstance(raw.get(opt), dict):
             variant[opt] = raw[opt]

@@ -80,10 +80,10 @@ export const paintClient = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ objects }),
     }),
-  textPolylines: (text: string, font: string, size: number, connectSpaces = false) =>
+  textPolylines: (text: string, font: string, size: number, connectSpaces = false, seed = 0) =>
     req<{ polylines: number[][][]; feeds?: number[][]; missing?: string[] }>("/api/paint/text-polylines", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, font, size, connect_spaces: connectSpaces }),
+      body: JSON.stringify({ text, font, size, connect_spaces: connectSpaces, seed }),
     }),
 };

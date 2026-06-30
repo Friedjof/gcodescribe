@@ -124,6 +124,9 @@ class TextPreviewRequest(BaseModel):
     font: str = "sans"
     size: float = 12.0
     connect_spaces: bool = False
+    # Stroke fonts pick a variant per glyph from this seed; the frontend stores a
+    # stable per-text-object seed so preview and plot stay in sync.
+    seed: int = 0
 
 
 @router.put("/pages/{page_id}")
@@ -440,7 +443,7 @@ def paint_text_polylines(req: TextPreviewRequest) -> dict:
     if req.font.startswith("stroke-"):
         from ...services.stroke_fonts import StrokeFontService
 
-        result = StrokeFontService().render(req.font, req.text, req.size)
+        result = StrokeFontService().render(req.font, req.text, req.size, seed=req.seed)
         return {
             "polylines": result.polylines,
             "feeds": result.feeds,

@@ -15,7 +15,7 @@ import { useLiveRegistryState } from "../stream/liveRegistry";
 import { useLiveStream } from "../stream/useLiveStream";
 import { localize, type Pt, type Transform } from "../paint/geometry";
 import { type TextFont } from "../paint/text";
-import { objectStyle, textGeometryAsync } from "../paint/sceneObjects";
+import { objectStyle, randomTextSeed, textGeometryAsync } from "../paint/sceneObjects";
 import { DEFAULT_VECTOR_STYLE } from "../paint/styling";
 import { useObjectOps } from "../paint/useObjectOps";
 import { type EraserBrush, ERASER_BRUSH_FACTOR } from "../paint/eraser";
@@ -398,13 +398,14 @@ export default function Paint({
     const text = defaultText;
     const size = 12;
     const font: TextFont = "sans";
-    textGeometryAsync(text, size, font, defaultText)
+    const seed = randomTextSeed();
+    textGeometryAsync(text, size, font, defaultText, false, seed)
       .then(({ local, cx, cy, feeds, missing }) => {
         if (missing?.length) warnMissingGlyphs(missing);
         ops.addObject({
           id: crypto.randomUUID(),
           type: "text",
-          data: { text, mode: "single-line", size, font, basePolylines: local, style: DEFAULT_VECTOR_STYLE },
+          data: { text, mode: "single-line", size, font, seed, basePolylines: local, style: DEFAULT_VECTOR_STYLE },
           cachedPolylines: local,
           cachedFeeds: feeds,
           transform: { x: at[0] + cx, y: at[1] + cy, rotation: 0, scale: 1 },
