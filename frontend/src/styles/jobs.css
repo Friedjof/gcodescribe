@@ -298,3 +298,13 @@
   width: 90px;
   flex: 0 0 auto;
 }
+
+.obs-capture-panel {
+  padding: 10px 0;
+}
+
+.obs-coords {
+  flex: 1;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}

@@ -3,6 +3,7 @@ from __future__ import annotations
 from ..calibration import Calibration
 from ..position import PositionTracker, get_tracker
 from ..printer import PrinterBackend, get_printer_client
+from ..routing import route_travel
 from .errors import NotHomedError, ServiceError
 
 
@@ -110,7 +111,12 @@ class PrinterController:
         commands = ["G90"]
         if pen_up_first:
             commands.append(f"G0 Z{cal.pen_up_z:.3f} F{cal.z_feed:.0f}")
-        commands.append(f"G0 X{x:.3f} Y{y:.3f} F{cal.travel_feed:.0f}")
+        if pen_up_first and cal.obstacles:
+            cur = self.tracker.snapshot()
+            for wx, wy in route_travel((cur["x"], cur["y"]), (x, y), cal.obstacles):
+                commands.append(f"G0 X{wx:.3f} Y{wy:.3f} F{cal.travel_feed:.0f}")
+        else:
+            commands.append(f"G0 X{x:.3f} Y{y:.3f} F{cal.travel_feed:.0f}")
         self.client.gcode(commands)
         self.tracker.set_axes(x=x, y=y, z=cal.pen_up_z if pen_up_first else None)
         return self.position()

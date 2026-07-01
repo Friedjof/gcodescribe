@@ -41,16 +41,16 @@ export default function Paper({
   const [active, setActive] = useState(1);
   const [xyStep, setXyStep] = useState(10);
   const [zStep, setZStep] = useState(0.1);
-  const [clickMove, setClickMove] = useState(false);
+  const [clickMove, setClickMove] = useState(true);
   const [margin, setMargin] = useState(5);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [previewJob, setPreviewJob] = useState("");
   const [preview, setPreview] = useState<GcodePreview | null>(null);
   const [profileName, setProfileName] = useState<string | null>(null);
-  // Track whether the head has been driven to calibration position in step 2
-  const [atCalibPos, setAtCalibPos] = useState(false);
   // Obstacle (no-go zone) editing
   const [obstacles, setObstacles] = useState<Obstacle[]>([]);
+  const [obsCaptureActive, setObsCaptureActive] = useState(false);
+  const [obsCaptureCorner1, setObsCaptureCorner1] = useState<[number, number] | null>(null);
 
   const online = status?.online;
   const homed = !!pos?.homed;
@@ -103,14 +103,14 @@ export default function Paper({
 
   const pressed = useArrowKeys(
     {
-      left: active === 3 ? () => jogXY(-1, 0) : undefined,
-      right: active === 3 ? () => jogXY(1, 0) : undefined,
-      up: active === 3 ? () => jogXY(0, 1) : undefined,
-      down: active === 3 ? () => jogXY(0, -1) : undefined,
+      left: (active === 3 || active === 4) ? () => jogXY(-1, 0) : undefined,
+      right: (active === 3 || active === 4) ? () => jogXY(1, 0) : undefined,
+      up: (active === 3 || active === 4) ? () => jogXY(0, 1) : active === 2 ? () => jogZ(1) : undefined,
+      down: (active === 3 || active === 4) ? () => jogXY(0, -1) : active === 2 ? () => jogZ(-1) : undefined,
       raise: homed ? () => jogZ(1) : undefined,
       lower: homed ? () => jogZ(-1) : undefined,
     },
-    visible && online && (active === 2 || active === 3)
+    visible && online && (active === 2 || active === 3 || active === 4)
   );
   const kbd = (dir: string) => (pressed === dir ? " kbd-active" : "");
 
@@ -173,19 +173,6 @@ export default function Paper({
   const driveToCorner = (corner: string, target: "paper" | "plot") =>
     run(() => api.moveToCorner(corner, target));
 
-  const moveToCalibPos = () => {
-    const corners = cal.paper_corners ?? {};
-    const firstCorner = (["tl", "tr", "bl", "br"] as const).find((c) => corners[c]);
-    let x: number, y: number;
-    if (firstCorner) {
-      [x, y] = corners[firstCorner] as [number, number];
-    } else {
-      x = cal.bed_width / 2;
-      y = cal.bed_height / 2;
-    }
-    run(() => api.move(x, y)).then(() => setAtCalibPos(true));
-  };
-
   // Corner drag handlers (no machine movement)
   const handleDragCorner = (corner: string, x: number, y: number) => {
     setCal((prev) =>
@@ -206,23 +193,6 @@ export default function Paper({
   const saveObstacles = (next: Obstacle[]) => {
     setObstacles(next);
     api.setObstacles(next).then(applyPaperState).catch(fail);
-  };
-
-  const addObstacle = () => {
-    const cx = cal.origin_x + cal.plot_width / 2;
-    const cy = cal.origin_y + cal.plot_height / 2;
-    const newObs: Obstacle = {
-      id: `obs-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      x: Math.round((cx - 15) * 10) / 10,
-      y: Math.round((cy - 10) * 10) / 10,
-      w: 30, h: 20,
-    };
-    saveObstacles([...obstacles, newObs]);
-  };
-
-  const updateObstacle = (id: string, patch: Partial<Obstacle>) => {
-    const next = obstacles.map((o) => o.id === id ? { ...o, ...patch } : o);
-    saveObstacles(next);
   };
 
   const deleteObstacle = (id: string) => {
@@ -247,7 +217,7 @@ export default function Paper({
           position={pos}
           rect={rect}
           preview={preview}
-          onMoveTo={clickMove && homed && active !== 4 ? moveTo : undefined}
+          onMoveTo={clickMove && homed ? moveTo : undefined}
           onDragCorner={active === 3 ? handleDragCorner : undefined}
           onDropCorner={active === 3 ? handleDropCorner : undefined}
           obstacles={obstacles}
@@ -385,81 +355,69 @@ export default function Paper({
                         </div>
                       )}
 
-                      {/* Move to calibration position */}
-                      {!atCalibPos ? (
-                        <div className="calib-pos-block">
-                          <p className="muted">{t("paper.moveToCalibHint")}</p>
-                          <button
-                            className="primary big"
-                            disabled={!online || !homed}
-                            onClick={moveToCalibPos}
-                          >
-                            {t("paper.moveToCalib")}
+                      {!homed && (
+                        <div className="banner warn-inline" style={{ marginBottom: 10 }}>
+                          <span>{t("paper.needHome")}</span>
+                          <button className="primary" disabled={!online} onClick={homeAll}>
+                            {t("paper.homeXYZ")}
                           </button>
-                          {!homed && (
-                            <div className="banner warn-inline" style={{ marginTop: 8 }}>
-                              <span>{t("paper.needHome")}</span>
-                              <button className="primary" disabled={!online} onClick={homeAll}>
-                                {t("paper.homeXYZ")}
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="banner ok" style={{ marginTop: 0, marginBottom: 10 }}>
-                          {t("paper.atCalibPos")}
                         </div>
                       )}
 
-                      {/* Z jog — shown once at calibration position */}
-                      {(atCalibPos || !homed) && (
-                        <div className="z-panel">
-                          <div className="z-readout">
-                            <span className="muted">{t("paper.currentZ")}</span>
-                            <strong>{homed && pos ? `${pos.z.toFixed(2)} mm` : t("paper.notHomed")}</strong>
-                          </div>
-                          <Segmented
-                            value={zStep}
-                            onChange={setZStep}
-                            options={Z_STEPS.map((st) => ({ value: st, label: st }))}
-                          />
-                          <div className="z-buttons">
-                            <button className={"big" + kbd("raise")} disabled={!online || !homed} onClick={() => jogZ(1)}>
-                              Z + {zStep}
-                            </button>
-                            <button className={"big" + kbd("lower")} disabled={!online || !homed} onClick={() => jogZ(-1)}>
-                              Z − {zStep}
-                            </button>
-                          </div>
-                          {homed && (
-                            <p className="muted kbd-hint">
-                              {t("common.keyboard")}: <kbd>{t("common.pageUpKey")}</kbd><kbd>{t("common.pageDownKey")}</kbd> {t("paper.kbdZ")}
-                            </p>
-                          )}
-                          <div className="save-row">
-                            <button disabled={!online || !homed} onClick={() => savePenHeight("down")}>
-                              {t("paper.saveAsDown")}
-                            </button>
-                            <button disabled={!online || !homed} onClick={() => savePenHeight("up")}>
-                              {t("paper.saveAsUp")}
-                            </button>
-                          </div>
-                          <div className="save-row" style={{ marginTop: 4 }}>
-                            <button
-                              disabled={!online || !homed || !heightSaved}
-                              onClick={() => run(() => api.pen(true))}
-                            >
-                              {t("paper.testLower")}
-                            </button>
-                            <button
-                              disabled={!online || !homed || !heightSaved}
-                              onClick={() => run(() => api.pen(false))}
-                            >
-                              {t("paper.testRaise")}
-                            </button>
-                          </div>
+                      <div className="z-panel">
+                        <div className="z-readout">
+                          <span className="muted">{t("paper.currentZ")}</span>
+                          <strong>{homed && pos ? `${pos.z.toFixed(2)} mm` : t("paper.notHomed")}</strong>
                         </div>
-                      )}
+                        <Segmented
+                          value={zStep}
+                          onChange={setZStep}
+                          options={Z_STEPS.map((st) => ({ value: st, label: st }))}
+                        />
+                        <div className="z-buttons">
+                          <button
+                            className={"big" + kbd("raise") + kbd("up")}
+                            disabled={!online || !homed}
+                            onClick={() => jogZ(1)}
+                          >
+                            Z + {zStep}
+                          </button>
+                          <button
+                            className={"big" + kbd("lower") + kbd("down")}
+                            disabled={!online || !homed}
+                            onClick={() => jogZ(-1)}
+                          >
+                            Z − {zStep}
+                          </button>
+                        </div>
+                        {homed && (
+                          <p className="muted kbd-hint">
+                            {t("common.keyboard")}: <kbd>↑</kbd><kbd>↓</kbd> / <kbd>{t("common.pageUpKey")}</kbd><kbd>{t("common.pageDownKey")}</kbd> {t("paper.kbdZ")}
+                          </p>
+                        )}
+                        <div className="save-row">
+                          <button disabled={!online || !homed} onClick={() => savePenHeight("down")}>
+                            {t("paper.saveAsDown")}
+                          </button>
+                          <button disabled={!online || !homed} onClick={() => savePenHeight("up")}>
+                            {t("paper.saveAsUp")}
+                          </button>
+                        </div>
+                        <div className="save-row" style={{ marginTop: 4 }}>
+                          <button
+                            disabled={!online || !homed || !heightSaved}
+                            onClick={() => run(() => api.pen(true))}
+                          >
+                            {t("paper.testLower")}
+                          </button>
+                          <button
+                            disabled={!online || !homed || !heightSaved}
+                            onClick={() => run(() => api.pen(false))}
+                          >
+                            {t("paper.testRaise")}
+                          </button>
+                        </div>
+                      </div>
 
                       {/* Manual numeric inputs, collapsed */}
                       <details className="collapsible" style={{ marginTop: 12 }}>
@@ -604,70 +562,109 @@ export default function Paper({
                   {s.n === 4 && (
                     <>
                       <p className="muted">{t("paper.step4ObstaclesHint")}</p>
-                      <button className="primary" onClick={addObstacle} style={{ marginBottom: 10 }}>
-                        + {t("paper.addObstacle")}
-                      </button>
-                      {obstacles.length === 0 && (
-                        <p className="muted" style={{ fontSize: "0.85em" }}>
-                          {t("paper.noObstacles")}
-                        </p>
-                      )}
-                      {obstacles.length > 0 && (
-                        <div className="obstacle-list">
-                          {obstacles.map((obs, i) => (
-                            <div key={obs.id} className="obstacle-item">
-                              <span className="obstacle-idx">{i + 1}</span>
-                              <label className="field obs-field">
-                                <span>X</span>
-                                <div className="input-unit">
-                                  <input
-                                    type="number" step="1"
-                                    value={obs.x}
-                                    onChange={(e) => updateObstacle(obs.id, { x: parseFloat(e.target.value) || 0 })}
-                                  />
-                                  <em>mm</em>
+
+                      {!obsCaptureActive ? (
+                        <>
+                          <button
+                            className="primary"
+                            onClick={() => { setObsCaptureCorner1(null); setObsCaptureActive(true); }}
+                            style={{ marginBottom: 10 }}
+                          >
+                            + {t("paper.obsStartCapture")}
+                          </button>
+                          {obstacles.length === 0 && (
+                            <p className="muted" style={{ fontSize: "0.85em" }}>
+                              {t("paper.noObstacles")}
+                            </p>
+                          )}
+                          {obstacles.length > 0 && (
+                            <div className="obstacle-list">
+                              {obstacles.map((obs, i) => (
+                                <div key={obs.id} className="obstacle-item">
+                                  <span className="obstacle-idx">{i + 1}</span>
+                                  <span className="obs-coords muted">
+                                    X{obs.x.toFixed(0)} Y{obs.y.toFixed(0)} · {obs.w.toFixed(0)}×{obs.h.toFixed(0)} mm
+                                  </span>
+                                  <button
+                                    className="ghost tiny danger"
+                                    onClick={() => deleteObstacle(obs.id)}
+                                    title={t("paper.deleteObstacle")}
+                                  >🗑</button>
                                 </div>
-                              </label>
-                              <label className="field obs-field">
-                                <span>Y</span>
-                                <div className="input-unit">
-                                  <input
-                                    type="number" step="1"
-                                    value={obs.y}
-                                    onChange={(e) => updateObstacle(obs.id, { y: parseFloat(e.target.value) || 0 })}
-                                  />
-                                  <em>mm</em>
-                                </div>
-                              </label>
-                              <label className="field obs-field">
-                                <span>{t("paper.obsWidth")}</span>
-                                <div className="input-unit">
-                                  <input
-                                    type="number" step="1" min="1"
-                                    value={obs.w}
-                                    onChange={(e) => updateObstacle(obs.id, { w: Math.max(1, parseFloat(e.target.value) || 1) })}
-                                  />
-                                  <em>mm</em>
-                                </div>
-                              </label>
-                              <label className="field obs-field">
-                                <span>{t("paper.obsHeight")}</span>
-                                <div className="input-unit">
-                                  <input
-                                    type="number" step="1" min="1"
-                                    value={obs.h}
-                                    onChange={(e) => updateObstacle(obs.id, { h: Math.max(1, parseFloat(e.target.value) || 1) })}
-                                  />
-                                  <em>mm</em>
-                                </div>
-                              </label>
-                              <button
-                                className="ghost tiny"
-                                onClick={() => deleteObstacle(obs.id)}
-                                title={t("paper.deleteObstacle")}
-                              >✕</button>
+                              ))}
                             </div>
-                          ))}
+                          )}
+                        </>
+                      ) : (
+                        <div className="obs-capture-panel">
+                          <p className="muted">
+                            {t(obsCaptureCorner1 ? "paper.obsHintCorner2" : "paper.obsHintCorner1")}
+                          </p>
+                          <Segmented
+                            value={xyStep}
+                            onChange={setXyStep}
+                            options={XY_STEPS.map((st) => ({ value: st, label: st }))}
+                            suffix={<em className="muted">mm</em>}
+                          />
+                          <div className="jog compact">
+                            <div className="xy">
+                              <button disabled={!online} onClick={() => jogXY(0, 1)} className={"up" + kbd("up")}>↑</button>
+                              <button disabled={!online} onClick={() => jogXY(-1, 0)} className={"left" + kbd("left")}>←</button>
+                              <span className="pad-center" />
+                              <button disabled={!online} onClick={() => jogXY(1, 0)} className={"right" + kbd("right")}>→</button>
+                              <button disabled={!online} onClick={() => jogXY(0, -1)} className={"down" + kbd("down")}>↓</button>
+                            </div>
+                          </div>
+                          <p className="muted kbd-hint">
+                            {t("common.keyboard")}: <kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> {t("control.kbdMove")}
+                          </p>
+                          {obsCaptureCorner1 && (
+                            <div className="banner ok" style={{ marginTop: 8, marginBottom: 8 }}>
+                              {t("paper.obsCorner1Set", {
+                                x: obsCaptureCorner1[0].toFixed(1),
+                                y: obsCaptureCorner1[1].toFixed(1),
+                              })}
+                            </div>
+                          )}
+                          <div className="save-row" style={{ marginTop: 12 }}>
+                            {!obsCaptureCorner1 ? (
+                              <button
+                                className="primary"
+                                disabled={!homed || !pos}
+                                onClick={() => setObsCaptureCorner1([pos!.x, pos!.y])}
+                              >
+                                {t("paper.obsSetCorner1")}
+                              </button>
+                            ) : (
+                              <button
+                                className="primary"
+                                disabled={!homed || !pos}
+                                onClick={() => {
+                                  const x1 = obsCaptureCorner1[0], y1 = obsCaptureCorner1[1];
+                                  const x2 = pos!.x, y2 = pos!.y;
+                                  const ow = Math.abs(x2 - x1), oh = Math.abs(y2 - y1);
+                                  if (ow < 1 || oh < 1) { toast.error(t("paper.obsMinSize")); return; }
+                                  saveObstacles([...obstacles, {
+                                    id: `obs-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                                    x: Math.round(Math.min(x1, x2) * 10) / 10,
+                                    y: Math.round(Math.min(y1, y2) * 10) / 10,
+                                    w: Math.round(ow * 10) / 10,
+                                    h: Math.round(oh * 10) / 10,
+                                  }]);
+                                  setObsCaptureCorner1(null);
+                                  setObsCaptureActive(false);
+                                }}
+                              >
+                                {t("paper.obsSetCorner2")}
+                              </button>
+                            )}
+                            <button
+                              className="ghost"
+                              onClick={() => { setObsCaptureCorner1(null); setObsCaptureActive(false); }}
+                            >
+                              {t("paper.obsCancelCapture")}
+                            </button>
+                          </div>
                         </div>
                       )}
                       <div className="save-row" style={{ marginTop: 14 }}>

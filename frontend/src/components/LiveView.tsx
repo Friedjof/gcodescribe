@@ -33,24 +33,6 @@ function snapTo90(
   return dist <= SNAP_THRESHOLD ? [sx, sy] : null;
 }
 
-// ── Obstacle drag state ────────────────────────────────────────────────────
-type ObsDrag =
-  | { mode: "create"; x0: number; y0: number; x1: number; y1: number }
-  | { mode: "move"; id: string; startBedX: number; startBedY: number; origX: number; origY: number }
-  | { mode: "resize"; id: string; handle: "tl" | "tr" | "br" | "bl"; orig: Obstacle };
-
-function newObstacleId() {
-  return `obs-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-}
-
-function obsFromDrag(drag: Extract<ObsDrag, { mode: "create" }>): Obstacle {
-  const x = Math.min(drag.x0, drag.x1);
-  const y = Math.min(drag.y0, drag.y1);
-  const w = Math.max(1, Math.abs(drag.x1 - drag.x0));
-  const h = Math.max(1, Math.abs(drag.y1 - drag.y0));
-  return { id: newObstacleId(), x, y, w, h };
-}
-
 export default function LiveView({
   cal,
   position,
@@ -83,24 +65,32 @@ export default function LiveView({
   const [dragging, setDragging] = useState<{ corner: string; pointerId: number } | null>(null);
   const [snapTarget, setSnapTarget] = useState<[number, number] | null>(null);
 
-  // Obstacle edit state
-  const [localObs, setLocalObs] = useState<Obstacle[]>(obstacles ?? []);
+  // Obstacle selection (for keyboard delete)
   const [selectedObsId, setSelectedObsId] = useState<string | null>(null);
-  const [obsDrag, setObsDrag] = useState<ObsDrag | null>(null);
-
-  useEffect(() => { setLocalObs(obstacles ?? []); }, [obstacles]);
 
   // Deselect when leaving edit mode
   useEffect(() => {
-    if (!editingObstacles) {
-      setSelectedObsId(null);
-      setObsDrag(null);
-    }
+    if (!editingObstacles) setSelectedObsId(null);
   }, [editingObstacles]);
 
+  // Delete selected obstacle via keyboard
+  useEffect(() => {
+    if (!editingObstacles || !selectedObsId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
+      const tgt = e.target as HTMLElement | null;
+      if (tgt?.tagName === "INPUT" || tgt?.tagName === "TEXTAREA" || tgt?.isContentEditable) return;
+      e.preventDefault();
+      const next = (obstacles ?? []).filter((o) => o.id !== selectedObsId);
+      setSelectedObsId(null);
+      onObstaclesChange?.(next);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [editingObstacles, selectedObsId, obstacles, onObstaclesChange]);
+
   const svgBedCoords = (
-    e: { clientX: number; clientY: number },
-    snap: boolean
+    e: { clientX: number; clientY: number }
   ): [number, number] | null => {
     if (!svgRef.current) return null;
     const pt = svgRef.current.createSVGPoint();
@@ -109,20 +99,12 @@ export default function LiveView({
     const ctm = svgRef.current.getScreenCTM();
     if (!ctm) return null;
     const p = pt.matrixTransform(ctm.inverse());
-    const bx = Math.max(0, Math.min(W, snap ? Math.round(p.x * 10) / 10 : p.x));
-    const by = Math.max(0, Math.min(H, snap ? Math.round(ty(p.y) * 10) / 10 : ty(p.y)));
+    const bx = Math.max(0, Math.min(W, Math.round(p.x * 10) / 10));
+    const by = Math.max(0, Math.min(H, Math.round(ty(p.y) * 10) / 10));
     return [bx, by];
   };
 
-  const svgCoords = (e: React.PointerEvent<SVGSVGElement>) => svgBedCoords(e, true);
-  const svgCoordsRaw = (e: { clientX: number; clientY: number }) => svgBedCoords(e, false);
-
   const handleClick = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (editingObstacles) {
-      // Clicking on SVG background deselects
-      setSelectedObsId(null);
-      return;
-    }
     if (!onMoveTo || dragging || !svgRef.current) return;
     const pt = svgRef.current.createSVGPoint();
     pt.x = e.clientX;
@@ -131,7 +113,11 @@ export default function LiveView({
     if (!ctm) return;
     const p = pt.matrixTransform(ctm.inverse());
     if (p.x < 0 || p.x > W || p.y < 0 || p.y > H) return;
-    onMoveTo(Math.round(p.x * 10) / 10, Math.round(ty(p.y) * 10) / 10);
+    const bx = Math.round(p.x * 10) / 10;
+    const by = Math.round(ty(p.y) * 10) / 10;
+    // Block click if target is inside any obstacle
+    if ((obstacles ?? []).some((o) => bx >= o.x && bx <= o.x + o.w && by >= o.y && by <= o.y + o.h)) return;
+    onMoveTo(bx, by);
   };
 
   // ── Paper corner drag ──────────────────────────────────────────────────
@@ -146,165 +132,33 @@ export default function LiveView({
     setSnapTarget(null);
   };
 
-  // ── Obstacle drag handlers ─────────────────────────────────────────────
-  const handleObsBodyPointerDown = (
-    e: React.PointerEvent<SVGRectElement>,
-    obs: Obstacle
-  ) => {
-    if (!editingObstacles) return;
-    e.stopPropagation();
-    (e.target as SVGRectElement).setPointerCapture(e.pointerId);
-    setSelectedObsId(obs.id);
-    const coords = svgCoordsRaw(e);
-    if (!coords) return;
-    setObsDrag({ mode: "move", id: obs.id, startBedX: coords[0], startBedY: coords[1], origX: obs.x, origY: obs.y });
-  };
-
-  const handleObsHandlePointerDown = (
-    e: React.PointerEvent<SVGRectElement>,
-    obs: Obstacle,
-    handle: "tl" | "tr" | "br" | "bl"
-  ) => {
-    if (!editingObstacles) return;
-    e.stopPropagation();
-    (e.target as SVGRectElement).setPointerCapture(e.pointerId);
-    setObsDrag({ mode: "resize", id: obs.id, handle, orig: { ...obs } });
-  };
-
-  const handleSvgPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
-    if (!editingObstacles || dragging) return;
-    // Only start creating if clicking on background (not on an obstacle)
-    if ((e.target as Element).closest(".obs-body, .obs-handle")) return;
-    const coords = svgCoordsRaw(e);
-    if (!coords) return;
-    setSelectedObsId(null);
-    setObsDrag({ mode: "create", x0: coords[0], y0: coords[1], x1: coords[0], y1: coords[1] });
-    (e.currentTarget as SVGSVGElement).setPointerCapture(e.pointerId);
-  };
-
   const handlePointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
-    // Paper corner drag
-    if (dragging) {
-      const coords = svgCoords(e);
-      if (!coords) return;
+    if (!dragging) return;
+    const coords = svgBedCoords(e);
+    if (!coords) return;
+    const [x, y] = coords;
+    const snap = snapTo90(
+      cal.paper_corners as Record<string, [number, number]>,
+      dragging.corner, x, y
+    );
+    setSnapTarget(snap);
+    onDragCorner?.(dragging.corner, snap ? snap[0] : x, snap ? snap[1] : y);
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (!dragging) return;
+    const coords = svgBedCoords(e);
+    if (coords) {
       const [x, y] = coords;
       const snap = snapTo90(
         cal.paper_corners as Record<string, [number, number]>,
         dragging.corner, x, y
       );
-      setSnapTarget(snap);
-      const finalX = snap ? snap[0] : x;
-      const finalY = snap ? snap[1] : y;
-      onDragCorner?.(dragging.corner, finalX, finalY);
-      return;
+      onDropCorner?.(dragging.corner, snap ? snap[0] : x, snap ? snap[1] : y);
     }
-
-    // Obstacle drag
-    if (!obsDrag) return;
-    const coords = svgCoordsRaw(e);
-    if (!coords) return;
-    const [bx, by] = coords;
-
-    if (obsDrag.mode === "create") {
-      setObsDrag({ ...obsDrag, x1: bx, y1: by });
-    } else if (obsDrag.mode === "move") {
-      const dx = bx - obsDrag.startBedX;
-      const dy = by - obsDrag.startBedY;
-      setLocalObs((prev) =>
-        prev.map((o) =>
-          o.id !== obsDrag.id ? o : {
-            ...o,
-            x: Math.max(0, Math.round((obsDrag.origX + dx) * 10) / 10),
-            y: Math.max(0, Math.round((obsDrag.origY + dy) * 10) / 10),
-          }
-        )
-      );
-    } else if (obsDrag.mode === "resize") {
-      const orig = obsDrag.orig;
-      setLocalObs((prev) =>
-        prev.map((o) => {
-          if (o.id !== obsDrag.id) return o;
-          const handle = obsDrag.handle;
-          let nx = orig.x, ny = orig.y, nw = orig.w, nh = orig.h;
-          // Each corner handle moves that corner; opposite corner stays fixed
-          if (handle === "bl") {
-            nx = Math.min(bx, orig.x + orig.w - 1);
-            ny = Math.min(by, orig.y + orig.h - 1);
-            nw = orig.x + orig.w - nx;
-            nh = orig.y + orig.h - ny;
-          } else if (handle === "br") {
-            ny = Math.min(by, orig.y + orig.h - 1);
-            nw = Math.max(1, bx - orig.x);
-            nh = orig.y + orig.h - ny;
-            nx = orig.x;
-          } else if (handle === "tr") {
-            nw = Math.max(1, bx - orig.x);
-            nh = Math.max(1, by - orig.y);
-            nx = orig.x; ny = orig.y;
-          } else { // tl
-            nx = Math.min(bx, orig.x + orig.w - 1);
-            nh = Math.max(1, by - orig.y);
-            nw = orig.x + orig.w - nx;
-            ny = orig.y;
-          }
-          return { ...o, x: Math.round(nx * 10) / 10, y: Math.round(ny * 10) / 10, w: Math.round(nw * 10) / 10, h: Math.round(nh * 10) / 10 };
-        })
-      );
-    }
+    setDragging(null);
+    setSnapTarget(null);
   };
-
-  const handlePointerUp = (e: React.PointerEvent<SVGSVGElement>) => {
-    // Paper corner drop
-    if (dragging) {
-      const coords = svgCoords(e);
-      if (coords) {
-        const [x, y] = coords;
-        const snap = snapTo90(
-          cal.paper_corners as Record<string, [number, number]>,
-          dragging.corner, x, y
-        );
-        const finalX = snap ? snap[0] : x;
-        const finalY = snap ? snap[1] : y;
-        onDropCorner?.(dragging.corner, finalX, finalY);
-      }
-      setDragging(null);
-      setSnapTarget(null);
-      return;
-    }
-
-    // Obstacle drop
-    if (!obsDrag) return;
-    let nextObs = localObs;
-
-    if (obsDrag.mode === "create") {
-      const coords = svgCoordsRaw(e);
-      if (coords) {
-        const finalDrag = { ...obsDrag, x1: coords[0], y1: coords[1] };
-        const w = Math.abs(finalDrag.x1 - finalDrag.x0);
-        const h = Math.abs(finalDrag.y1 - finalDrag.y0);
-        if (w >= 3 && h >= 3) {
-          const newObs = obsFromDrag(finalDrag);
-          nextObs = [...localObs, newObs];
-          setLocalObs(nextObs);
-          setSelectedObsId(newObs.id);
-        }
-      }
-    }
-    // move / resize: localObs already updated during pointermove
-
-    setObsDrag(null);
-    onObstaclesChange?.(nextObs);
-  };
-
-  // Obstacle creation rubber-band preview
-  const createPreview = obsDrag?.mode === "create" ? (() => {
-    const x = Math.min(obsDrag.x0, obsDrag.x1);
-    const y = Math.min(obsDrag.y0, obsDrag.y1);
-    const w = Math.abs(obsDrag.x1 - obsDrag.x0);
-    const h = Math.abs(obsDrag.y1 - obsDrag.y0);
-    if (w < 1 || h < 1) return null;
-    return { x, y, w, h };
-  })() : null;
 
   const grid = [];
   for (let x = 0; x <= W; x += 10) {
@@ -349,8 +203,7 @@ export default function LiveView({
       .join(" ");
   }
 
-  const displayObs = obsDrag?.mode === "create" ? localObs : localObs;
-  const HANDLE_SIZE = Math.max(3, Math.min(W, H) * 0.02);
+  const displayObs = obstacles ?? [];
 
   return (
     <div className="liveview">
@@ -358,18 +211,11 @@ export default function LiveView({
         ref={svgRef}
         viewBox={`-8 -8 ${W + 16} ${H + 16}`}
         onClick={handleClick}
-        onPointerDown={editingObstacles ? handleSvgPointerDown : undefined}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
         style={{
-          cursor: obsDrag?.mode === "create"
-            ? "crosshair"
-            : obsDrag
-            ? "grabbing"
-            : dragging ? "grabbing"
-            : editingObstacles ? "crosshair"
-            : onMoveTo ? "crosshair" : "default",
+          cursor: dragging ? "grabbing" : onMoveTo ? "crosshair" : "default",
         }}
       >
         {/* bed */}
@@ -454,19 +300,19 @@ export default function LiveView({
           const isSelected = editingObstacles && selectedObsId === obs.id;
           return (
             <g key={obs.id}>
-              {/* body */}
               <rect
                 className="obs-body"
                 x={sx} y={sy} width={sw} height={sh}
-                fill={isSelected ? "rgba(255,59,48,0.25)" : "rgba(255,59,48,0.18)"}
+                fill={isSelected ? "rgba(255,59,48,0.28)" : "rgba(255,59,48,0.18)"}
                 stroke="rgb(255,59,48)"
                 strokeWidth={isSelected ? 1.2 : 0.8}
                 strokeDasharray={editingObstacles ? undefined : "3 2"}
-                style={{ cursor: editingObstacles ? "move" : "default" }}
-                onPointerDown={editingObstacles ? (e) => handleObsBodyPointerDown(e, obs) : undefined}
-                onClick={(e) => { e.stopPropagation(); if (editingObstacles) setSelectedObsId(obs.id); }}
+                style={{ cursor: editingObstacles ? "pointer" : "default" }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (editingObstacles) setSelectedObsId(isSelected ? null : obs.id);
+                }}
               />
-              {/* label */}
               <text
                 x={sx + sw / 2} y={sy + sh / 2}
                 fontSize={Math.max(4, Math.min(8, sw * 0.3, sh * 0.4))}
@@ -476,44 +322,9 @@ export default function LiveView({
               >
                 {obs.w.toFixed(0)}×{obs.h.toFixed(0)}
               </text>
-              {/* resize handles (only when selected) */}
-              {isSelected && ([
-                ["tl", sx, sy] as const,
-                ["tr", sx + sw, sy] as const,
-                ["br", sx + sw, sy + sh] as const,
-                ["bl", sx, sy + sh] as const,
-              ]).map(([handle, hx, hy]) => (
-                <rect
-                  key={handle}
-                  className="obs-handle"
-                  x={hx - HANDLE_SIZE / 2} y={hy - HANDLE_SIZE / 2}
-                  width={HANDLE_SIZE} height={HANDLE_SIZE}
-                  fill="white"
-                  stroke="rgb(255,59,48)"
-                  strokeWidth={0.8}
-                  style={{ cursor: "nwse-resize" }}
-                  onPointerDown={(e) => handleObsHandlePointerDown(e, obs, handle)}
-                  onClick={(e) => e.stopPropagation()}
-                />
-              ))}
             </g>
           );
         })}
-
-        {/* Obstacle creation rubber-band */}
-        {createPreview && (
-          <rect
-            x={createPreview.x}
-            y={ty(createPreview.y + createPreview.h)}
-            width={createPreview.w}
-            height={createPreview.h}
-            fill="rgba(255,59,48,0.12)"
-            stroke="rgb(255,59,48)"
-            strokeWidth={0.8}
-            strokeDasharray="3 2"
-            pointerEvents="none"
-          />
-        )}
 
         {/* corner handles */}
         {CORNER_ORDER.map((name) => {
