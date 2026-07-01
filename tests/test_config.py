@@ -17,6 +17,7 @@ def _clean_env(monkeypatch):
         "PLOTTER_DATA_DIR",
         "PLOTTER_AUTH_SESSION_TTL", "PLOTTER_AUTH_COOKIE_SECURE",
         "PLOTTER_HOST", "PLOTTER_PORT", "REDIS_URL",
+        "GCODESCRIBE_MCP_ENABLED", "GCODESCRIBE_MCP_TOKEN",
     ]
     for var in env_vars:
         monkeypatch.delenv(var, raising=False)
@@ -72,6 +73,13 @@ def test_defaults_server(monkeypatch):
     assert cfg.server.redis_url == "redis://localhost:6379/0"
 
 
+def test_defaults_mcp(monkeypatch):
+    _clean_env(monkeypatch)
+    cfg = load_settings()
+    assert cfg.mcp.enabled is False
+    assert cfg.mcp.token == ""
+
+
 # ── env overrides default ─────────────────────────────────────────────────────
 
 
@@ -124,6 +132,16 @@ def test_env_overrides_server(monkeypatch):
     assert cfg.server.host == "127.0.0.1"
     assert cfg.server.port == 9000
     assert cfg.server.redis_url == "redis://redis:6379/1"
+
+
+def test_env_overrides_mcp(monkeypatch):
+    _clean_env(monkeypatch)
+    monkeypatch.setenv("GCODESCRIBE_MCP_ENABLED", "true")
+    monkeypatch.setenv("GCODESCRIBE_MCP_TOKEN", "mcp-secret")
+
+    cfg = load_settings()
+    assert cfg.mcp.enabled is True
+    assert cfg.mcp.token == "mcp-secret"
 
 
 # ── saved overrides env ───────────────────────────────────────────────────────
@@ -241,13 +259,23 @@ def test_redact_api_key_configured_false_when_absent(monkeypatch):
     d = cfg.redact()
     assert d["printer"]["octoprint_api_key_configured"] is False
     assert d["ai"]["api_key_configured"] is False
+    assert d["mcp"]["token_configured"] is False
+
+
+def test_redact_hides_mcp_token(monkeypatch):
+    _clean_env(monkeypatch)
+    monkeypatch.setenv("GCODESCRIBE_MCP_TOKEN", "mcp-secret")
+    cfg = load_settings()
+    d = cfg.redact()
+    assert "token" not in d["mcp"]
+    assert d["mcp"]["token_configured"] is True
 
 
 def test_redact_contains_all_expected_sections(monkeypatch):
     _clean_env(monkeypatch)
     cfg = load_settings()
     d = cfg.redact()
-    assert set(d.keys()) == {"printer", "ai", "storage", "auth", "server", "gallery"}
+    assert set(d.keys()) == {"printer", "ai", "storage", "auth", "server", "gallery", "mcp"}
 
 
 # ── source tracking ───────────────────────────────────────────────────────────
@@ -256,7 +284,7 @@ def test_redact_contains_all_expected_sections(monkeypatch):
 def test_sources_all_default_when_env_clean(monkeypatch):
     _clean_env(monkeypatch)
     _, sources = load_settings_with_sources()
-    for section in ("printer", "ai", "storage", "auth", "server", "gallery"):
+    for section in ("printer", "ai", "storage", "auth", "server", "gallery", "mcp"):
         for key, src in sources[section].items():
             assert src == "default", f"{section}.{key} expected default, got {src}"
 

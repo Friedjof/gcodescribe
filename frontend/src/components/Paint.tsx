@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, type Calibration, type GcodePreview3D, type Page, type PageIndex, type SceneObject } from "../api";
+import { api, onAppEvent, type AppEvent, type Calibration, type GcodePreview3D, type Page, type PageIndex, type SceneObject } from "../api";
 import PaintCanvas, { type Tool, type ViewRotation } from "./PaintCanvas";
 import MarkdownEditor from "./MarkdownEditor";
 import PagePanel from "./PagePanel";
@@ -161,6 +161,40 @@ export default function Paint({
       })
       .catch(fail);
   }, [visible]);
+
+  // Live sync over the events WebSocket. `document` events (any UI/agent change)
+  // only refresh the page list so the open canvas's in-progress edits are never
+  // clobbered. A successful page-mutating MCP tool additionally pulls the active
+  // page so an agent's drawing shows up on the canvas immediately, following the
+  // page the agent left active.
+  const liveHandlerRef = useRef<(event: AppEvent) => void>(() => {});
+  liveHandlerRef.current = (event: AppEvent) => {
+    if (event.type === "document") {
+      reloadIndex();
+      return;
+    }
+    if (event.type === "mcp" && event.changed) {
+      api
+        .listPages()
+        .then((idx) => {
+          setIndex(idx);
+          const id = idx.activeId ?? idx.order[0]?.id;
+          if (!id) return;
+          return api
+            .getPage(id)
+            .then(autoAdoptStale)
+            .then((p) => {
+              if (p.id !== pageIdRef.current) {
+                ops.resetHistory();
+                setSelectedIds([]);
+              }
+              setPage(p);
+            });
+        })
+        .catch(fail);
+    }
+  };
+  useEffect(() => onAppEvent((event) => liveHandlerRef.current(event)), []);
 
   const calReqRef = useRef(0);
   useEffect(() => {

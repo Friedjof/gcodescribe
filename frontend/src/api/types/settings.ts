@@ -22,8 +22,15 @@ export interface AppSettings {
   storage: { data_dir: string };
   auth: { session_ttl: number; cookie_secure: boolean };
   server: { host: string; port: number; redis_url: string };
+  gallery: { upload_enabled: boolean; upload_secret_configured: boolean };
+  mcp: { enabled: boolean; token_configured: boolean };
 }
 
 export interface EffectiveSettings extends AppSettings {
   sources: Record<string, Record<string, string>>;
+}
+
+export interface McpTokenResponse {
+  token: string;
+  settings: EffectiveSettings;
 }

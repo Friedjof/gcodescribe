@@ -51,6 +51,11 @@ _GALLERY_DEFAULTS: dict = {
     "upload_secret": "",
 }
 
+_MCP_DEFAULTS: dict = {
+    "enabled": False,
+    "token": "",
+}
+
 
 # ── typed settings models ────────────────────────────────────────────────────
 
@@ -104,6 +109,12 @@ class GallerySettings:
 
 
 @dataclass(frozen=True)
+class McpSettings:
+    enabled: bool
+    token: str  # sensitive — bearer token for machine-control MCP access
+
+
+@dataclass(frozen=True)
 class AppSettings:
     printer: PrinterSettings
     ai: AiSettings
@@ -111,6 +122,7 @@ class AppSettings:
     auth: AuthSettings
     server: ServerSettings
     gallery: GallerySettings
+    mcp: McpSettings
 
     def redact(self) -> dict:
         """Return an API-safe dict — secrets are replaced with presence flags."""
@@ -150,6 +162,10 @@ class AppSettings:
             "gallery": {
                 "upload_enabled": self.gallery.upload_enabled,
                 "upload_secret_configured": bool(self.gallery.upload_secret),
+            },
+            "mcp": {
+                "enabled": self.mcp.enabled,
+                "token_configured": bool(self.mcp.token),
             },
         }
 
@@ -270,6 +286,7 @@ def _load(saved: dict | None) -> tuple[AppSettings, SourceMap]:
     au_src: dict[str, ConfigSource] = {}
     sv_src: dict[str, ConfigSource] = {}
     g_src: dict[str, ConfigSource] = {}
+    mcp_src: dict[str, ConfigSource] = {}
 
     printer = PrinterSettings(
         octoprint_url=_str(
@@ -382,8 +399,20 @@ def _load(saved: dict | None) -> tuple[AppSettings, SourceMap]:
         ),
     )
 
+    mcp = McpSettings(
+        enabled=_bool(
+            "GCODESCRIBE_MCP_ENABLED", _MCP_DEFAULTS["enabled"],
+            s.get("mcp.enabled"), mcp_src, "enabled",
+        ),
+        token=_str(
+            "GCODESCRIBE_MCP_TOKEN", _MCP_DEFAULTS["token"],
+            s.get("mcp.token"), mcp_src, "token",
+        ),
+    )
+
     settings = AppSettings(
         printer=printer, ai=ai, storage=storage, auth=auth, server=server, gallery=gallery,
+        mcp=mcp,
     )
     sources: SourceMap = {
         "printer": p_src,
@@ -392,5 +421,6 @@ def _load(saved: dict | None) -> tuple[AppSettings, SourceMap]:
         "auth": au_src,
         "server": sv_src,
         "gallery": g_src,
+        "mcp": mcp_src,
     }
     return settings, sources

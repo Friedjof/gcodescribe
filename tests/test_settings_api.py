@@ -21,15 +21,17 @@ def test_settings_returns_200(client):
 
 def test_settings_has_all_sections(client):
     d = client.get("/api/settings").json()
-    assert set(d.keys()) == {"printer", "ai", "storage", "auth", "server", "gallery"}
+    assert set(d.keys()) == {"printer", "ai", "storage", "auth", "server", "gallery", "mcp"}
 
 
 def test_settings_no_raw_secrets(client, monkeypatch):
     monkeypatch.setenv("OCTOPRINT_API_KEY", "super-secret")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-secret")
+    monkeypatch.setenv("GCODESCRIBE_MCP_TOKEN", "mcp-secret")
     d = client.get("/api/settings").json()
     assert "super-secret" not in str(d)
     assert "sk-secret" not in str(d)
+    assert "mcp-secret" not in str(d)
 
 
 def test_settings_api_key_configured_flag(client, monkeypatch):
@@ -74,7 +76,9 @@ def test_effective_has_sources_key(client):
 
 def test_effective_sources_has_all_sections(client):
     d = client.get("/api/settings/effective").json()
-    assert set(d["sources"].keys()) == {"printer", "ai", "storage", "auth", "server", "gallery"}
+    assert set(d["sources"].keys()) == {
+        "printer", "ai", "storage", "auth", "server", "gallery", "mcp",
+    }
 
 
 def test_effective_sources_all_default_on_clean_env(client, monkeypatch):
@@ -84,6 +88,7 @@ def test_effective_sources_all_default_on_clean_env(client, monkeypatch):
         "PRINTER_SERIAL_BAUD", "PRINTER_DEFAULT_BACKEND",
         "OPENAI_API_KEY", "AI_IMAGE_FAKE", "OPENAI_IMAGE_MODEL",
         "AI_IMAGE_SIZE", "AI_IMAGE_QUALITY",
+        "GCODESCRIBE_MCP_ENABLED", "GCODESCRIBE_MCP_TOKEN",
     ):
         monkeypatch.delenv(var, raising=False)
 
@@ -110,9 +115,11 @@ def test_effective_values_and_sources_consistent(client, monkeypatch):
 def test_effective_no_raw_secrets(client, monkeypatch):
     monkeypatch.setenv("OCTOPRINT_API_KEY", "top-secret")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-secret")
+    monkeypatch.setenv("GCODESCRIBE_MCP_TOKEN", "mcp-secret")
     d = client.get("/api/settings/effective").json()
     assert "top-secret" not in str(d)
     assert "sk-secret" not in str(d)
+    assert "mcp-secret" not in str(d)
 
 
 # ── auth required ─────────────────────────────────────────────────────────────
@@ -128,6 +135,7 @@ def test_settings_requires_auth(workspace):
         c = TestClient(create_app())
         assert c.get("/api/settings").status_code == 401
         assert c.get("/api/settings/effective").status_code == 401
+        assert c.post("/api/settings/mcp/token").status_code == 401
 
 
 # ── PATCH /api/settings ───────────────────────────────────────────────────────
@@ -174,6 +182,23 @@ def test_patch_settings_accepts_api_key_but_does_not_return_it(client):
     d = r.json()
     assert "sk-saved" not in str(d)
     assert d["ai"]["api_key_configured"] is True
+
+
+def test_patch_settings_accepts_mcp_token_but_does_not_return_it(client):
+    r = client.patch("/api/settings", json={"settings": {"mcp.token": "mcp-saved"}})
+    assert r.status_code == 200
+    d = r.json()
+    assert "mcp-saved" not in str(d)
+    assert d["mcp"]["token_configured"] is True
+
+
+def test_generate_mcp_token_returns_token_once_and_redacts_settings(client):
+    r = client.post("/api/settings/mcp/token")
+    assert r.status_code == 200
+    d = r.json()
+    assert len(d["token"]) >= 32
+    assert d["settings"]["mcp"]["token_configured"] is True
+    assert d["token"] not in str(d["settings"])
 
 
 def test_patch_settings_multiple_fields(client):

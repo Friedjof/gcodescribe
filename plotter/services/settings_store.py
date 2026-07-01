@@ -18,6 +18,7 @@ _READONLY = frozenset(
         "ai.enabled",
         "ai.api_key_configured",
         "printer.octoprint_api_key_configured",
+        "mcp.token_configured",
     }
 )
 

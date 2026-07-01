@@ -1,5 +1,5 @@
 import { req } from "./req";
-import type { AppSettings, EffectiveSettings } from "../types/settings";
+import type { AppSettings, EffectiveSettings, McpTokenResponse } from "../types/settings";
 
 export const settingsClient = {
   getSettings: () => req<AppSettings>("/api/settings"),
@@ -12,4 +12,6 @@ export const settingsClient = {
     }),
   resetSetting: (section: string, field: string) =>
     req<EffectiveSettings>(`/api/settings/${section}/${field}`, { method: "DELETE" }),
+  generateMcpToken: () =>
+    req<McpTokenResponse>("/api/settings/mcp/token", { method: "POST" }),
 };

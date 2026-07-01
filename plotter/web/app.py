@@ -7,6 +7,7 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from ..mcp import server as mcp_server
 from ..pipeline import PlotterError
 from ..printer import PrinterError, get_printer_client, use_serial
 from ..services import ServiceError
@@ -16,6 +17,7 @@ from .routes import (
     auth,
     calibration,
     coloring_pages,
+    events,
     fonts,
     gallery,
     jobs,
@@ -55,6 +57,10 @@ def create_app() -> FastAPI:
     app.include_router(auth.router, prefix="/api")
     app.include_router(gallery.router, prefix="/api")
     app.include_router(stream.router, prefix="/api")
+    # The events socket authenticates the session itself (WebSockets cannot use
+    # the require_admin HTTP dependency), like the stream socket above.
+    app.include_router(events.router, prefix="/api")
+    app.include_router(mcp_server.router)
     protected_modules = (
         ai_images,
         calibration,

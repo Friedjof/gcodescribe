@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { api, type AiImageStatus, type AuthSession, type AuthSetupStart, type EffectiveSettings } from "./api";
+import { api, onAppEvent, type AiImageStatus, type AuthSession, type AuthSetupStart, type EffectiveSettings } from "./api";
 import AiImageDesigner from "./components/AiImageDesigner";
 import Convert from "./components/Convert";
 import Paint from "./components/Paint";
@@ -62,6 +62,18 @@ function AdminApp() {
 
   const notificationsActive = notificationPermission === "granted";
   const refreshStatus = () => api.octoStatus().then(setStatus).catch(() => setStatus(null));
+
+  // Surface a toast whenever a connected agent triggers an MCP tool. The data
+  // those tools change is refreshed live by each view (e.g. the designer) via
+  // the same event stream.
+  useEffect(() => {
+    return onAppEvent((event) => {
+      if (event.type !== "mcp") return;
+      const message = t("mcp.toolUsed", { tool: event.tool });
+      if (event.ok) toast.notify(message, { kind: "ok" });
+      else toast.warn(t("mcp.toolFailed", { tool: event.tool }));
+    });
+  }, [t, toast]);
 
   useEffect(() => {
     refreshStatus();

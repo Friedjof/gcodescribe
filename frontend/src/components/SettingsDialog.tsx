@@ -4,8 +4,8 @@ import Modal from "./Modal";
 import { useI18n } from "../i18n";
 import { fontLabel, useTextFonts } from "../paint/useTextFonts";
 
-type Section = "printer" | "ai" | "fonts" | "storage" | "auth" | "server";
-const SECTIONS: Section[] = ["printer", "ai", "fonts", "storage", "auth", "server"];
+type Section = "printer" | "ai" | "fonts" | "storage" | "auth" | "server" | "mcp";
+const SECTIONS: Section[] = ["printer", "ai", "fonts", "storage", "auth", "server", "mcp"];
 
 // Computed server-side flags — rendered read-only, never patchable.
 const READONLY_FIELDS = new Set(["ai.enabled"]);
@@ -15,6 +15,7 @@ const READONLY_FIELDS = new Set(["ai.enabled"]);
 const SECRET_KEY_MAP: Record<string, string> = {
   "ai.api_key_configured": "ai.api_key",
   "printer.octoprint_api_key_configured": "printer.octoprint_api_key",
+  "mcp.token_configured": "mcp.token",
 };
 
 export default function SettingsDialog({
@@ -110,6 +111,7 @@ export default function SettingsDialog({
             pending={pending}
             onChange={handleChange}
             onReset={handleReset}
+            onSettingsChange={(next) => { setData(next); onSaved?.(next); }}
           />
         )}
       </div>
@@ -123,12 +125,14 @@ function SectionView({
   pending,
   onChange,
   onReset,
+  onSettingsChange,
 }: {
   section: Section;
   data: EffectiveSettings;
   pending: Record<string, unknown>;
   onChange: (key: string, value: unknown) => void;
   onReset: (section: string, field: string) => void;
+  onSettingsChange: (settings: EffectiveSettings) => void;
 }) {
   const { t } = useI18n();
   if (section === "fonts") return <FontSettingsSection />;
@@ -205,7 +209,66 @@ function SectionView({
       </dl>
 
       {section === "printer" && <OctoPrintCheckSection />}
+      {section === "mcp" && <McpTokenSection onSettingsChange={onSettingsChange} />}
     </section>
+  );
+}
+
+function McpTokenSection({
+  onSettingsChange,
+}: {
+  onSettingsChange: (settings: EffectiveSettings) => void;
+}) {
+  const { t } = useI18n();
+  const [token, setToken] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const mcpUrl = `${window.location.origin}/mcp`;
+  const clientConfig = JSON.stringify({ url: mcpUrl, authorization: "Bearer <token>" }, null, 2);
+
+  const generate = () => {
+    setBusy(true);
+    setMessage(null);
+    api.generateMcpToken()
+      .then((res) => {
+        setToken(res.token);
+        onSettingsChange(res.settings);
+      })
+      .catch((e: Error) => setMessage(String(e.message ?? e)))
+      .finally(() => setBusy(false));
+  };
+
+  const copy = () => {
+    if (!token) return;
+    navigator.clipboard?.writeText(token)
+      .then(() => setMessage(t("settings.mcp.tokenCopied")))
+      .catch(() => setMessage(t("settings.mcp.copyFailed")));
+  };
+
+  const copyUrl = () => {
+    navigator.clipboard?.writeText(mcpUrl)
+      .then(() => setMessage(t("settings.mcp.urlCopied")))
+      .catch(() => setMessage(t("settings.mcp.copyFailed")));
+  };
+
+  return (
+    <div className="settings-mcp-token">
+      <p className="muted">{t("settings.mcp.hint")}</p>
+      <div className="settings-mcp-endpoint">
+        <span>{t("settings.mcp.endpoint")}</span>
+        <code>{mcpUrl}</code>
+        <button className="ghost" onClick={copyUrl}>{t("settings.mcp.copyUrl")}</button>
+      </div>
+      <pre className="settings-mcp-config">{clientConfig}</pre>
+      <div className="settings-mcp-actions">
+        <button className="ghost" disabled={busy} onClick={generate}>
+          {busy ? t("settings.mcp.generating") : t("settings.mcp.generateToken")}
+        </button>
+        {token && <button className="ghost" onClick={copy}>{t("settings.mcp.copyToken")}</button>}
+      </div>
+      {token && <code className="settings-mcp-token-value">{token}</code>}
+      {message && <p className="muted">{message}</p>}
+    </div>
   );
 }
 

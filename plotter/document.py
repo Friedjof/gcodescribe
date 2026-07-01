@@ -4,7 +4,14 @@ import threading
 import time
 import uuid
 
+from .events import hub
 from .state import StateStore, create_store
+
+
+def _emit(action: str, *, page_id: str | None = None, mcp: bool = False) -> None:
+    """Notify connected clients that the document changed so they can refresh
+    the page list (and the open page) live, without a manual reload."""
+    hub.publish("document", action=action, pageId=page_id, mcp=mcp)
 
 # Default grid: five granularity levels in mm (coarse -> fine).
 GRID_STEPS = [50, 25, 10, 5, 1]
@@ -84,6 +91,7 @@ class DocumentStore:
             "profileId": page.get("profileId"),
             "profileName": page.get("profileName"),
             "profileFingerprint": page.get("profileFingerprint"),
+            "mcpCreated": bool((page.get("mcp") or {}).get("created")),
         }
 
     def _page_key(self, page_id: str) -> str:
@@ -107,7 +115,12 @@ class DocumentStore:
 
     # -- mutations ---------------------------------------------------------
 
-    def _create_locked(self, name: str | None = None, profile: dict | None = None) -> dict:
+    def _create_locked(
+        self,
+        name: str | None = None,
+        profile: dict | None = None,
+        mcp: dict | None = None,
+    ) -> dict:
         page_id = _new_id()
         now = _now()
         page = {
@@ -122,16 +135,24 @@ class DocumentStore:
             page["profileId"] = profile.get("id")
             page["profileName"] = profile.get("name")
             page["profileFingerprint"] = profile.get("fingerprint")
+        if mcp:
+            page["mcp"] = dict(mcp)
         self._store.set(self._page_key(page_id), page)
         index = self._index()
         index["order"].append(self._meta(page))
         index["activeId"] = page_id
         self._save_index(index)
+        _emit("create", page_id=page_id, mcp=bool(mcp))
         return page
 
-    def create_page(self, name: str | None = None, profile: dict | None = None) -> dict:
+    def create_page(
+        self,
+        name: str | None = None,
+        profile: dict | None = None,
+        mcp: dict | None = None,
+    ) -> dict:
         with self._lock:
-            return self._create_locked(name, profile)
+            return self._create_locked(name, profile, mcp)
 
     def set_page_profile(self, page_id: str, profile: dict) -> dict:
         """Explicitly bind a page to a profile (adopt / re-adopt)."""
@@ -145,6 +166,7 @@ class DocumentStore:
             page["modified"] = _now()
             self._store.set(self._page_key(page_id), page)
             self._refresh_meta(page)
+            _emit("save", page_id=page_id)
             return page
 
     def save_page(self, page_id: str, updates: dict) -> dict:
@@ -159,6 +181,7 @@ class DocumentStore:
             page["modified"] = _now()
             self._store.set(self._page_key(page_id), page)
             self._refresh_meta(page)
+            _emit("save", page_id=page_id)
             return page
 
     def rename_page(self, page_id: str, name: str) -> dict:
@@ -175,6 +198,7 @@ class DocumentStore:
             if not index["order"]:
                 self._create_locked(profile=_active_profile_meta())
                 index = self._index()
+            _emit("delete", page_id=page_id)
             return index
 
     def duplicate_page(self, page_id: str) -> dict:
@@ -201,6 +225,7 @@ class DocumentStore:
             copy["modified"] = _now()
             self._store.set(self._page_key(copy["id"]), copy)
             self._refresh_meta(copy)
+            _emit("save", page_id=copy["id"])
             return copy
 
     def set_active(self, page_id: str) -> dict:
@@ -209,6 +234,7 @@ class DocumentStore:
             if any(m["id"] == page_id for m in index["order"]):
                 index["activeId"] = page_id
                 self._save_index(index)
+                _emit("active", page_id=page_id)
             return index
 
     def reorder_pages(self, ids: list[str]) -> dict:
@@ -226,6 +252,7 @@ class DocumentStore:
             ordered += [m for m in index["order"] if m["id"] not in seen]
             index["order"] = ordered
             self._save_index(index)
+            _emit("reorder")
             return index
 
     # -- internal ----------------------------------------------------------

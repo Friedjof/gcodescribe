@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import secrets
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -54,6 +56,18 @@ def patch_settings(body: SettingsPatch) -> dict:
             )
     patch_saved(body.settings)
     return _effective()
+
+
+@router.post("/settings/mcp/token")
+def generate_mcp_token() -> dict:
+    """Generate a new bearer token for MCP clients.
+
+    The raw token is returned exactly once here; normal settings responses only
+    expose the redacted ``mcp.token_configured`` flag.
+    """
+    token = secrets.token_urlsafe(32)
+    patch_saved({"mcp.token": token})
+    return {"token": token, "settings": _effective()}
 
 
 @router.delete("/settings/{section}/{field}")

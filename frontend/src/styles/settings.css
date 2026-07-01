@@ -269,6 +269,53 @@
 .settings-octo-result.ok { color: var(--ok); }
 .settings-octo-result.err { color: var(--err); }
 
+/* MCP token management */
+.settings-mcp-token {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel-2);
+}
+.settings-mcp-token p { margin: 0; }
+.settings-mcp-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.settings-mcp-endpoint {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+}
+.settings-mcp-endpoint code,
+.settings-mcp-config {
+  overflow-x: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+}
+.settings-mcp-config {
+  margin: 0;
+  color: var(--text);
+  font-size: 12px;
+}
+.settings-mcp-token-value {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
 @media (max-width: 640px) {
   .settings-modal .modal-body { flex-direction: column; }
   .settings-nav {
@@ -280,4 +327,5 @@
   }
   .settings-rows { grid-template-columns: 1fr; }
   .settings-label { border-bottom: none; padding-bottom: 2px; }
+  .settings-mcp-endpoint { grid-template-columns: 1fr; }
 }
