@@ -203,6 +203,21 @@ the `gcodescribe-data` volume (`/data`).
 Set `OPENAI_API_KEY` to enable the AI Designer tab, or `AI_IMAGE_FAKE=true`
 for cost-free local testing.
 
+For direct USB/serial plotting from Docker, pass the device through to the
+container and enable the serial backend:
+
+```bash
+docker run --rm -p 8000:8000 \
+  --device=/dev/ttyUSB0 \
+  -v gcodescribe-data:/data \
+  -e PRINTER_SERIAL_ENABLED=true \
+  -e PRINTER_SERIAL_PORT=/dev/ttyUSB0 \
+  ghcr.io/noweck/gcodescribe:latest
+```
+
+With Compose, add the serial device to the app service and set the same
+`PRINTER_SERIAL_*` values in `.env`.
+
 On first opening the admin app, create the local admin account and enroll a
 TOTP authenticator. The public `/upload` page stays available without login;
 the normal app and API are protected by the admin session. Plain HTTP works for
@@ -216,6 +231,126 @@ the network; use HTTPS if the controller is exposed beyond a trusted setup.
 > OSM map generation uses Nominatim for place search and the public Overpass API
 > from the backend. Boundary mode can request a whole city area; for very large
 > places, reduce detail or pick a smaller search result to keep generation fast.
+
+### MCP access for AI clients
+
+The Docker/web app can expose an optional Model Context Protocol endpoint at
+`/mcp`. Enable it in **Settings → MCP**, generate an access token, and configure
+the AI client to call the shown URL with `Authorization: Bearer <token>`.
+
+MCP is disabled by default and is not enabled for the Flatpak/Desktop build yet.
+Treat the token like a machine-control credential: MCP tools can home the plotter,
+move the head within configured limits, pause/cancel jobs, create designer pages,
+generate jobs and start plotting. Use HTTPS or a trusted local network.
+
+The MCP surface deliberately does **not** expose raw G-code or raw serial writes.
+AI clients draw by creating/placing page content (polylines, text or gallery
+items). Every plot path still goes through the active profile, page/profile
+fingerprints, G-code generation and safety checks. If inserted content would
+leave the active plot area, the tool returns an error containing the active
+profile dimensions and nothing is saved or plotted.
+
+Available MCP tool groups include:
+
+- Read status: printer status/position, active profile, pages, fonts, gallery,
+  jobs, SVG previews.
+- Draw and plot: create a new page from polylines/text/gallery items and plot it,
+  or add those elements to an existing page and plot the updated page.
+- Safe printer control: home, move to a bounded coordinate, pen up/down, and
+  pause/resume/cancel the active job.
+
+#### Connect Claude, Codex or OpenCode
+
+1. Start GCodeScribe and open **Settings → MCP**.
+2. Enable MCP, generate a token and copy the endpoint URL, usually
+   `http://localhost:8000/mcp`.
+3. Store the token outside version control, for example:
+
+```bash
+export GCODESCRIBE_MCP_TOKEN='paste-token-from-settings'
+```
+
+**Claude Code** supports remote HTTP MCP servers with custom headers:
+
+```bash
+claude mcp add --transport http gcodescribe http://localhost:8000/mcp \
+  --header "Authorization: Bearer $GCODESCRIBE_MCP_TOKEN"
+```
+
+For a project-local `.mcp.json` without committing secrets, use environment
+expansion:
+
+```json
+{
+  "mcpServers": {
+    "gcodescribe": {
+      "type": "http",
+      "url": "${GCODESCRIBE_MCP_URL:-http://localhost:8000/mcp}",
+      "headers": {
+        "Authorization": "Bearer ${GCODESCRIBE_MCP_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+Run `claude mcp list` or open `/mcp` inside Claude Code to verify the server.
+
+**Codex CLI / IDE extension** share `config.toml`. Add this to
+`~/.codex/config.toml` or `.codex/config.toml` in a trusted project:
+
+```toml
+[mcp_servers.gcodescribe]
+url = "http://localhost:8000/mcp"
+# This is the environment variable name, not the token value itself.
+bearer_token_env_var = "GCODESCRIBE_MCP_TOKEN"
+startup_timeout_sec = 20
+tool_timeout_sec = 120
+enabled = true
+```
+
+Before starting Codex, export the token in the same shell/session that launches
+Codex:
+
+```bash
+export GCODESCRIBE_MCP_TOKEN='paste-token-from-settings'
+codex
+```
+
+If you accidentally set `bearer_token_env_var` to the token itself, Codex will
+try to read an environment variable with that long token as its name and fail
+with an error like `Environment variable <token> for MCP server 'gcodescribe' is
+not set`.
+
+Then start Codex and use `/mcp` in the TUI to check the connection. If your
+GCodeScribe instance is not local, replace the URL with the HTTPS endpoint.
+
+**OpenCode** uses the `mcp` section in `opencode.json`/`opencode.jsonc`:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "gcodescribe": {
+      "type": "remote",
+      "url": "http://localhost:8000/mcp",
+      "enabled": true,
+      "oauth": false,
+      "headers": {
+        "Authorization": "Bearer {env:GCODESCRIBE_MCP_TOKEN}"
+      },
+      "timeout": 120000
+    }
+  }
+}
+```
+
+Use `opencode mcp list` to inspect configured servers. For non-local access,
+serve GCodeScribe behind HTTPS and use that HTTPS `/mcp` URL.
+
+Because this MCP can move real hardware, keep it out of shared repository config
+unless the config contains only environment-variable references. Prefer local or
+user-scoped client config and rotate the MCP token from Settings if it is exposed.
 
 ### Production
 
