@@ -15,6 +15,13 @@ export default defineConfig({
     setupFiles: ["src/test/setup.ts"],
   },
   server: {
+    // Polling also covers Vite's config/env files and keeps `make dev` usable
+    // when other applications have exhausted the user's inotify budget.
+    // CHOKIDAR_USEPOLLING=false can opt back into native watchers.
+    watch: {
+      usePolling: true,
+      interval: 500,
+    },
     proxy: {
       "/api": {
         target: `http://localhost:${backendPort}`,

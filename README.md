@@ -44,6 +44,10 @@ For automation or a direct non-interactive start, use:
 make dev-plain
 ```
 
+The frontend checks for file changes every 500 ms, so development also works
+when Linux's inotify watcher limit is exhausted. Hot reload remains available.
+To use native file watching instead, run `CHOKIDAR_USEPOLLING=false make dev`.
+
 ## Install a release
 
 Download the `.deb` from the [release page](https://github.com/Friedjof/gcodescribe/releases/latest), then install and start the web application:
