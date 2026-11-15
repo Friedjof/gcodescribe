@@ -3,26 +3,31 @@ import { api, type GalleryMetrics, type GalleryScore, type PageScore, type Scene
 import { fmtBytes, fmtDuration } from "../lib/format";
 import { useI18n } from "../i18n";
 import { scoreClass } from "./ScoreBadge";
+import { flushEdits } from "../api/pageEdits";
 
 const DEBOUNCE_MS = 600;
 const SUB_SCORES = ["time", "lifts", "size", "detail"] as const;
 
 /** Debounced live rating of the canvas — every change is rated by the same
  * central backend evaluation the gallery uses, without writing a job file. */
-function usePageScore(pageId: string, objects: SceneObject[]): PageScore | null {
+function usePageScore(pageId: string, objects: SceneObject[], visible: boolean): PageScore | null {
   const [result, setResult] = useState<PageScore | null>(null);
   const seq = useRef(0);
 
   useEffect(() => {
     const mine = ++seq.current;
+    if (!visible) return;
+    const controller = new AbortController();
     const timer = window.setTimeout(() => {
-      api
-        .pageScore(pageId, objects)
+      flushEdits(pageId).then(() => {
+        if (controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
+        return api.pageScore(pageId, undefined, controller.signal);
+      })
         .then((res) => seq.current === mine && setResult(res))
         .catch(() => seq.current === mine && setResult(null));
     }, DEBOUNCE_MS);
-    return () => window.clearTimeout(timer);
-  }, [pageId, objects]);
+    return () => { window.clearTimeout(timer); controller.abort(); ++seq.current; };
+  }, [pageId, objects, visible]);
 
   return result;
 }
@@ -44,8 +49,8 @@ function insights(
 
 /** Floating plottability score over the paint canvas: colored chip top-left,
  * with a hover panel breaking down sub-scores, key facts and tuning hints. */
-export default function PlotScore({ pageId, objects }: { pageId: string; objects: SceneObject[] }) {
-  const result = usePageScore(pageId, objects);
+export default function PlotScore({ pageId, objects, visible = true }: { pageId: string; objects: SceneObject[]; visible?: boolean }) {
+  const result = usePageScore(pageId, objects, visible);
   return <ScoreOverlay result={result} />;
 }
 

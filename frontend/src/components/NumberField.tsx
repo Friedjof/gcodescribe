@@ -15,7 +15,7 @@ export default function NumberField({
   className = "field",
 }: {
   label: ReactNode;
-  unit: string;
+  unit?: string;
   /** Empty string renders an empty input (e.g. no selection). */
   value: number | "";
   onChange: (value: number) => void;
@@ -40,7 +40,7 @@ export default function NumberField({
             if (e.target.value !== "") onChange(Number(e.target.value));
           }}
         />
-        <em>{unit}</em>
+        {unit && <em>{unit}</em>}
       </div>
     </label>
   );

@@ -13,6 +13,7 @@ export default function Gcode3D({
   data,
   chrome = true,
   showTravels: travelsProp,
+  showBed: bedProp,
   resetToken = 0,
   viewState,
   onViewChange,
@@ -22,6 +23,7 @@ export default function Gcode3D({
   // Controlled mode for hosts that render their own controls (e.g. in a
   // modal footer): pass showTravels and bump resetToken to reset the view.
   showTravels?: boolean;
+  showBed?: boolean;
   resetToken?: number;
   viewState?: Gcode3DView;
   onViewChange?: (view: Gcode3DView) => void;
@@ -32,13 +34,19 @@ export default function Gcode3D({
   const drag = useRef<{ x: number; y: number; mode: "orbit" | "pan" } | null>(null);
   const renderRef = useRef<() => void>(() => {});
   const [travelsState, setShowTravels] = useState(true);
+  const [bedState, setShowBed] = useState(true);
   const showTravels = travelsProp ?? travelsState;
+  const showBed = bedProp ?? bedState;
+  const bed = Array.isArray(data.bed) && data.bed.length === 2 &&
+    data.bed.every((n) => Number.isFinite(n) && n > 0) ? data.bed : null;
   const showTravelsRef = useRef(showTravels);
+  const showBedRef = useRef(showBed);
   showTravelsRef.current = showTravels;
+  showBedRef.current = showBed;
 
   useEffect(() => {
     renderRef.current();
-  }, [showTravels]);
+  }, [showTravels, showBed]);
 
   useEffect(() => {
     if (!viewState) return;
@@ -52,9 +60,13 @@ export default function Gcode3D({
     const ctx = canvas.getContext("2d")!;
     let raf = 0;
 
-    const b = data.bounds ?? [0, 0, 0, 200, 200, 10];
-    const center: V3 = [(b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2];
-    const extent = Math.max(b[3] - b[0], b[4] - b[1], 1);
+    const b = data.bounds ?? [0, 0, 0, bed?.[0] ?? 200, bed?.[1] ?? 200, 10];
+    const x0 = bed ? Math.min(0, b[0]) : b[0];
+    const y0 = bed ? Math.min(0, b[1]) : b[1];
+    const x1 = bed ? Math.max(bed[0], b[3]) : b[3];
+    const y1 = bed ? Math.max(bed[1], b[4]) : b[4];
+    const center: V3 = [(x0 + x1) / 2, (y0 + y1) / 2, (b[2] + b[5]) / 2];
+    const extent = Math.max(x1 - x0, y1 - y0, 1);
 
     const project = (p: number[], w: number, h: number, baseScale: number): [number, number] => {
       const { yaw, pitch, zoom, panX, panY } = view.current;
@@ -84,37 +96,41 @@ export default function Gcode3D({
       ctx.clearRect(0, 0, w, h);
       const baseScale = (Math.min(w, h) * 0.78) / extent;
 
-      // Ground plate (drawing bounds at the paper plane) + grid for context.
-      const z0 = b[2];
-      const corners: V3[] = [
-        [b[0], b[1], z0], [b[3], b[1], z0], [b[3], b[4], z0], [b[0], b[4], z0],
-      ];
-      const cp = corners.map((c) => project(c, w, h, baseScale));
-      ctx.beginPath();
-      ctx.moveTo(cp[0][0], cp[0][1]);
-      for (let i = 1; i < cp.length; i++) ctx.lineTo(cp[i][0], cp[i][1]);
-      ctx.closePath();
-      ctx.fillStyle = "rgba(255,255,255,0.035)";
-      ctx.fill();
-      ctx.strokeStyle = "rgba(255,255,255,0.18)";
-      ctx.lineWidth = 1;
-      ctx.stroke();
+      // Machine-space bed, not the bounding box of the tool path. Older
+      // previews without bed metadata retain the original bounds plate.
+      if (!bed || showBedRef.current) {
+        const [px0, py0, px1, py1, z0] = bed
+          ? [0, 0, bed[0], bed[1], 0] : [b[0], b[1], b[3], b[4], b[2]];
+        const corners: V3[] = [
+          [px0, py0, z0], [px1, py0, z0], [px1, py1, z0], [px0, py1, z0],
+        ];
+        const cp = corners.map((c) => project(c, w, h, baseScale));
+        ctx.beginPath();
+        ctx.moveTo(cp[0][0], cp[0][1]);
+        for (let i = 1; i < cp.length; i++) ctx.lineTo(cp[i][0], cp[i][1]);
+        ctx.closePath();
+        ctx.fillStyle = bed ? "rgba(255,255,255,0.018)" : "rgba(255,255,255,0.035)";
+        ctx.fill();
+        ctx.strokeStyle = bed ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.18)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
 
-      const GRID = 8;
-      ctx.strokeStyle = "rgba(255,255,255,0.07)";
-      ctx.lineWidth = 0.5;
-      ctx.beginPath();
-      for (let i = 1; i < GRID; i++) {
-        const tx = b[0] + ((b[3] - b[0]) * i) / GRID;
-        const a = project([tx, b[1], z0], w, h, baseScale);
-        const c = project([tx, b[4], z0], w, h, baseScale);
-        ctx.moveTo(a[0], a[1]); ctx.lineTo(c[0], c[1]);
-        const ty = b[1] + ((b[4] - b[1]) * i) / GRID;
-        const d = project([b[0], ty, z0], w, h, baseScale);
-        const e = project([b[3], ty, z0], w, h, baseScale);
-        ctx.moveTo(d[0], d[1]); ctx.lineTo(e[0], e[1]);
+        const GRID = 8;
+        ctx.strokeStyle = bed ? "rgba(255,255,255,0.045)" : "rgba(255,255,255,0.07)";
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        for (let i = 1; i < GRID; i++) {
+          const tx = px0 + ((px1 - px0) * i) / GRID;
+          const a = project([tx, py0, z0], w, h, baseScale);
+          const c = project([tx, py1, z0], w, h, baseScale);
+          ctx.moveTo(a[0], a[1]); ctx.lineTo(c[0], c[1]);
+          const ty = py0 + ((py1 - py0) * i) / GRID;
+          const d = project([px0, ty, z0], w, h, baseScale);
+          const e = project([px1, ty, z0], w, h, baseScale);
+          ctx.moveTo(d[0], d[1]); ctx.lineTo(e[0], e[1]);
+        }
+        ctx.stroke();
       }
-      ctx.stroke();
 
       const stroke = (lines: number[][][], style: string, width: number, dash?: number[]) => {
         ctx.strokeStyle = style;
@@ -232,6 +248,11 @@ export default function Gcode3D({
             />
             {t("g3d.travels")}
           </label>
+          {bed && <label className="g3d-toggle">
+            <input type="checkbox" checked={showBed}
+              onChange={(e) => setShowBed(e.target.checked)} />
+            {t("g3d.bed")}
+          </label>}
           <button className="ghost" onClick={resetView}>{t("g3d.resetView")}</button>
         </div>
       )}
