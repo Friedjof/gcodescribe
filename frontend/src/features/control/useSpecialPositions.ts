@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type Calibration, type Position, type PositionKind } from "../../api";
 import { useI18n } from "../../i18n";
-import { useToasts } from "../../components/Toasts";
 import { positionDefinition, type PositionTarget } from "./specialPositions";
 
-export function useSpecialPositions({ active, cal, pos, profileId, projectId, canMove, onPosition, onCalibration, onAction }: {
+export function useSpecialPositions({ active, cal, pos, profileId, projectId, canMove, onPosition, onCalibration, execute }: {
   active: boolean;
   cal: Calibration | null;
   pos: Position | null;
@@ -13,10 +12,9 @@ export function useSpecialPositions({ active, cal, pos, profileId, projectId, ca
   canMove: boolean;
   onPosition: (position: Position) => void;
   onCalibration: (calibration: Calibration) => void;
-  onAction: () => void;
+  execute: (action: () => Promise<void>, homesFirst: boolean) => Promise<boolean>;
 }) {
   const { t } = useI18n();
-  const toast = useToasts();
   const [kind, setKind] = useState<PositionKind>("park");
   const [target, setTarget] = useState<PositionTarget | null>(null);
   const [busy, setBusy] = useState(false);
@@ -30,6 +28,7 @@ export function useSpecialPositions({ active, cal, pos, profileId, projectId, ca
     generation.current++;
     setTarget(null);
     setMessage("");
+    return () => { generation.current++; };
   }, [active, profileId, projectId, kind]);
 
   const run = async (action: () => Promise<void>, homesFirst = false) => {
@@ -37,12 +36,10 @@ export function useSpecialPositions({ active, cal, pos, profileId, projectId, ca
     pending.current = true;
     setBusy(true);
     setMessage("");
+    const token = generation.current;
     try {
-      await action();
-      onAction();
-    } catch (error: any) {
-      setTarget(null);
-      toast.error(String(error.message ?? error));
+      const ok = await execute(action, homesFirst);
+      if (!ok && token === generation.current) setTarget(null);
     } finally {
       pending.current = false;
       setBusy(false);
@@ -53,8 +50,8 @@ export function useSpecialPositions({ active, cal, pos, profileId, projectId, ca
     const token = generation.current;
     setTarget({ kind, ...xy });
     const result = await (projectId ? api.moveToPosition(kind, xy, projectId) : api.moveToPosition(kind, xy));
-    onPosition(result.position);
     if (token === generation.current) {
+      onPosition(result.position);
       setTarget({ kind, x: result.position.x, y: result.position.y });
       setMessage(t("paper.positions.commandSent"));
     }
@@ -73,8 +70,10 @@ export function useSpecialPositions({ active, cal, pos, profileId, projectId, ca
     const token = generation.current;
     setTarget(null);
     const result = await (projectId ? api.homeAndMoveToPosition(kind, projectId) : api.homeAndMoveToPosition(kind));
-    onPosition(result.position);
-    if (token === generation.current) setMessage(t("paper.positions.commandSent"));
+    if (token === generation.current) {
+      onPosition(result.position);
+      setMessage(t("paper.positions.commandSent"));
+    }
   }, true);
 
   return {

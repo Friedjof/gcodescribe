@@ -2,7 +2,7 @@ import { req } from "./req";
 import type { Job, GcodePreview, GcodePreview3D } from "../types/jobs";
 
 export const jobsClient = {
-  listJobs: () => req<Job[]>("/api/jobs"),
+  listJobs: (signal?: AbortSignal) => req<Job[]>("/api/jobs", { signal }),
   deleteJob: (name: string) =>
     req(`/api/jobs/${encodeURIComponent(name)}`, { method: "DELETE" }),
   renameJob: (name: string, newName: string) =>
@@ -18,8 +18,8 @@ export const jobsClient = {
   },
   testPattern: (name: string, projectId?: string) =>
     req<Job>(`/api/testpattern/${name}${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ""}`, { method: "POST" }),
-  jobPreview: (filename: string) =>
-    req<GcodePreview>(`/api/jobs/${encodeURIComponent(filename)}/preview`),
+  jobPreview: (filename: string, signal?: AbortSignal) =>
+    req<GcodePreview>(`/api/jobs/${encodeURIComponent(filename)}/preview`, { signal }),
   jobPreview3D: (filename: string) =>
     req<GcodePreview3D>(`/api/jobs/${encodeURIComponent(filename)}/preview3d`),
 };

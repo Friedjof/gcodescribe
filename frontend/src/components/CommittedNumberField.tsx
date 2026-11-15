@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useI18n } from "../i18n";
 
 /** Keep unfinished numeric input local; apply only a valid completed value. */
-export default function CommittedNumberField({ label, unit = "mm", value, onChange, min, max, step = 0.1 }: {
+export default function CommittedNumberField({ label, unit = "mm", value, onChange, min, max, step = 0.1, disabled = false }: {
   label: string;
   unit?: string;
   value: number;
@@ -10,6 +10,7 @@ export default function CommittedNumberField({ label, unit = "mm", value, onChan
   min?: number;
   max?: number;
   step?: number;
+  disabled?: boolean;
 }) {
   const { t } = useI18n();
   const id = useId();
@@ -37,7 +38,7 @@ export default function CommittedNumberField({ label, unit = "mm", value, onChan
   return <div className="field">
     <label htmlFor={id}>{label}</label>
     <div className="input-unit">
-      <input id={id} type="number" value={draft} min={min} max={max} step={step}
+      <input id={id} type="number" value={draft} min={min} max={max} step={step} disabled={disabled}
         aria-invalid={invalid || undefined} aria-describedby={invalid ? `${id}-error` : undefined}
         onFocus={() => { editing.current = true; }}
         onChange={(event) => { setDraft(event.target.value); setInvalid(false); }}

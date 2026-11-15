@@ -4,11 +4,11 @@ import { CORNERS } from "./steps";
 
 type Controls = Pick<CalibrationController,
   "homed" | "heightSaved" | "currentBase" | "margin" | "setMargin" | "marginValid" | "apply" |
-  "canMove" | "plotFrame" | "projectId" | "rect" | "adoptPaperArea" | "fail" | "driveToCorner">;
+  "canMove" | "canEdit" | "plotFrame" | "projectId" | "rect" | "adoptPaperArea" | "driveToCorner">;
 
 export default function ReviewStep({ controls }: { controls: Controls }) {
   const { t } = useI18n();
-  const { homed, heightSaved, currentBase, margin, setMargin, marginValid, apply, canMove, plotFrame, projectId, rect, adoptPaperArea, fail, driveToCorner } = controls;
+  const { homed, heightSaved, currentBase, margin, setMargin, marginValid, apply, canMove, canEdit, plotFrame, projectId, rect, adoptPaperArea, driveToCorner } = controls;
   return (
     <>
       <p className="muted">{t("paper.reviewHint")}</p>
@@ -19,13 +19,13 @@ export default function ReviewStep({ controls }: { controls: Controls }) {
           <span>{t("paper.margin")}</span>
           <div className="input-unit">
             <input
-              type="number" aria-label={t("paper.margin")} step="1" min="0" max={(Math.min(currentBase.w, currentBase.h) - 5) / 2} value={margin}
+              type="number" disabled={!canEdit} aria-label={t("paper.margin")} step="1" min="0" max={(Math.min(currentBase.w, currentBase.h) - 5) / 2} value={margin}
               onChange={(e) => setMargin(parseFloat(e.target.value) || 0)}
             />
             <em>mm</em>
           </div>
         </label>
-        <button className="primary" disabled={!marginValid} onClick={apply}>
+        <button className="primary" disabled={!marginValid || !canEdit} onClick={apply}>
           {t("paper.applyMargin")}
         </button>
         <button
@@ -39,7 +39,7 @@ export default function ReviewStep({ controls }: { controls: Controls }) {
           {t("common.exportXml")}
         </a>
       </div>
-      <button type="button" className="ghost" disabled={!rect} onClick={() => { adoptPaperArea().catch(fail); }}
+      <button type="button" className="ghost" disabled={!rect || !canEdit} onClick={() => { void adoptPaperArea(); }}
         style={{ marginTop: 10 }}>{t("paper.fromCorners")}</button>
       <div className="field-group" style={{ marginTop: 14 }}>
         <h3>{t("paper.driveToPlotCorners")}</h3>

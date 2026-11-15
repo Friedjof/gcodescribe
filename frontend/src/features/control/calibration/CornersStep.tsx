@@ -5,13 +5,13 @@ import Segmented from "../../../components/Segmented";
 import { CORNERS, XY_STEPS } from "./steps";
 
 type Controls = Pick<CalibrationController,
-  "clearCorner" | "xyStep" | "setXyStep" | "canMove" | "jogXY" | "kbd" | "testPen" | "homed" |
+  "clearCorner" | "xyStep" | "setXyStep" | "canMove" | "canEdit" | "jogXY" | "kbd" | "testPen" | "homed" |
   "capture" | "driveToCorner" | "capturedCount" | "resetCorners" | "rect" | "adoptPaperArea" |
-  "setActive" | "fail">;
+  "setActive">;
 
 export default function CornersStep({ cal, controls }: { cal: Calibration; controls: Controls }) {
   const { t } = useI18n();
-  const { clearCorner, xyStep, setXyStep, canMove, jogXY, kbd, testPen, homed, capture, driveToCorner, capturedCount, resetCorners, rect, adoptPaperArea, setActive, fail } = controls;
+  const { clearCorner, xyStep, setXyStep, canMove, canEdit, jogXY, kbd, testPen, homed, capture, driveToCorner, capturedCount, resetCorners, rect, adoptPaperArea, setActive } = controls;
   return (
     <>
       <p className="muted">{t("paper.step3Hint")}</p>
@@ -32,7 +32,7 @@ export default function CornersStep({ cal, controls }: { cal: Calibration; contr
               {cap && (
                 <button
                   className="ghost tiny"
-                  onClick={() => clearCorner(c.id)}
+                  disabled={!canEdit} onClick={() => clearCorner(c.id)}
                   title={t("paper.resetCorners")}
                 >✕</button>
               )}
@@ -101,10 +101,10 @@ export default function CornersStep({ cal, controls }: { cal: Calibration; contr
 
       <div className="save-row" style={{ marginTop: 12 }}>
         {capturedCount > 0 && (
-          <button className="ghost" onClick={resetCorners}>{t("paper.resetCorners")}</button>
+          <button className="ghost" disabled={!canEdit} onClick={resetCorners}>{t("paper.resetCorners")}</button>
         )}
-        <button className="primary" disabled={!rect} onClick={() => {
-          adoptPaperArea().then(() => setActive("apply")).catch(fail);
+        <button className="primary" disabled={!rect || !canEdit} onClick={() => {
+          void adoptPaperArea(true);
         }}>
           {t("paper.usePaperArea")}
         </button>

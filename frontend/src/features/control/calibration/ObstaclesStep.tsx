@@ -5,12 +5,12 @@ import { XY_STEPS } from "./steps";
 
 type Controls = Pick<CalibrationController,
   "obsCaptureActive" | "obsCaptureCorner1" | "obstacles" | "deleteObstacle" | "xyStep" |
-  "setXyStep" | "canMove" | "jogXY" | "kbd" | "homed" | "pos" | "startObstacleCapture" |
+  "setXyStep" | "canMove" | "canEdit" | "jogXY" | "kbd" | "homed" | "pos" | "startObstacleCapture" |
   "captureObstacleCorner" | "cancelObstacleCapture" | "setActive">;
 
 export default function ObstaclesStep({ controls }: { controls: Controls }) {
   const { t } = useI18n();
-  const { obsCaptureActive, obsCaptureCorner1, obstacles, deleteObstacle, xyStep, setXyStep, canMove, jogXY, kbd, homed, pos, startObstacleCapture, captureObstacleCorner, cancelObstacleCapture, setActive } = controls;
+  const { obsCaptureActive, obsCaptureCorner1, obstacles, deleteObstacle, xyStep, setXyStep, canMove, canEdit, jogXY, kbd, homed, pos, startObstacleCapture, captureObstacleCorner, cancelObstacleCapture, setActive } = controls;
   return (
     <>
       <p className="muted">{t("paper.step4ObstaclesHint")}</p>
@@ -19,7 +19,7 @@ export default function ObstaclesStep({ controls }: { controls: Controls }) {
         <>
           <button
             className="primary"
-            onClick={startObstacleCapture}
+            disabled={!canEdit} onClick={startObstacleCapture}
             style={{ marginBottom: 10 }}
           >
             + {t("paper.obsStartCapture")}
@@ -39,7 +39,7 @@ export default function ObstaclesStep({ controls }: { controls: Controls }) {
                   </span>
                   <button
                     className="ghost tiny danger"
-                    onClick={() => deleteObstacle(obs.id)}
+                    disabled={!canEdit} onClick={() => deleteObstacle(obs.id)}
                     title={t("paper.deleteObstacle")}
                   >🗑</button>
                 </div>
@@ -82,7 +82,7 @@ export default function ObstaclesStep({ controls }: { controls: Controls }) {
             {!obsCaptureCorner1 ? (
               <button
                 className="primary"
-                disabled={!homed || !pos}
+                disabled={!canMove || !homed || !pos}
                 onClick={captureObstacleCorner}
               >
                 {t("paper.obsSetCorner1")}
@@ -90,7 +90,7 @@ export default function ObstaclesStep({ controls }: { controls: Controls }) {
             ) : (
               <button
                 className="primary"
-                disabled={!homed || !pos}
+                disabled={!canMove || !homed || !pos}
                 onClick={captureObstacleCorner}
               >
                 {t("paper.obsSetCorner2")}

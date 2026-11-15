@@ -472,3 +472,75 @@ it("lets paper layout be edited before homing while keeping machine controls dis
   expect(mocks.home).not.toHaveBeenCalled();
   expect(mocks.move).not.toHaveBeenCalled();
 });
+
+it("does not advance the setup after homing finishes in a hidden view", async () => {
+  let finish!: () => void;
+  mocks.home.mockReturnValue(new Promise<void>(resolve => { finish = resolve; }));
+  const { rerender, onAction } = await setup();
+  fireEvent.click(screen.getByRole("button", { name: "paper.homeXYZ" }));
+  expect(mocks.home).toHaveBeenCalledOnce();
+  rerender(<Paper status={{ configured: true, online: true }} onAction={onAction} visible={false} />);
+  await act(async () => finish());
+  rerender(<Paper status={{ configured: true, online: true }} onAction={onAction} />);
+  expect(screen.getByRole("button", { name: /paper.step1/ })).toHaveAttribute("aria-expanded", "true");
+  expect(onAction).not.toHaveBeenCalled();
+});
+
+it("never starts a generated frame after leaving the calibration view", async () => {
+  let finish!: (job: { filename: string }) => void;
+  mocks.testPattern.mockReturnValue(new Promise(resolve => { finish = resolve; }));
+  const { rerender, onAction } = await setup();
+  fireEvent.click(screen.getByRole("button", { name: /paper.step5/ }));
+  const test = screen.getByRole("button", { name: "paper.testFrame" });
+  fireEvent.click(test);
+  fireEvent.click(test);
+  expect(mocks.testPattern).toHaveBeenCalledExactlyOnceWith("frame", "project");
+  expect(test).toBeDisabled();
+  rerender(<Paper status={{ configured: true, online: true }} onAction={onAction} visible={false} />);
+  await act(async () => finish({ filename: "frame.gcode" }));
+  expect(mocks.send).not.toHaveBeenCalled();
+  expect(onAction).not.toHaveBeenCalled();
+});
+
+it.each([{ online: false }, { online: true, job: { state: "Printing" } }])(
+  "does not start a generated frame when the printer becomes unavailable: %j", async status => {
+    let finish!: (job: { filename: string }) => void;
+    mocks.testPattern.mockReturnValue(new Promise(resolve => { finish = resolve; }));
+    const { rerender, onAction } = await setup();
+    fireEvent.click(screen.getByRole("button", { name: /paper.step5/ }));
+    fireEvent.click(screen.getByRole("button", { name: "paper.testFrame" }));
+    rerender(<Paper status={{ configured: true, ...status }} onAction={onAction} />);
+    await act(async () => finish({ filename: "frame.gcode" }));
+    expect(mocks.send).not.toHaveBeenCalled();
+  },
+);
+
+it("discards an obstacle's first captured corner on tab changes", async () => {
+  const { rerender, onAction } = await setup();
+  fireEvent.click(screen.getByRole("button", { name: /paper.step4Obstacles/ }));
+  fireEvent.click(screen.getByRole("button", { name: /paper.obsStartCapture/ }));
+  fireEvent.click(screen.getByRole("button", { name: "paper.obsSetCorner1" }));
+  expect(screen.getByRole("button", { name: "paper.obsSetCorner2" })).toBeInTheDocument();
+  rerender(<Paper status={{ configured: true, online: true }} onAction={onAction} visible={false} />);
+  rerender(<Paper status={{ configured: true, online: true }} onAction={onAction} />);
+  expect(screen.getByRole("button", { name: /paper.obsStartCapture/ })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "paper.obsSetCorner2" })).not.toBeInTheDocument();
+  expect(mocks.setObstacles).not.toHaveBeenCalled();
+});
+
+it("publishes a completed calibration save even if its view has since been hidden", async () => {
+  let finish!: (calibration: Calibration) => void;
+  mocks.saveCalibration.mockReturnValue(new Promise(resolve => { finish = resolve; }));
+  const { rerender, onAction } = await setup();
+  fireEvent.click(screen.getByText("paper.bedSize"));
+  const input = screen.getByRole("spinbutton", { name: "paper.bedWidth" });
+  fireEvent.change(input, { target: { value: "230" } });
+  fireEvent.blur(input);
+  expect(mocks.saveCalibration).toHaveBeenCalledOnce();
+  const reads = mocks.getProfile.mock.calls.length;
+  rerender(<Paper status={{ configured: true, online: true }} onAction={onAction} visible={false} />);
+  profileCalibration = { ...profileCalibration, bed_width: 230 };
+  await act(async () => finish(profileCalibration));
+  await waitFor(() => expect(mocks.getProfile.mock.calls.length).toBeGreaterThan(reads));
+  expect(onAction).not.toHaveBeenCalled();
+});

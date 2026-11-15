@@ -2,7 +2,7 @@
 
 import { ProjectCalibrationProvider } from "../../state/ProjectCalibrationContext";
 import type { ReactElement } from "react";
-import { cleanup, fireEvent, render as renderComponent, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render as renderComponent, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import CalibrationPressureDialog from "./CalibrationPressureDialog";
@@ -114,4 +114,49 @@ it("requires a fresh confirmation if the same profile's calibration changed befo
   expect(mocks.calibrationHeight).not.toHaveBeenCalled();
   expect(mocks.saveProfile).not.toHaveBeenCalled();
   expect(screen.getByText("paper.pressure.height 2.00")).toBeInTheDocument();
+});
+
+it("uses the controller's live position without starting a second position poll", async () => {
+  render(<CalibrationPressureDialog canMove={true} position={head} onPosition={vi.fn()}
+    onClose={vi.fn()} onBusyChange={vi.fn()} />);
+  await screen.findByRole("spinbutton");
+  expect(screen.getByRole("button", { name: "paper.pressure.apply" })).toBeEnabled();
+  expect(mocks.position).not.toHaveBeenCalled();
+});
+
+it("does not save or move if the dialog closes while the profile check is pending", async () => {
+  const { onPosition } = await setup();
+  let finish!: (value: typeof profile) => void;
+  mocks.activeProfile.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+  fireEvent.click(screen.getByRole("button", { name: "paper.pressure.apply" }));
+  cleanup();
+  await act(async () => finish(profile));
+  expect(mocks.saveProfile).not.toHaveBeenCalled();
+  expect(mocks.calibrationHeight).not.toHaveBeenCalled();
+  expect(onPosition).not.toHaveBeenCalled();
+});
+
+it("does not apply height after a pending save finishes in a closed dialog", async () => {
+  const { onPosition } = await setup();
+  let finish!: (value: typeof profile) => void;
+  mocks.saveProfile.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+  fireEvent.click(screen.getByRole("button", { name: "paper.pressure.apply" }));
+  await waitFor(() => expect(mocks.saveProfile).toHaveBeenCalledOnce());
+  cleanup();
+  await act(async () => finish(profile));
+  expect(mocks.calibrationHeight).not.toHaveBeenCalled();
+  expect(onPosition).not.toHaveBeenCalled();
+});
+
+it("does not lower the pen if the head left C while the offset was being saved", async () => {
+  let finish!: (value: typeof profile) => void;
+  mocks.saveProfile.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+  const props = { canMove: true, onClose: vi.fn(), onBusyChange: vi.fn(), position: { ...head } };
+  const { rerender } = render(<CalibrationPressureDialog {...props} />);
+  await screen.findByRole("spinbutton");
+  fireEvent.click(screen.getByRole("button", { name: "paper.pressure.apply" }));
+  await waitFor(() => expect(mocks.saveProfile).toHaveBeenCalledOnce());
+  rerender(<CalibrationPressureDialog {...props} position={{ ...head, x: 10 }} />);
+  await act(async () => finish(profile));
+  expect(mocks.calibrationHeight).not.toHaveBeenCalled();
 });

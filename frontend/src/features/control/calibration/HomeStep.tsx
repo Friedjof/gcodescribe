@@ -4,11 +4,11 @@ import type { Calibration } from "../../../api";
 import CommittedNumberField from "../../../components/CommittedNumberField";
 
 type Controls = Pick<CalibrationController,
-  "homed" | "setActive" | "canMove" | "homeAll" | "saveBedDimension">;
+  "homed" | "setActive" | "canMove" | "canEdit" | "homeAll" | "saveBedDimension">;
 
 export default function HomeStep({ cal, controls }: { cal: Calibration; controls: Controls }) {
   const { t } = useI18n();
-  const { homed, setActive, canMove, homeAll, saveBedDimension } = controls;
+  const { homed, setActive, canMove, canEdit, homeAll, saveBedDimension } = controls;
   return (
     <>
       <p className="muted">{t("paper.step1Hint")}</p>
@@ -25,9 +25,9 @@ export default function HomeStep({ cal, controls }: { cal: Calibration; controls
           {t("paper.bedSizeHint")}
         </p>
         <div className="bed-size-row">
-          <CommittedNumberField label={t("paper.bedWidth")} value={cal.bed_width} min={10} step={1}
+          <CommittedNumberField disabled={!canEdit} label={t("paper.bedWidth")} value={cal.bed_width} min={10} step={1}
             onChange={(value) => saveBedDimension("bed_width", value)} />
-          <CommittedNumberField label={t("paper.bedHeight")} value={cal.bed_height} min={10} step={1}
+          <CommittedNumberField disabled={!canEdit} label={t("paper.bedHeight")} value={cal.bed_height} min={10} step={1}
             onChange={(value) => saveBedDimension("bed_height", value)} />
         </div>
       </details>

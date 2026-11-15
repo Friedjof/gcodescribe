@@ -14,7 +14,7 @@ export default function Paper(props: CalibrationControllerProps) {
   const controls = useCalibrationController(props);
   const { cal, error, retry, visible, pressureOpen, online, motionLocked, positions,
     projectId, profileId, setPressureOpen, setPressureBusy, setPos, profileName, project,
-    steps, active, setActive, pos, finishPositions } = controls;
+    steps, busy, active, setActive, pos, finishPositions } = controls;
   if (error) return <div className="card banner err" role="alert"><p>{error}</p>
     <button onClick={retry}>Erneut laden</button></div>;
   if (!cal) return <div className="card">{t("common.loading")}</div>;
@@ -23,7 +23,7 @@ export default function Paper(props: CalibrationControllerProps) {
       {visible && pressureOpen && <CalibrationPressureDialog canMove={!!online && !motionLocked && !positions.busy}
         projectId={projectId} profileId={profileId ?? undefined}
         onClose={() => setPressureOpen(false)} onBusyChange={setPressureBusy}
-        onPosition={setPos} onAction={props.onAction} />}
+        position={pos} onPosition={setPos} onAction={props.onAction} />}
       {/* ── Left: Wizard ────────────────────────────────────────── */}
       <section className="card paper-wizard-panel">
         <h2>{t("paper.title")}</h2>
@@ -42,7 +42,7 @@ export default function Paper(props: CalibrationControllerProps) {
             <div key={s.id} className={`wstep ${s.locked ? "locked" : ""} ${active === s.id ? "open" : ""}`}>
               <button
                 className="wstep-head"
-                disabled={s.locked || positions.busy}
+                disabled={s.locked || positions.busy || busy}
                 aria-expanded={active === s.id}
                 onClick={() => setActive(active === s.id ? null : s.id)}
               >

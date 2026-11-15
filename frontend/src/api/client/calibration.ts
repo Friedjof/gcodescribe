@@ -38,7 +38,7 @@ export const calibrationClient = {
   listProfiles: (includeArchived = true) =>
     req<CalibrationProfileSummary[]>(`/api/profiles?include_archived=${includeArchived}`),
   getProfile: (id: string, signal?: AbortSignal) => req<CalibrationProfile>(`/api/profiles/${id}`, { signal }),
-  activeProfile: () => req<CalibrationProfile>("/api/profiles/active"),
+  activeProfile: (signal?: AbortSignal) => req<CalibrationProfile>("/api/profiles/active", { signal }),
   createProfile: (name?: string) =>
     req<CalibrationProfile>("/api/profiles", {
       method: "POST",

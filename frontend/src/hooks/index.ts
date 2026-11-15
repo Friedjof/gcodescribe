@@ -26,7 +26,7 @@ export function useArrowKeys(handlers: ArrowHandlers, enabled = true): ArrowDir 
   const timer = useRef<number | undefined>(undefined);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled) { setPressed(null); return; }
     const KEYS: Record<string, ArrowDir> = {
       ArrowLeft: "left",
       ArrowRight: "right",

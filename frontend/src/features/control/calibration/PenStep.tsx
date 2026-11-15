@@ -6,12 +6,12 @@ import Segmented from "../../../components/Segmented";
 import { Z_STEPS } from "./steps";
 
 type Controls = Pick<CalibrationController,
-  "heightSaved" | "homed" | "canMove" | "homeAll" | "pos" | "zStep" | "setZStep" | "kbd" |
+  "heightSaved" | "homed" | "canMove" | "canEdit" | "homeAll" | "pos" | "zStep" | "setZStep" | "kbd" |
   "jogZ" | "savePenHeight" | "testPen" | "setPenHeightValue" | "setActive">;
 
 export default function PenStep({ cal, controls }: { cal: Calibration; controls: Controls }) {
   const { t } = useI18n();
-  const { heightSaved, homed, canMove, homeAll, pos, zStep, setZStep, kbd, jogZ, savePenHeight, testPen, setPenHeightValue, setActive } = controls;
+  const { heightSaved, homed, canMove, canEdit, homeAll, pos, zStep, setZStep, kbd, jogZ, savePenHeight, testPen, setPenHeightValue, setActive } = controls;
   return (
     <>
       {heightSaved && (
@@ -99,9 +99,9 @@ export default function PenStep({ cal, controls }: { cal: Calibration; controls:
       <details className="collapsible" style={{ marginTop: 12 }}>
         <summary className="muted">{t("paper.manualValues")}</summary>
         <div className="height-fields" style={{ marginTop: 8 }}>
-          <CommittedNumberField label={t("calibrate.penDownZ")} value={cal.pen_down_z} min={0} max={cal.z_max} step={0.05}
+          <CommittedNumberField disabled={!canEdit} label={t("calibrate.penDownZ")} value={cal.pen_down_z} min={0} max={cal.z_max} step={0.05}
             onChange={(value) => setPenHeightValue("down", value)} />
-          <CommittedNumberField label={t("calibrate.penUpZ")} value={cal.pen_up_z} min={0} max={cal.z_max} step={0.05}
+          <CommittedNumberField disabled={!canEdit} label={t("calibrate.penUpZ")} value={cal.pen_up_z} min={0} max={cal.z_max} step={0.05}
             onChange={(value) => setPenHeightValue("up", value)} />
         </div>
       </details>

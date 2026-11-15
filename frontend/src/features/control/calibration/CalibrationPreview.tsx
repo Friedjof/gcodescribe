@@ -8,13 +8,13 @@ import type { CalibrationController } from "./useCalibrationController";
 type Controls = Pick<CalibrationController,
   "positionsOpen" | "clickMove" | "formatId" | "setFormatId" | "currentFormat" |
   "formatLandscape" | "setFormatLandscape" | "pos" | "rect" | "preview" | "positions" |
-  "visible" | "homed" | "canMove" | "moveTo" | "active" | "handleDragCorner" |
+  "visible" | "homed" | "canMove" | "canEdit" | "moveTo" | "active" | "handleDragCorner" |
   "handleDropCorner" | "obstacles" | "saveObstacles" | "currentPlot" | "cornerAngles" |
   "setClickMove" | "previewJob" | "setPreviewJob" | "jobs" | "refreshJobs">;
 
 export default function CalibrationPreview({ cal, controls }: { cal: Calibration; controls: Controls }) {
   const { t } = useI18n();
-  const { positionsOpen, clickMove, formatId, setFormatId, currentFormat, formatLandscape, setFormatLandscape, pos, rect, preview, positions, visible, homed, canMove, moveTo, active, handleDragCorner, handleDropCorner, obstacles, saveObstacles, currentPlot, cornerAngles, setClickMove, previewJob, setPreviewJob, jobs, refreshJobs } = controls;
+  const { positionsOpen, clickMove, formatId, setFormatId, currentFormat, formatLandscape, setFormatLandscape, pos, rect, preview, positions, visible, homed, canMove, canEdit, moveTo, active, handleDragCorner, handleDropCorner, obstacles, saveObstacles, currentPlot, cornerAngles, setClickMove, previewJob, setPreviewJob, jobs, refreshJobs } = controls;
   return (
     <section className="card paper-live-panel">
       <h2>{t("paper.liveView")}</h2>
@@ -32,7 +32,7 @@ export default function CalibrationPreview({ cal, controls }: { cal: Calibration
             {formatLandscape ? t("paper.landscape") : t("paper.portrait")} ↻
           </button>}
       </div>
-      <LiveView
+      <LiveView key={visible ? "visible" : "hidden"}
         cal={cal}
         position={pos}
         rect={rect}
@@ -42,12 +42,12 @@ export default function CalibrationPreview({ cal, controls }: { cal: Calibration
           : visible && clickMove && homed && canMove ? moveTo : undefined}
         selectedPosition={positionsOpen ? positions.kind : null}
         target={positions.target}
-        onDragCorner={active === "corners" ? handleDragCorner : undefined}
-        onDropCorner={active === "corners" ? handleDropCorner : undefined}
+        onDragCorner={visible && canEdit && active === "corners" ? handleDragCorner : undefined}
+        onDropCorner={visible && canEdit && active === "corners" ? handleDropCorner : undefined}
         formatPreview={currentFormat ? { format: currentFormat, landscape: formatLandscape } : undefined}
         obstacles={obstacles}
-        editingObstacles={active === "obstacles"}
-        onObstaclesChange={saveObstacles}
+        editingObstacles={visible && canEdit && active === "obstacles"}
+        onObstaclesChange={canEdit ? saveObstacles : undefined}
       />
       <div className="paper-area-readout">
         <span>{t("paper.drawingArea")} {currentPlot.w.toFixed(1)} × {currentPlot.h.toFixed(1)} mm</span>

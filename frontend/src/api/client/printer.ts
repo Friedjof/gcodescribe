@@ -65,7 +65,7 @@ export const printerClient = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ profile_id: profileId }),
     }),
-  position: () => req<Position>("/api/position"),
+  position: (signal?: AbortSignal) => req<Position>("/api/position", { signal }),
   move: (x: number, y: number, projectId?: string) =>
     req<{ ok: boolean; position: Position }>("/api/printer/move", {
       method: "POST",
