@@ -55,6 +55,10 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      - name: Frontend tests
+        working-directory: frontend
+        run: npm test
+
       - name: Typecheck & build frontend
         working-directory: frontend
         run: npm run build
@@ -84,7 +88,7 @@ jobs:
           gh release create "${GITHUB_REF_NAME}" \
             --title "${GITHUB_REF_NAME}" \
             --notes-file notes.md \
-            --verify-tag
+            --verify-tag --draft
 
   # Build the Flatpak bundle and attach it to the GitHub release.
   flatpak:
@@ -157,6 +161,12 @@ jobs:
           bash scripts/build-pkg.sh rpm      "${{ steps.ver.outputs.ver }}"
           bash scripts/build-pkg.sh appimage "${{ steps.ver.outputs.ver }}"
 
+      - name: Install and verify Debian package
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ./*.deb
+          bash scripts/verify-deb.sh "${{ steps.ver.outputs.ver }}"
+
       - name: Upload packages to release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -164,6 +174,18 @@ jobs:
           gh release upload "${GITHUB_REF_NAME}" \
             *.deb *.rpm "GCodeScribe-${{ steps.ver.outputs.ver }}-x86_64.AppImage" \
             --repo "${GITHUB_REPOSITORY}" --clobber
+
+  publish:
+    name: Publish complete release
+    needs: [release, package, flatpak]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish release with installation packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release edit "${GITHUB_REF_NAME}" --draft=false --latest \
+            --repo "${GITHUB_REPOSITORY}"
 
   # Optional: build & publish the Docker image to GHCR. Delete this job if you
   # don't want to publish a container image on release.

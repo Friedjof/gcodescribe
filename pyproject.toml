@@ -40,6 +40,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["plotter"]
+artifacts = ["plotter/web/static/**"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "plotter/vpype_config.toml" = "plotter/vpype_config.toml"
@@ -59,3 +60,6 @@ line-length = 100
 select = ["E", "W", "F", "I", "UP", "B", "C4"]
 # B008: FastAPI uses callables (File(), Depends(), …) as argument defaults by design.
 ignore = ["B008"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

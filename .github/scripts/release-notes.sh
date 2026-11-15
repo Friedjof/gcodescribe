@@ -41,6 +41,11 @@ done < <("${api_authors[@]}" | awk '!seen[$1]++')  # dedupe by login, keep order
 [ -z "$contributors" ] && contributors="_No linked GitHub accounts in this range._"
 
 # --- Body --------------------------------------------------------------------
+notes="docs/releases/${TAG#v}.md"
+if [ -f "$notes" ]; then
+  cat "$notes"
+  printf '\n'
+fi
 cat <<EOF
 $header
 

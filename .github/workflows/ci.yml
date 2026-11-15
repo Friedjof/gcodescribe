@@ -55,6 +55,10 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      - name: Frontend tests
+        working-directory: frontend
+        run: npm test
+
       # `npm run build` is `tsc -b && vite build` — this also typechecks.
       - name: Typecheck & build
         working-directory: frontend
@@ -100,6 +104,12 @@ jobs:
           bash scripts/build-pkg.sh deb   "${{ steps.ver.outputs.ver }}"
           bash scripts/build-pkg.sh rpm   "${{ steps.ver.outputs.ver }}"
           bash scripts/build-pkg.sh appimage "${{ steps.ver.outputs.ver }}"
+
+      - name: Install and verify Debian package
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ./*.deb
+          bash scripts/verify-deb.sh "${{ steps.ver.outputs.ver }}"
 
       - uses: actions/upload-artifact@v7
         with:

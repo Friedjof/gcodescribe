@@ -24,6 +24,15 @@ printf '▶ Installing into staging venv…\n'
 python3.12 -m venv "$VENV"
 "$VENV/bin/pip" install --quiet .
 
+# vpype is invoked as a subprocess. Its pip-generated shebang still points at
+# staging, so resolve the interpreter relative to the relocated script instead.
+cat > "$VENV/bin/vpype" <<'EOF'
+#!/bin/sh
+HERE="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+exec "$HERE/python3" -c "from vpype_cli.cli import cli; cli()" "$@"
+EOF
+chmod +x "$VENV/bin/vpype"
+
 # Launcher wrappers invoke the venv's python *binary* directly rather than the
 # generated console scripts: a venv is not relocatable, so those scripts bake
 # the build-time path into their shebang (#!/src/staging/...) and break once the
@@ -37,6 +46,7 @@ mkdir -p "$STAGING/usr/bin"
 emit_wrapper() {  # $1 = command name, $2 = module providing main()
   cat > "$STAGING/usr/bin/$1" <<EOF
 #!/bin/sh
+export PATH="/usr/lib/gcodescribe/bin:\$PATH"
 exec /usr/lib/gcodescribe/bin/python3 -c "from $2 import main; main()" "\$@"
 EOF
   chmod +x "$STAGING/usr/bin/$1"
@@ -99,6 +109,7 @@ EOF
     cat > AppDir/AppRun <<'EOF'
 #!/bin/sh
 HERE="${APPDIR:-$(dirname "$(readlink -f "$0")")}"
+export PATH="$HERE/usr/lib/gcodescribe/bin:$PATH"
 exec "$HERE/usr/lib/gcodescribe/bin/python3" \
   -c "from plotter.web.server import main; main()" "$@"
 EOF
