@@ -33,7 +33,7 @@ import PaintToolRail, { paintTools } from "./components/PaintToolRail";
 import PaintToolbar from "./components/PaintToolbar";
 import PaintObjectMenu from "./components/PaintObjectMenu";
 import PaintInfoModal from "./components/PaintInfoModal";
-import { queueObjects, rememberPage, flushEdits, subscribeEdits, editState, discardEdits, cachedPage, refreshPage } from "../../api/pageEdits";
+import { queueObjects, rememberPage, flushEdits, subscribeEdits, subscribeSaved, editState, discardEdits, cachedPage, refreshPage } from "../../api/pageEdits";
 import { startImport, type AssetTask } from "../../api/assetTasks";
 import { useLatestCallbacks } from "../../hooks/useLatestCallbacks";
 import DelayedLoading from "../../components/DelayedLoading";
@@ -209,18 +209,17 @@ export default function Paint({
   };
   useEffect(() => onAppEvent((event) => liveHandlerRef.current(event)), []);
   useEffect(() => {
-    const saved = (event: Event) => {
-      const id = (event as CustomEvent<string>).detail;
+    const saved = (id: string) => {
       const next = cachedPage(id);
       if (next) setPage((previous) => previous?.id === id ? { ...previous, objects: next.objects, revision: next.revision } : previous);
     };
-    window.addEventListener("gcs:page-saved", saved);
+    const unsubscribeSaved = subscribeSaved(saved);
     const imported = (event: Event) => {
       const task = (event as CustomEvent<AssetTask>).detail;
       if (task.attached && task.target) void refreshPage(task.target.page_id).catch(fail);
     };
     window.addEventListener("gcs:asset-ready", imported);
-    return () => { window.removeEventListener("gcs:page-saved", saved); window.removeEventListener("gcs:asset-ready", imported); };
+    return () => { unsubscribeSaved(); window.removeEventListener("gcs:asset-ready", imported); };
   }, []);
 
   useLiveSource(live, {

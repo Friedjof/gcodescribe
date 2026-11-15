@@ -23,9 +23,12 @@ import BackgroundTasks from "./components/BackgroundTasks";
 import DelayedLoading from "./components/DelayedLoading";
 import { ProjectCalibrationProvider } from "./state/ProjectCalibrationContext";
 
+import { installPageEditLifecycle } from "./api/pageEdits";
+
 type Tab = "paint" | "games" | "gallery" | "ai" | "convert" | "paper" | "calibrate" | "control" | "font";
 
 export default function App() {
+  useEffect(installPageEditLifecycle, []);
   return (
     <AuthGate>
       <AdminApp />
