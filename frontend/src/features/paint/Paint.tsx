@@ -105,8 +105,8 @@ export default function Paint({
 
   const ops = useObjectOps(page, cal, selectedIds, setPage, setSelectedIds, persist, fail, warnMissingGlyphs, defaultText, sizeLinked);
 
-  const { saveState, reloadIndex, showProject } = usePaintDocument({ page, setPage, index, setIndex,
-    projectMatches, visible, agentRevision, ops, setSelectedIds, refresh, fail });
+  const { saveState, reloadIndex, showProject, prepareProjectChange, navigation } = usePaintDocument({ page, setPage, index, setIndex,
+    projectMatches, visible, agentRevision, ops, setSelectedIds, fail });
 
   const { busy, sending, calibrating, setCalibrating, fullscreen, setFullscreen, loadingPreview, plotError,
     setPlotError, createGcode, directPlot, plotSelection, moveToCalibration, openFullscreen } = usePaintJobs({
@@ -165,6 +165,7 @@ export default function Paint({
     setSelectedIds,
     ops,
     reloadIndex,
+    navigation,
     confirm,
     prompt,
     fail,
@@ -465,7 +466,7 @@ export default function Paint({
       {projectsOpen && <ProjectOverviewPopup
         activeId={index.project?.id}
         movePageId={movePageId}
-        beforeChange={async () => { await flushEdits(page.id); if (movePageId && movePageId !== page.id) await flushEdits(movePageId); }}
+        beforeChange={() => prepareProjectChange(movePageId)}
         onRefresh={reloadIndex}
         onActivate={showProject}
         confirm={confirm}
