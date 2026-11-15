@@ -31,9 +31,9 @@ const ba: Record<string, string> = {
     "status.octoUnconfigured": "Drucker is no ned eigricht",
     "status.octoOffline": "Drucker is offline",
     "notify.enable": "Benachrichtign",
-    "notify.enableHint": "Browser-Benachrichtigungen fia Plot-Fortschritt aktiviern",
+    "notify.enableHint": "Desktop-Benachrichtigungen für Plot-Fortschritt aktivieren (App geöffnet lassen)",
     "notify.enabled": "Browser-Benachrichtigungen aktiv.",
-    "notify.denied": "Browser-Benachrichtigungen san blockiert.",
+    "notify.denied": "Benachrichtigungen sind blockiert. Browser- oder Systemeinstellungen prüfen; in der Desktop-App zum erneuten Nachfragen neu starten.",
     "notify.unsupported": "Der Browser koane Benachrichtigungen.",
     "notify.title": "GCodeScribe",
     "notify.plotProgress": "»{name}« is zu {pct}% fertig.",
@@ -848,5 +848,11 @@ const ba: Record<string, string> = {
     "paper.positionMapHint": "Positionsanpassung aktiv: Ein Klick auf das Druckbett fährt den Kopf zum Ziel. Erst nach Prüfung am Drucker speichern.",
     "paper.parkDragHint": "P lässt sich bei den optionalen Parkpositionen anpassen. Die Abhebehöhe stellst du unter Profile ein.",
     "paper.penInstructions": "So stellst du die Stifthöhen ein",
+    "notify.test": "Benachrichtigung testen",
+    "notify.testHint": "Eine Test-Benachrichtigung auf dem Desktop senden",
+    "notify.testBody": "Benachrichtigungen sind bereit. Die App geöffnet lassen; sie darf minimiert sein.",
+    "notify.testSent": "Test-Benachrichtigung gesendet.",
+    "notify.failed": "Benachrichtigung konnte nicht gesendet werden. Browser- und Systemberechtigungen prüfen.",
+    "notify.secureRequired": "Benachrichtigungen benötigen localhost oder HTTPS.",
 };
 export default ba;

@@ -49,9 +49,9 @@ const en: Record<string, string> = {
     "status.octoUnconfigured": "Printer not configured",
     "status.octoOffline": "Printer offline",
     "notify.enable": "Notify",
-    "notify.enableHint": "Enable browser notifications for plot progress",
+    "notify.enableHint": "Enable desktop notifications for plot progress (keep the app open)",
     "notify.enabled": "Browser notifications enabled.",
-    "notify.denied": "Browser notifications are blocked.",
+    "notify.denied": "Notifications are blocked. Check browser or system notification settings; in the desktop app, restart to ask again.",
     "notify.unsupported": "This browser does not support notifications.",
     "notify.title": "GCodeScribe",
     "notify.plotProgress": "»{name}« is {pct}% complete.",
@@ -1471,5 +1471,11 @@ const en: Record<string, string> = {
     "paper.clickMoveEnabled": "Click-to-move is on: clicking an empty spot sends a movement command.",
     "paper.positionMapHint": "Position adjustment is active: clicking the bed moves the head to that target. Save it only after checking the real position.",
     "paper.penInstructions": "How to set pen heights",
+    "notify.test": "Test notification",
+    "notify.testHint": "Send a test notification to your desktop",
+    "notify.testBody": "Notifications are ready. Keep the app open; it can be minimized.",
+    "notify.testSent": "Test notification sent.",
+    "notify.failed": "The notification could not be sent. Check browser and system permissions.",
+    "notify.secureRequired": "Notifications require localhost or HTTPS.",
 };
 export default en;

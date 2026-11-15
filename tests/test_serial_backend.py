@@ -597,3 +597,41 @@ def _tmp_gcode(text: str):
     path = Path(_tmp_dir) / f"job-{time.monotonic_ns()}.gcode"
     path.write_text(text)
     return path
+
+
+def test_completion_result_survives_job_disappearing_and_repeated_filenames(workspace):
+    worker, _ = _make_worker()
+    try:
+        assert _wait_until(lambda: worker.status().get("online") is True)
+        path = _tmp_gcode("G0 X1\nG0 X2\n")
+        worker.upload(path, start=True)
+        assert _wait_until(
+            lambda: (worker.status().get("last_job") or {}).get("outcome") == "completed"
+        )
+        first = worker.status()["last_job"]
+        assert first["filename"] == path.name
+        assert worker.status()["job"] is None
+        worker.upload(path, start=True)
+        assert _wait_until(lambda: (worker.status().get("last_job") or {}).get("id") != first["id"])
+        assert worker.status()["last_job"]["outcome"] == "completed"
+    finally:
+        worker.shutdown()
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_cancelled_and_failed_jobs_have_distinct_terminal_results(workspace, fail):
+    worker, _ = _make_worker(
+        responder=lambda cmd: [b"Error: halted\n"] if fail and cmd == "G0 X1" else [b"ok\n"]
+    )
+    try:
+        assert _wait_until(lambda: worker.status().get("online") is True)
+        worker.upload(_tmp_gcode("G0 X1\n"), start=fail)
+        if fail:
+            assert _wait_until(
+                lambda: (worker.status().get("last_job") or {}).get("outcome") == "failed"
+            )
+        else:
+            worker.job_command("cancel")
+            assert worker.status()["last_job"]["outcome"] == "cancelled"
+    finally:
+        worker.shutdown()

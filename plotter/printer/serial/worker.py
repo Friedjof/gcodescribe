@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+import uuid
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
@@ -75,6 +76,8 @@ class SerialWorker:
         self._state = IDLE
         self._job_lines: list[str] = []
         self._job_name: str | None = None
+        self._job_id: str | None = None
+        self._last_job: dict | None = None
         self._job_calibration = None
         self._job_index = 0
         self._job_generation = 0
@@ -110,13 +113,14 @@ class SerialWorker:
                 total = len(self._job_lines)
                 completion = round(self._job_index / total * 100, 1) if total else None
                 job = {
+                    "id": self._job_id,
                     "state": STATE_LABELS[self._state],
                     "progress": {"completion": completion},
                     "job": {"file": {"name": self._job_name}},
                 }
             return {
                 "configured": True, "backend": "serial", "online": True,
-                "job": job, "error": self._last_error,
+                "job": job, "last_job": self._last_job, "error": self._last_error,
                 "motion_locked": self._state == PRINTING or self._park_requested
                 or self._resume_requested or self._control_in_progress,
             }
@@ -136,6 +140,7 @@ class SerialWorker:
                 raise PrinterBusyError("Bitte den laufenden Druck zuerst beenden.")
             self._job_lines = lines
             self._job_name = gcode_path.name
+            self._job_id = uuid.uuid4().hex
             self._job_calibration = cal
             self._job_index = 0
             self._job_generation += 1
@@ -200,6 +205,7 @@ class SerialWorker:
             if self._state == PAUSED and not reset:
                 raise PrinterBusyError("Bitte den pausierten Druck mit Fortsetzen weiterführen.")
             if reset:
+                self._job_id = uuid.uuid4().hex
                 self._job_index = 0
                 self._job_generation += 1
                 self._reset_pause()
@@ -226,6 +232,7 @@ class SerialWorker:
     def _cancel(self) -> None:
         with self._lock:
             cal = self._job_calibration
+            self._record_job_result("cancelled")
             self._state = IDLE
             self._job_lines = []
             self._job_name = None
@@ -372,12 +379,19 @@ class SerialWorker:
         return Command(self._return_from_pause_lines(position, cal),
                        purpose="resume", generation=generation)
 
+    def _record_job_result(self, outcome: str) -> None:
+        # Called under _lock. Keep the terminal result after the job disappears,
+        # so a polling client cannot mistake cancellation for successful completion.
+        if self._job_id and self._job_name:
+            self._last_job = {"id": self._job_id, "filename": self._job_name, "outcome": outcome}
+
     def _take_job_line(self) -> tuple[int, int, str] | None:
         with self._lock:
             if self._state != PRINTING:
                 return None
             if self._job_index >= len(self._job_lines):
                 # Job complete.
+                self._record_job_result("completed")
                 self._state = IDLE
                 self._job_lines = []
                 self._job_name = None
@@ -392,6 +406,7 @@ class SerialWorker:
         except PrinterError as exc:
             log.warning("serial print aborted: %s", exc)
             with self._lock:
+                self._record_job_result("failed")
                 self._state = IDLE
                 self._last_error = str(exc)
                 self._job_calibration = None

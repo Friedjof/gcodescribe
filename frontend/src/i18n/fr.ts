@@ -821,5 +821,11 @@ const fr: Record<string, string> = {
     "save.reload": "Charger la version enregistrée",
     "paint.processingGeometry": "Mise à jour du dessin…",
     "paint.editChanged": "L’objet a changé pendant le calcul. Veuillez réappliquer la modification.",
+    "notify.test": "Tester les notifications",
+    "notify.testHint": "Envoyer une notification de test",
+    "notify.testBody": "Notifications prêtes. Gardez l’application ouverte ; elle peut être réduite.",
+    "notify.testSent": "Notification de test envoyée.",
+    "notify.failed": "Envoi impossible. Vérifiez les autorisations du navigateur et du système.",
+    "notify.secureRequired": "Les notifications nécessitent localhost ou HTTPS.",
 };
 export default fr;

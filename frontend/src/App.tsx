@@ -1,6 +1,7 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { api, onAppEvent, type AiImageStatus, type EffectiveSettings } from "./api";
 import StatusPill from "./components/StatusPill";
+import { usePlotNotifications } from "./hooks/usePlotNotifications";
 import QuickStopPlot, { canStopPlot } from "./components/QuickStopPlot";
 const AiImageDesigner = lazy(() => import("./features/ai-designer/AiImageDesigner"));
 import AuthGate from "./features/auth/AuthGate";
@@ -34,7 +35,6 @@ export default function App() {
 // so switching back is instant instead of refetching + rebuilding the canvas.
 // The lighter list/state tabs stay unmount-on-switch so they reflect fresh data.
 const KEEP_ALIVE: Tab[] = ["paint", "games", "gallery", "ai", "convert", "paper", "calibrate", "font"];
-const PLOT_PROGRESS_THRESHOLDS = [25, 50, 90, 100];
 
 function AdminApp() {
   const { lang, setLang, t } = useI18n();
@@ -47,15 +47,8 @@ function AdminApp() {
   const [aiStatus, setAiStatus] = useState<AiImageStatus | null>(null);
   const [aiInitialFile, setAiInitialFile] = useState<File | null>(null);
   const [desktop, setDesktop] = useState(false);
-  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">(() =>
-    typeof Notification === "undefined" ? "unsupported" : Notification.permission
-  );
-  const progressNotify = useRef<{
-    jobKey: string | null;
-    notified: Set<number>;
-    lastProgress: number | null;
-    wasPrinting: boolean;
-  }>({ jobKey: null, notified: new Set(), lastProgress: null, wasPrinting: false });
+  const notifications = usePlotNotifications(status);
+  const notificationPermission = notifications.permission;
 
   useEffect(() => {
     setVisited((prev) => (prev.has(tab) ? prev : new Set(prev).add(tab)));
@@ -67,7 +60,7 @@ function AdminApp() {
     api.health().then((h) => setDesktop(h.desktop)).catch(() => {});
   }, []);
 
-  const notificationsActive = notificationPermission === "granted";
+  const notificationsActive = notifications.active;
   const refreshStatus = useCallback(() => api.octoStatus().then(setStatus).catch(() => setStatus(null)), []);
 
   // Surface a toast whenever a connected agent triggers an MCP tool. The data
@@ -100,67 +93,6 @@ function AdminApp() {
     };
   }, [notificationsActive]);
 
-  const requestNotifications = () => {
-    if (typeof Notification === "undefined") {
-      setNotificationPermission("unsupported");
-      toast.warn(t("notify.unsupported"));
-      return;
-    }
-    Notification.requestPermission().then((permission) => {
-      setNotificationPermission(permission);
-      if (permission === "granted") toast.success(t("notify.enabled"));
-      else toast.warn(t("notify.denied"));
-    });
-  };
-
-  useEffect(() => {
-    const tracker = progressNotify.current;
-    const job = status?.job;
-    const jobKey = job?.job?.file?.name ?? null;
-    const state = String(job?.state ?? "").toLowerCase();
-    const printing = !!job && state.includes("printing");
-    const rawProgress = job?.progress?.completion;
-    const progress = typeof rawProgress === "number" && Number.isFinite(rawProgress)
-      ? Math.max(0, Math.min(100, rawProgress))
-      : null;
-
-    const notifyMilestone = (pct: number, key = tracker.jobKey) => {
-      if (!key || tracker.notified.has(pct)) return;
-      tracker.notified.add(pct);
-      const name = key.replace(/\.[^/.]+$/, "");
-      const message = pct >= 100
-        ? t("notify.plotDone", { name })
-        : t("notify.plotProgress", { pct, name });
-      toast.success(message);
-      if (notificationPermission === "granted") {
-        new Notification(t("notify.title"), {
-          body: message,
-          tag: `gcodescribe-plot-${key}`,
-        });
-      }
-    };
-
-    if (!job && tracker.wasPrinting && (tracker.lastProgress ?? 0) >= 90) {
-      notifyMilestone(100);
-    }
-
-    if (jobKey !== tracker.jobKey) {
-      tracker.jobKey = jobKey;
-      tracker.notified = new Set();
-      tracker.lastProgress = null;
-      tracker.wasPrinting = false;
-    }
-
-    if (printing && progress != null) {
-      const crossed = PLOT_PROGRESS_THRESHOLDS.filter(
-        (pct) => pct <= progress && !tracker.notified.has(pct)
-      );
-      const next = crossed[crossed.length - 1];
-      if (next != null) notifyMilestone(next);
-      tracker.lastProgress = progress;
-    }
-    tracker.wasPrinting = printing;
-  }, [notificationPermission, status, t, toast]);
 
   const openInAiDesigner = (itemId: string) => {
     api.galleryOriginal(itemId)
@@ -193,11 +125,13 @@ function AdminApp() {
           <span className="pen">✎</span> GCodeScribe
         </h1>
         <div className="header-actions">
-          {notificationPermission !== "unsupported" && notificationPermission !== "granted" && (
-            <button className="notify-enable" onClick={requestNotifications} title={t("notify.enableHint")}>
-              {t("notify.enable")}
-            </button>
-          )}
+          <button className="notify-enable" disabled={notificationPermission === "unsupported"}
+            onClick={notificationPermission === "granted" ? notifications.test : notifications.request}
+            title={t(notificationPermission === "unsupported"
+              ? window.isSecureContext === false ? "notify.secureRequired" : "notify.unsupported"
+              : notificationPermission === "granted" ? "notify.testHint" : "notify.enableHint")}>
+            {t(notificationPermission === "granted" ? "notify.test" : "notify.enable")}
+          </button>
           <select className="lang-select" value={lang} onChange={(e) => setLang(e.target.value as "de" | "ba" | "en" | "fr" | "es")}>
             <option value="de">{t("lang.de")}</option>
             <option value="ba">{t("lang.ba")}</option>
