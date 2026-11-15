@@ -827,5 +827,16 @@ const es: Record<string, string> = {
     "notify.testSent": "Notificación de prueba enviada.",
     "notify.failed": "No se pudo enviar. Comprueba los permisos del navegador y del sistema.",
     "notify.secureRequired": "Las notificaciones requieren localhost o HTTPS.",
+    "paint.canvas.resizeHandle": "Cambiar tamaño · Mayús: proporcional",
+    "paint.canvas.rotateHandle": "Girar · Mayús: 15° · Alt: libre",
+    "paint.canvas.rotateGroup": "Girar selección · Mayús: 15° · Alt: libre",
+    "paint.canvas.resizeGroup": "Escalar selección proporcionalmente",
+    "paint.canvas.angleSnapped": "Ángulo ajustado · Alt: giro libre",
+    "paint.canvas.rotationHelp": "Mayús: 15° · Alt: giro libre",
+    "paint.canvas.plotLimit": "Límite de trazado alcanzado",
+    "paint.canvas.proportional": "Proporciones conservadas",
+    "paint.canvas.aligned": "Alineado · Alt: mover libremente",
+    "paint.canvas.gridSnapped": "Cuadrícula · Alt: mover libremente",
+    "paint.canvas.freeHelp": "Alt: mover libremente · Esc: cancelar",
 };
 export default es;

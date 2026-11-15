@@ -1,3 +1,5 @@
+import { useI18n } from "../../../../i18n";
+import TransformHandle from "./TransformHandle";
 import type { SceneObject } from "../../../../api";
 import { localBounds as geometryBounds, IDENTITY, type Pt } from "../../lib/geometry";
 import { objectPlacementFrame } from "../../lib/sourcePage";
@@ -56,11 +58,12 @@ export default function SelectionLayer({
   onStartGroupScale: (e: React.PointerEvent, ids: string[], center: Pt) => void;
   viewRotation: ViewRotation;
 }) {
+  const { t: translate } = useI18n();
   const STROKE = stroke;
   const HANDLE = handleSize;
   return (
     <>
-      {objects.map((obj) => {
+      {[...objects].sort((a, b) => Number(selectedIds.includes(a.id)) - Number(selectedIds.includes(b.id))).map((obj) => {
         const t = obj.transform ?? IDENTITY;
         const localLines = objectPlacementFrame(obj);
         const localBounds = geometryBounds(localLines);
@@ -83,7 +86,7 @@ export default function SelectionLayer({
         const bw = bx1 - bx0;
         const bh = by1 - by0;
         const topMid: Pt = [(boxCorners[0][0] + boxCorners[1][0]) / 2, (boxCorners[0][1] + boxCorners[1][1]) / 2];
-        const rotateOffset = screenVectorToRotatedLocal([0, -HANDLE * 1.2], -t.rotation);
+        const rotateOffset = screenVectorToRotatedLocal([0, -HANDLE * 3.2], -t.rotation);
         const rotateHandle: Pt = [topMid[0] + rotateOffset[0], topMid[1] + rotateOffset[1]];
         const outline = boxCorners.map((p) => p.join(",")).join(" ");
         return (
@@ -120,12 +123,9 @@ export default function SelectionLayer({
                 <line x1={topMid[0]} y1={topMid[1]} x2={rotateHandle[0]} y2={rotateHandle[1]}
                   stroke="var(--accent)" strokeWidth={STROKE} strokeDasharray={`${STROKE} ${STROKE}`}
                   pointerEvents="none" />
-                <circle
-                  cx={rotateHandle[0]} cy={rotateHandle[1]} r={HANDLE / 2}
-                  fill="var(--panel)" stroke="var(--accent)" strokeWidth={STROKE}
-                  style={{ cursor: "grab" }}
-                  onPointerDown={(e) => onStartRotate(e, obj, [cx, cy])}
-                />
+                <TransformHandle x={rotateHandle[0]} y={rotateHandle[1]} size={HANDLE}
+                  cursor="grab" round label={translate("paint.canvas.rotateHandle")}
+                  onPointerDown={(e) => onStartRotate(e, obj, [cx, cy])} />
                 {/* 8 resize handles — cursor follows the handle's on-screen direction,
                     so it stays correct for rotated/flipped objects and view rotation */}
                 {RESIZE_EDGES.map((edge) => {
@@ -133,18 +133,15 @@ export default function SelectionLayer({
                   const [hx, hy] = worldPoint(handle, t);
                   const [wcx, wcy] = worldPoint([(lx0 + lx1) / 2, (ly0 + ly1) / 2], t);
                   const deg = (Math.atan2(hy - wcy, hx - wcx) * 180) / Math.PI + viewRotation;
-                  const hs = HANDLE * 0.85;
-                  return (
-                    <rect
-                      key={edge}
-                      x={hx - hs / 2} y={hy - hs / 2}
-                      width={hs} height={hs}
-                      rx={hs * 0.18}
-                      fill="var(--accent)" stroke="#fff" strokeWidth={STROKE / 2}
-                      style={{ cursor: resizeCursor(deg) }}
-                      onPointerDown={(e) => onStartResize(e, obj, edge)}
-                    />
-                  );
+                  // Hide crowded middle grips on small objects; leave corners usable.
+                  const width = Math.abs((lx1 - lx0) * (t.scaleX ?? t.scale));
+                  const height = Math.abs((ly1 - ly0) * (t.scaleY ?? t.scale));
+                  if ((edge === "tc" || edge === "bc") && width < HANDLE * 5) return null;
+                  if ((edge === "ml" || edge === "mr") && height < HANDLE * 5) return null;
+                  if (Math.min(width, height) < HANDLE * 2.4 && edge !== "br") return null;
+                  return <TransformHandle key={edge} x={hx} y={hy} size={HANDLE}
+                    cursor={resizeCursor(deg)} label={translate("paint.canvas.resizeHandle")}
+                    onPointerDown={(e) => onStartResize(e, obj, edge)} />;
                 })}
               </>
             )}
@@ -159,7 +156,7 @@ export default function SelectionLayer({
         const cx = (bx0 + bx1) / 2;
         const cy = (by0 + by1) / 2;
         const rotHandleX = cx;
-        const rotHandleY = by0 - m - HANDLE * 1.5;
+        const rotHandleY = by0 - m - HANDLE * 3.2;
         return (
           <g>
             <rect
@@ -174,20 +171,12 @@ export default function SelectionLayer({
               strokeDasharray={`${STROKE} ${STROKE}`}
               pointerEvents="none"
             />
-            <circle
-              cx={rotHandleX} cy={rotHandleY} r={HANDLE / 2}
-              fill="var(--panel)" stroke="var(--accent)" strokeWidth={STROKE}
-              style={{ cursor: "grab" }}
-              onPointerDown={(e) => onStartGroupRotate(e, selectedObjects.map((obj) => obj.id), [cx, cy])}
-            />
-            <rect
-              x={bx1 + m - HANDLE * 0.425} y={by1 + m - HANDLE * 0.425}
-              width={HANDLE * 0.85} height={HANDLE * 0.85}
-              rx={HANDLE * 0.15}
-              fill="var(--accent)" stroke="#fff" strokeWidth={STROKE / 2}
-              style={{ cursor: resizeCursor(45 + viewRotation) }}
-              onPointerDown={(e) => onStartGroupScale(e, selectedObjects.map((obj) => obj.id), [cx, cy])}
-            />
+            <TransformHandle x={rotHandleX} y={rotHandleY} size={HANDLE} round cursor="grab"
+              label={translate("paint.canvas.rotateGroup")}
+              onPointerDown={(e) => onStartGroupRotate(e, selectedObjects.map((obj) => obj.id), [cx, cy])} />
+            <TransformHandle x={bx1 + m} y={by1 + m} size={HANDLE}
+              cursor={resizeCursor(45 + viewRotation)} label={translate("paint.canvas.resizeGroup")}
+              onPointerDown={(e) => onStartGroupScale(e, selectedObjects.map((obj) => obj.id), [cx, cy])} />
           </g>
         );
       })()}

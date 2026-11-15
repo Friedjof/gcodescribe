@@ -1,24 +1,15 @@
 import { toPath, type Guide, type Pt } from "../../lib/geometry";
 import type { Tool } from "../../PaintCanvas";
 
-export interface RotationHint {
-  at: Pt;
-  currentDeg: number;
-  deltaDeg: number;
-  snapped: boolean;
-}
-
 /** Transient feedback drawn above the objects: live draft preview, erase-line
- * highlight, marquee rectangle, alignment guides and the rotation readout. */
+ * highlight, marquee rectangle, alignment guides. */
 export default function OverlayLayer({
   draftTool,
   draftWorld,
   lineErasePreview,
   marqueeRect,
   guides,
-  rotationHint,
   stroke,
-  handleSize,
   effRadius,
 }: {
   draftTool: Tool | null;
@@ -26,13 +17,10 @@ export default function OverlayLayer({
   lineErasePreview: { id: string; line: Pt[] }[];
   marqueeRect: [number, number, number, number] | null;
   guides: Guide[];
-  rotationHint: RotationHint | null;
   stroke: number;
-  handleSize: number;
   effRadius: number;
 }) {
   const STROKE = stroke;
-  const HANDLE = handleSize;
   return (
     <>
       {lineErasePreview.map(({ id, line }) => (
@@ -80,37 +68,6 @@ export default function OverlayLayer({
         )
       )}
 
-      {rotationHint && (() => {
-        const label = `${rotationHint.currentDeg.toFixed(1)}° (${rotationHint.deltaDeg >= 0 ? "+" : ""}${rotationHint.deltaDeg.toFixed(1)}°)`;
-        const width = Math.max(28, label.length * HANDLE * 0.34);
-        const height = HANDLE * 0.92;
-        const x = rotationHint.at[0] - width / 2;
-        const y = rotationHint.at[1] - height / 2;
-        return (
-          <g pointerEvents="none">
-            <rect
-              x={x}
-              y={y}
-              width={width}
-              height={height}
-              rx={height * 0.25}
-              fill="rgba(13, 13, 15, 0.88)"
-              stroke={rotationHint.snapped ? "var(--ok)" : "var(--accent)"}
-              strokeWidth={STROKE}
-            />
-            <text
-              x={rotationHint.at[0]}
-              y={rotationHint.at[1] + height * 0.17}
-              textAnchor="middle"
-              fontSize={height * 0.46}
-              fill={rotationHint.snapped ? "var(--ok)" : "var(--text)"}
-              fontWeight={700}
-            >
-              {label}
-            </text>
-          </g>
-        );
-      })()}
     </>
   );
 }

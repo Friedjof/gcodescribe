@@ -14,7 +14,6 @@ import {
   localBounds,
   snapPt,
   alignmentCandidates,
-  snapToGuides,
   type Bounds,
   type GuideCandidate,
   type Guide,
@@ -26,11 +25,13 @@ import {
   rotatedBounds,
   signedDeg,
   displayDeg,
-  snapRotation,
   worldPoint,
-  screenVectorToRotatedLocal,
   resizeLocals,
 } from "./lib/viewTransform";
+import { clampedTransform, gestureRotation, moveSelection, resizeTransform } from "./lib/canvasTransforms";
+import { useCanvasMetrics } from "./hooks/useCanvasMetrics";
+import CanvasGestureReadout from "./components/canvas/CanvasGestureReadout";
+import type { GestureFeedback, RotationHint } from "./components/canvas/CanvasGestureReadout";
 import { geometryTask } from "./lib/geometryTasks";
 import CanvasGrid from "./components/canvas/CanvasGrid";
 import ObjectsLayer from "./components/canvas/ObjectsLayer";
@@ -41,36 +42,6 @@ import { useI18n } from "../../i18n";
 
 export type Tool = "select" | "pen" | "line" | "rect" | "maskRect" | "maskCircle" | "circle" | "semicircle" | "text" | "erase" | "eraseLine" | "bucketFill" | "areaFill";
 export type { ViewRotation } from "./lib/viewTransform";
-
-/**
- * Clamp a transform so the object's world bounding box stays within [0,W]×[0,H].
- * First scales down if the object is larger than the canvas, then shifts to fit.
- */
-function clampedTransform(t: Transform, local: Pt[][], W: number, H: number): Transform {
-  if (!local.length) return t;
-  const [bx0, by0, bx1, by1] = objectWorldBounds(local, t);
-  // Fast path — already in bounds.
-  if (bx0 >= 0 && by0 >= 0 && bx1 <= W && by1 <= H) return t;
-
-  const bw = bx1 - bx0, bh = by1 - by0;
-  const sx = t.scaleX ?? t.scale;
-  const sy = t.scaleY ?? t.scale;
-
-  // If the object is larger than the canvas, scale it down uniformly to fit.
-  const shrink = Math.min(bw > W ? W / bw : 1, bh > H ? H / bh : 1);
-  const nsx = sx * shrink;
-  const nsy = sy * shrink;
-  const shrunken: Transform = shrink < 1
-    ? { ...t, scaleX: nsx, scaleY: nsy, scale: Math.max(nsx, nsy) }
-    : t;
-
-  // After potential shrink, get the new bounds and shift into the canvas.
-  const [nx0, ny0, nx1, ny1] = objectWorldBounds(local, shrunken);
-  let dx = 0, dy = 0;
-  if (nx0 < 0) dx = -nx0; else if (nx1 > W) dx = W - nx1;
-  if (ny0 < 0) dy = -ny0; else if (ny1 > H) dy = H - ny1;
-  return { ...shrunken, x: shrunken.x + dx, y: shrunken.y + dy };
-}
 
 function shapeWorld(tool: Tool, pts: Pt[]): Pt[][] {
   if (tool === "pen" || tool === "areaFill") return pts.length > 1 ? [pts] : [];
@@ -168,7 +139,8 @@ function PaintCanvas({
   const [marquee, setMarquee] = useState<Marquee | null>(null);
   const [stylusErasing, setStylusErasing] = useState(false);
   const [guides, setGuides] = useState<Guide[]>([]);
-  const [rotationHint, setRotationHint] = useState<{ at: Pt; currentDeg: number; deltaDeg: number; snapped: boolean } | null>(null);
+  const [feedback, setFeedback] = useState<GestureFeedback | null>(null);
+  const [rotationHint, setRotationHint] = useState<RotationHint | null>(null);
   const [view, setView] = useState<ViewBox>(baseView);
   const [spaceDown, setSpaceDown] = useState(false);
   const [panning, setPanning] = useState(false);
@@ -183,11 +155,30 @@ function PaintCanvas({
   const queuedPointer = useRef<React.PointerEvent | null>(null);
   const [zooming, setZooming] = useState(false);
   const zoomTimer = useRef<ReturnType<typeof setTimeout>>();
-  useEffect(() => () => {
+  const activePointer = useRef<number | null>(null);
+  const drafting = useRef(false); drafting.current = !!(draft || marquee);
+  const visibleRef = useRef(visible); visibleRef.current = visible;
+  const cancelGesture = () => {
+    queuedPointer.current = null;
     if (frame.current !== null) cancelAnimationFrame(frame.current);
-    clearTimeout(zoomTimer.current);
-  }, []);
-  useEffect(() => { pendingTransforms.current.clear(); setPreviewTransforms(new Map()); }, [page.id]);
+    frame.current = null;
+    pendingTransforms.current.clear();
+    drag.current = null; pan.current = null;
+    setPreviewTransforms(new Map()); setDraft(null); setMarquee(null);
+    setRotationHint(null); setFeedback(null); setGuides([]); setPanning(false); setSpaceDown(false);
+    const pointer = activePointer.current; activePointer.current = null;
+    if (pointer !== null && svgRef.current?.hasPointerCapture?.(pointer)) svgRef.current.releasePointerCapture(pointer);
+  };
+  useEffect(() => {
+    cancelGesture();
+    return () => {
+      queuedPointer.current = null;
+      pendingTransforms.current.clear(); drag.current = null; pan.current = null;
+      if (frame.current !== null) cancelAnimationFrame(frame.current);
+      frame.current = null;
+      clearTimeout(zoomTimer.current);
+    };
+  }, [page.id, visible, tool, viewRotation, W, H]);
   const displayObjects = useMemo(() => page.objects.map((obj) => {
     const transform = previewTransforms.get(obj.id);
     return transform ? { ...obj, transform } : obj;
@@ -195,14 +186,16 @@ function PaintCanvas({
   const zoom = baseView.w / view.w;
   // Stylus eraser tip or barrel eraser button overrides the active tool.
   const effectiveTool: Tool = stylusErasing ? "erase" : tool;
-  const STROKE = (S * 0.0045) / zoom;
-  const HANDLE = (S * 0.016) / zoom;
+  const pixel = useCanvasMetrics(svgRef, view);
+  const STROKE = pixel * 1.3;
+  const LINE_STROKE = (S * 0.0045) / zoom;
+  const HANDLE = pixel * 11;
   // Effective eraser radius: point mode = cursor-tip size (zoom-adaptive, ~1 strokewidth)
-  const effRadius = eraserIsPoint ? STROKE * 1.2 : (eraserRadiusProp ?? ERASER_RADIUS);
+  const effRadius = eraserIsPoint ? LINE_STROKE * 1.2 : (eraserRadiusProp ?? ERASER_RADIUS);
 
   // How close (mm) a moving edge/center must come to a reference before it
   // snaps. Scaled to the plot area so it feels the same regardless of size.
-  const SNAP_TOL = S * 0.008;
+  const SNAP_TOL = pixel * 8;
 
   useEffect(() => {
     setView(baseView);
@@ -210,15 +203,23 @@ function PaintCanvas({
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
-      if (e.code === "Space") setSpaceDown(true);
+      if (!visibleRef.current) return;
+      const target = e.target as HTMLElement | null;
+      if (target instanceof Element && target.closest("input, textarea, select, button, a, [contenteditable='true']")) return;
+      if (e.key === "Escape" && (drag.current || pan.current || drafting.current)) {
+        e.preventDefault(); e.stopImmediatePropagation(); cancelGesture(); return;
+      }
+      if (e.code === "Space") { e.preventDefault(); setSpaceDown(true); }
     };
     const up = (e: KeyboardEvent) => {
       if (e.code === "Space") setSpaceDown(false);
     };
-    window.addEventListener("keydown", down);
+    window.addEventListener("keydown", down, true);
+    window.addEventListener("blur", cancelGesture);
     window.addEventListener("keyup", up);
     return () => {
-      window.removeEventListener("keydown", down);
+      window.removeEventListener("keydown", down, true);
+      window.removeEventListener("blur", cancelGesture);
       window.removeEventListener("keyup", up);
     };
   }, []);
@@ -343,7 +344,8 @@ function PaintCanvas({
       e.preventDefault();
       panMoved.current = false;
       pan.current = { pointerId: e.pointerId, startClient: [e.clientX, e.clientY], startView: view };
-      svgRef.current!.setPointerCapture(e.pointerId);
+      activePointer.current = e.pointerId;
+    svgRef.current!.setPointerCapture(e.pointerId);
       setPanning(true);
       return;
     }
@@ -354,7 +356,8 @@ function PaintCanvas({
       if (e.button !== 0) return;
       const p = toMM(e);
       setMarquee({ start: p, current: p, additive: e.ctrlKey || e.metaKey || e.shiftKey });
-      svgRef.current!.setPointerCapture(e.pointerId);
+      activePointer.current = e.pointerId;
+    svgRef.current!.setPointerCapture(e.pointerId);
       return;
     }
     if (activeTool === "text") {
@@ -367,6 +370,7 @@ function PaintCanvas({
       onBucketFill?.(toMM(e));
       return;
     }
+    activePointer.current = e.pointerId;
     svgRef.current!.setPointerCapture(e.pointerId);
     const freehand = activeTool === "pen" || activeTool === "areaFill" || activeTool === "erase" || activeTool === "eraseLine";
     const p = freehand ? toMM(e) : snapPt(toMM(e), step, snapOn);
@@ -418,82 +422,22 @@ function PaintCanvas({
     const m = toMM(e);
 
     if (d.mode === "move") {
-      const primary = d.startTs.get(d.primaryId);
-      if (!primary) return;
-      let dx = m[0] - d.startMouse[0];
-      let dy = m[1] - d.startMouse[1];
-      if (snapOn) {
-        const [sx, sy] = snapPt([primary.x + dx, primary.y + dy], step, true);
-        dx = sx - primary.x;
-        dy = sy - primary.y;
-      }
-      // Alignment guides override the grid per axis when something is in reach.
-      // Hold Alt to bypass snapping entirely for free placement.
-      if (!e.altKey) {
-        const snapped = snapToGuides(d.startBoundsAll, dx, dy, d.vGuides, d.hGuides, SNAP_TOL);
-        dx = snapped.dx;
-        dy = snapped.dy;
-        setGuides(snapped.guides);
-      } else if (guides.length) {
-        setGuides([]);
-      }
-      // Clamp so no part of any selected object leaves the plot area.
-      dx = cl(dx, -d.startBoundsAll[0], W - d.startBoundsAll[2]);
-      dy = cl(dy, -d.startBoundsAll[1], H - d.startBoundsAll[3]);
-      const updates = new Map<string, Transform>();
-      for (const id of d.ids) {
-        const t = d.startTs.get(id);
-        if (t) updates.set(id, { ...t, x: t.x + dx, y: t.y + dy });
-      }
-      updateManySafe(updates);
+      const result = moveSelection(d, m, { width: W, height: H,
+        gridStep: step, grid: snapOn, free: e.altKey, tolerance: SNAP_TOL });
+      if (!result) return;
+      setGuides(result.guides);
+      setFeedback({ at: m, mode: "move", snap: result.snap, constrained: result.constrained });
+      updateManySafe(result.updates);
 
     } else if (d.mode === "resize") {
       const obj = page.objects.find((o) => o.id === d.id);
       if (!obj) return;
-      const [slx0, sly0, slx1, sly1] = d.startLocalBounds;
-      const localW = Math.max(slx1 - slx0, 0.001);
-      const localH = Math.max(sly1 - sly0, 0.001);
-      const start = d.startTransform;
-      const startSx = start.scaleX ?? start.scale;
-      const startSy = start.scaleY ?? start.scale;
-      const localDelta = screenVectorToRotatedLocal([m[0] - d.anchorWorld[0], m[1] - d.anchorWorld[1]], start.rotation);
-      const handleDx = d.handleLocal[0] - d.anchorLocal[0];
-      const handleDy = d.handleLocal[1] - d.anchorLocal[1];
-      const movesX = Math.abs(handleDx) > 0.0001;
-      const movesY = Math.abs(handleDy) > 0.0001;
-      let newScaleX = movesX ? localDelta[0] / handleDx : startSx;
-      let newScaleY = movesY ? localDelta[1] / handleDy : startSy;
-      const minScaleX = 2 / localW;
-      const minScaleY = 2 / localH;
-      newScaleX = Math.max(minScaleX, Math.abs(newScaleX)) * Math.sign(startSx || 1);
-      newScaleY = Math.max(minScaleY, Math.abs(newScaleY)) * Math.sign(startSy || 1);
-
-      if (sourcePageFrame(obj)) {
-        const factorX = Math.abs(newScaleX / (startSx || 1));
-        const factorY = Math.abs(newScaleY / (startSy || 1));
-        const factor = movesX && movesY
-          ? (Math.abs(factorX - 1) >= Math.abs(factorY - 1) ? factorX : factorY)
-          : (movesX ? factorX : factorY);
-        const bounded = Math.max(factor, minScaleX / Math.abs(startSx || 1), minScaleY / Math.abs(startSy || 1));
-        newScaleX = startSx * bounded;
-        newScaleY = startSy * bounded;
-      } else if ((e.ctrlKey || e.metaKey) && movesX && movesY) {
-        const factor = Math.max(Math.abs(newScaleX / startSx), Math.abs(newScaleY / startSy));
-        newScaleX = Math.sign(startSx || 1) * Math.max(minScaleX, Math.abs(startSx) * factor);
-        newScaleY = Math.sign(startSy || 1) * Math.max(minScaleY, Math.abs(startSy) * factor);
-      }
-
-      const cos = Math.cos(start.rotation), sin = Math.sin(start.rotation);
-      const ax = d.anchorLocal[0] * newScaleX;
-      const ay = d.anchorLocal[1] * newScaleY;
-      updateSafe(d.id, {
-        ...start,
-        x: d.anchorWorld[0] - (ax * cos - ay * sin),
-        y: d.anchorWorld[1] - (ax * sin + ay * cos),
-        scaleX: newScaleX,
-        scaleY: newScaleY,
-        scale: Math.max(Math.abs(newScaleX), Math.abs(newScaleY)),
-      });
+      const linked = !!sourcePageFrame(obj) || e.shiftKey || e.ctrlKey || e.metaKey;
+      const wanted = resizeTransform(d, m, linked);
+      const bounded = clampedTransform(wanted, objectPlacementFrame(obj), W, H);
+      setFeedback({ at: m, mode: "resize", snap: "free", linked,
+        constrained: Math.abs(wanted.x - bounded.x) > .001 || Math.abs(wanted.y - bounded.y) > .001 || Math.abs(wanted.scale - bounded.scale) > .001 });
+      updateSafe(d.id, wanted);
 
     } else if (d.mode === "groupScale") {
       const dist = Math.hypot(m[0] - d.center[0], m[1] - d.center[1]);
@@ -516,13 +460,19 @@ function PaintCanvas({
         if (t.scaleY != null) next.scaleY = t.scaleY * factor;
         updates.set(id, next);
       }
+      const constrained = [...updates].some(([id, next]) => {
+        const object = page.objects.find(obj => obj.id === id);
+        const bounded = clampedTransform(next, object ? objectPlacementFrame(object) : [], W, H);
+        return Math.abs(next.x - bounded.x) > .001 || Math.abs(next.y - bounded.y) > .001 || Math.abs(next.scale - bounded.scale) > .001;
+      });
+      setFeedback({ at: m, mode: "groupScale", snap: "free", constrained, linked: true });
       updateManySafe(updates);
 
     } else if (d.mode === "groupRotate") {
       const angle = Math.atan2(m[1] - d.center[1], m[0] - d.center[0]);
       const rawDelta = angle - d.startAngle;
-      const snappedDelta = snapRotation(rawDelta);
-      const snapped = Math.abs(snappedDelta - rawDelta) > 0.0001;
+      const snappedDelta = gestureRotation(rawDelta, e.shiftKey, e.altKey);
+      const snapped = !e.altKey && (e.shiftKey || Math.abs(Math.sin(2 * snappedDelta)) < .0001);
       const cos = Math.cos(snappedDelta);
       const sin = Math.sin(snappedDelta);
       const groupUpdates = new Map<string, Transform>();
@@ -550,8 +500,8 @@ function PaintCanvas({
       const angle = Math.atan2(m[1] - d.center[1], m[0] - d.center[0]);
       const obj = page.objects.find((o) => o.id === d.id);
       const rawRotation = d.startRotation + angle - d.startAngle;
-      const rotation = snapRotation(rawRotation);
-      const snapped = Math.abs(rotation - rawRotation) > 0.0001;
+      const rotation = gestureRotation(rawRotation, e.shiftKey, e.altKey);
+      const snapped = !e.altKey && (e.shiftKey || Math.abs(Math.sin(2 * rotation)) < .0001);
       setRotationHint({
         at: [d.center[0], d.center[1] - HANDLE * 2.2],
         currentDeg: displayDeg(rotation),
@@ -576,11 +526,13 @@ function PaintCanvas({
   const onSvgUp = (e: React.PointerEvent) => {
     flushPointer();
     if (pendingTransforms.current.size) {
+      onEditStart();
       onUpdateMany(pendingTransforms.current);
       pendingTransforms.current = new Map(); setPreviewTransforms(new Map());
     }
     if (e.pointerType === "pen" && stylusErasing && (e.buttons & 32) === 0) setStylusErasing(false);
-    svgRef.current!.releasePointerCapture?.(e.pointerId);
+    activePointer.current = null;
+    if (svgRef.current?.hasPointerCapture?.(e.pointerId)) svgRef.current.releasePointerCapture(e.pointerId);
     if (pan.current?.pointerId === e.pointerId) {
       pan.current = null;
       setPanning(false);
@@ -642,6 +594,7 @@ function PaintCanvas({
     }
     drag.current = null;
     setRotationHint(null);
+    setFeedback(null);
     if (guides.length) setGuides([]);
   };
 
@@ -662,7 +615,7 @@ function PaintCanvas({
       ids = targetIds;
       onSelect(ids);
     }
-    onEditStart();
+    activePointer.current = e.pointerId;
     svgRef.current!.setPointerCapture(e.pointerId);
     const movingObjs = page.objects.filter((o) => ids.includes(o.id));
     const startBoundsAll = movingObjs.reduce<[number, number, number, number]>(
@@ -696,7 +649,7 @@ function PaintCanvas({
   const startResize = (e: React.PointerEvent, obj: SceneObject, edge: ResizeEdge) => {
     if (e.button !== 0) return;
     e.stopPropagation();
-    onEditStart();
+    activePointer.current = e.pointerId;
     svgRef.current!.setPointerCapture(e.pointerId);
     const t = obj.transform ?? IDENTITY;
     const localLines = objectPlacementFrame(obj);
@@ -717,7 +670,7 @@ function PaintCanvas({
   const startGroupScale = (e: React.PointerEvent, ids: string[], center: Pt) => {
     if (e.button !== 0) return;
     e.stopPropagation();
-    onEditStart();
+    activePointer.current = e.pointerId;
     svgRef.current!.setPointerCapture(e.pointerId);
     const m = toMM(e);
     drag.current = {
@@ -736,7 +689,7 @@ function PaintCanvas({
   const startGroupRotate = (e: React.PointerEvent, ids: string[], center: Pt) => {
     if (e.button !== 0) return;
     e.stopPropagation();
-    onEditStart();
+    activePointer.current = e.pointerId;
     svgRef.current!.setPointerCapture(e.pointerId);
     const m = toMM(e);
     drag.current = {
@@ -756,7 +709,7 @@ function PaintCanvas({
   const startRotate = (e: React.PointerEvent, obj: SceneObject, center: Pt) => {
     if (e.button !== 0) return;
     e.stopPropagation();
-    onEditStart();
+    activePointer.current = e.pointerId;
     svgRef.current!.setPointerCapture(e.pointerId);
     const m = toMM(e);
     const t = obj.transform ?? IDENTITY;
@@ -831,7 +784,8 @@ function PaintCanvas({
         onPointerDown={onSvgDown}
         onPointerMove={schedulePointer}
         onPointerUp={onSvgUp}
-        onPointerCancel={() => { queuedPointer.current = null; if (frame.current !== null) cancelAnimationFrame(frame.current); frame.current = null; pendingTransforms.current.clear(); setPreviewTransforms(new Map()); drag.current = null; pan.current = null; setPanning(false); setDraft(null); }}
+        onPointerCancel={cancelGesture}
+        onLostPointerCapture={() => { if (activePointer.current !== null) cancelGesture(); }}
         onPointerLeave={() => { setStylusErasing(false); onCursorMove?.({ x: 0, y: 0, inside: false, tool }); }}
         onContextMenu={(e) => e.preventDefault()}
         onDragOver={(e) => e.preventDefault()}
@@ -840,7 +794,7 @@ function PaintCanvas({
         <g transform={canvasRotationTransform}>
         <CanvasGrid W={W} H={H} S={S} pad={pad} step={step} major={major} />
 
-        <ObjectsLayer objects={objectsByZ} selectedIds={selectedIds} stroke={STROKE} active={visible} interactive={previewTransforms.size > 0 || panning || zooming} />
+        <ObjectsLayer objects={objectsByZ} selectedIds={selectedIds} stroke={LINE_STROKE} active={visible} interactive={previewTransforms.size > 0 || panning || zooming} />
 
         <OverlayLayer
           draftTool={draft?.tool ?? null}
@@ -848,9 +802,7 @@ function PaintCanvas({
           lineErasePreview={lineErasePreview}
           marqueeRect={marquee ? marqueeBounds(marquee) : null}
           guides={guides}
-          rotationHint={rotationHint}
           stroke={STROKE}
-          handleSize={HANDLE}
           effRadius={effRadius}
         />
 
@@ -875,6 +827,9 @@ function PaintCanvas({
         )}
 
         </g>
+        <CanvasGestureReadout objects={displayObjects.filter(obj => selectedIds.includes(obj.id))}
+          feedback={feedback} rotationHint={rotationHint} draft={draft}
+          pixel={pixel} view={view} width={W} height={H} viewRotation={viewRotation} />
       </svg>
     </div>
   );

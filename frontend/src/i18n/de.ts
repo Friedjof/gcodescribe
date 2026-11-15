@@ -1479,5 +1479,16 @@ const de: Record<string, string> = {
     "notify.testSent": "Test-Benachrichtigung gesendet.",
     "notify.failed": "Benachrichtigung konnte nicht gesendet werden. Browser- und Systemberechtigungen prüfen.",
     "notify.secureRequired": "Benachrichtigungen benötigen localhost oder HTTPS.",
+    "paint.canvas.resizeHandle": "Größe ziehen · Shift: proportional",
+    "paint.canvas.rotateHandle": "Drehen ziehen · Shift: 15° · Alt: frei",
+    "paint.canvas.rotateGroup": "Auswahl drehen · Shift: 15° · Alt: frei",
+    "paint.canvas.resizeGroup": "Auswahl proportional skalieren",
+    "paint.canvas.angleSnapped": "Winkel eingerastet · Alt: frei drehen",
+    "paint.canvas.rotationHelp": "Shift: 15° · Alt: frei drehen",
+    "paint.canvas.plotLimit": "Plotgrenze erreicht",
+    "paint.canvas.proportional": "Seitenverhältnis bleibt erhalten",
+    "paint.canvas.aligned": "Ausgerichtet · Alt: frei bewegen",
+    "paint.canvas.gridSnapped": "Raster · Alt: frei bewegen",
+    "paint.canvas.freeHelp": "Alt: frei bewegen · Esc: abbrechen",
 };
 export default de;

@@ -854,5 +854,16 @@ const ba: Record<string, string> = {
     "notify.testSent": "Test-Benachrichtigung gesendet.",
     "notify.failed": "Benachrichtigung konnte nicht gesendet werden. Browser- und Systemberechtigungen prüfen.",
     "notify.secureRequired": "Benachrichtigungen benötigen localhost oder HTTPS.",
+    "paint.canvas.resizeHandle": "Größe ziagn · Shift: proportional",
+    "paint.canvas.rotateHandle": "Drahn · Shift: 15° · Alt: frei",
+    "paint.canvas.rotateGroup": "Auswahl drahn · Shift: 15° · Alt: frei",
+    "paint.canvas.resizeGroup": "Auswahl proportional größer macha",
+    "paint.canvas.angleSnapped": "Winkel eingerastet · Alt: frei drahn",
+    "paint.canvas.rotationHelp": "Shift: 15° · Alt: frei drahn",
+    "paint.canvas.plotLimit": "Plotgrenz erreicht",
+    "paint.canvas.proportional": "Seitenverhältnis bleibt gleich",
+    "paint.canvas.aligned": "Ausgerichtet · Alt: frei verschiebn",
+    "paint.canvas.gridSnapped": "Raster · Alt: frei verschiebn",
+    "paint.canvas.freeHelp": "Alt: frei verschiebn · Esc: abbrecha",
 };
 export default ba;

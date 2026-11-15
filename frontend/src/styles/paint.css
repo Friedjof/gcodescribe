@@ -904,3 +904,8 @@ section.project-settings-section { display: grid; gap: 13px; padding: 16px; }
 .project-pages.collapsed .project-slide-open { justify-content: center; padding: 0; }
 .project-pages.collapsed .project-page-thumb { width: 34px; height: 34px; }
 @media (hover: none) { .project-more { opacity: 1; } }
+
+/* Larger transparent targets leave the drawing visible around each grip. */
+.canvas-transform-handle .handle-face { transition: fill 100ms ease, stroke 100ms ease; }
+.canvas-transform-handle:hover .handle-face { fill: var(--accent); stroke: var(--text); }
+.canvas-transform-handle:hover path { stroke: var(--panel); }

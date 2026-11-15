@@ -1477,5 +1477,16 @@ const en: Record<string, string> = {
     "notify.testSent": "Test notification sent.",
     "notify.failed": "The notification could not be sent. Check browser and system permissions.",
     "notify.secureRequired": "Notifications require localhost or HTTPS.",
+    "paint.canvas.resizeHandle": "Drag to resize · Shift: keep proportions",
+    "paint.canvas.rotateHandle": "Drag to rotate · Shift: 15° · Alt: free",
+    "paint.canvas.rotateGroup": "Rotate selection · Shift: 15° · Alt: free",
+    "paint.canvas.resizeGroup": "Resize selection proportionally",
+    "paint.canvas.angleSnapped": "Angle snapped · Alt: free rotation",
+    "paint.canvas.rotationHelp": "Shift: 15° · Alt: free rotation",
+    "paint.canvas.plotLimit": "Plot boundary reached",
+    "paint.canvas.proportional": "Proportions locked",
+    "paint.canvas.aligned": "Aligned · Alt: move freely",
+    "paint.canvas.gridSnapped": "Grid · Alt: move freely",
+    "paint.canvas.freeHelp": "Alt: move freely · Esc: cancel",
 };
 export default en;
