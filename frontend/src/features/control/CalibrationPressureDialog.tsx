@@ -51,7 +51,7 @@ export default function CalibrationPressureDialog({ canMove, onClose, onBusyChan
     onBusyChange(true);
     try {
       const current = await (profileId ? api.getProfile(profileId) : api.activeProfile());
-      if (current.id !== profile.id) {
+      if (current.id !== profile.id || current.fingerprint !== profile.fingerprint) {
         setProfile(current);
         setOffset(current.calibration.calibration_pressure_offset ?? 0);
         throw new Error(t("paper.pressure.profileChanged"));

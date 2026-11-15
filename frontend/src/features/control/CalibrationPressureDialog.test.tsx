@@ -14,7 +14,7 @@ vi.mock("../../i18n", () => ({ useI18n: () => ({
   t: (key: string, vars?: Record<string, string>) => key + (vars?.z ? ` ${vars.z}` : vars?.marker ? ` ${vars.marker}` : ""),
 }) }));
 vi.mock("../../components/Toasts", () => ({ useToasts: () => ({ error: mocks.error, success: mocks.success }) }));
-const initial = { id: "active", name: "Current printer profile", calibration: {
+const initial = { id: "active", name: "Current printer profile", fingerprint: "original", calibration: {
   calibration_x: 40, calibration_y: 60, calibration_pressure_offset: 0,
   pen_down_z: 1, pen_up_z: 5, z_max: 205,
 } };
@@ -98,4 +98,14 @@ it("rejects a profile switch before saving or moving", async () => {
   await waitFor(() => expect(mocks.error).toHaveBeenCalledWith("paper.pressure.profileChanged"));
   expect(mocks.calibrationHeight).not.toHaveBeenCalled();
   expect(mocks.saveProfile).not.toHaveBeenCalled();
+});
+
+it("requires a fresh confirmation if the same profile's calibration changed before movement", async () => {
+  await setup();
+  profile = { ...profile, fingerprint: "updated", calibration: { ...profile.calibration, pen_down_z: 2 } };
+  fireEvent.click(screen.getByRole("button", { name: "paper.pressure.apply" }));
+  await waitFor(() => expect(mocks.error).toHaveBeenCalledWith("paper.pressure.profileChanged"));
+  expect(mocks.calibrationHeight).not.toHaveBeenCalled();
+  expect(mocks.saveProfile).not.toHaveBeenCalled();
+  expect(screen.getByText("paper.pressure.height 2.00")).toBeInTheDocument();
 });
