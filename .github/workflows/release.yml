@@ -42,6 +42,11 @@ jobs:
       - name: Lint
         run: uv run ruff check .
 
+      - name: Install conversion runtime libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends poppler-utils librsvg2-2
+
       - name: Run tests
         run: uv run pytest -q
 
