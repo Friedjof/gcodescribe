@@ -141,6 +141,31 @@
   min-height: 0;
 }
 
+.osm-filter-group {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin: 12px 0;
+  padding: 10px;
+}
+
+.osm-filter-group legend {
+  padding: 0 5px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.osm-filter-select {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0;
+  font-size: 12px;
+}
+
+.osm-filter-select select {
+  width: 100%;
+}
+
 .osm-map-pane {
   display: flex;
   flex-direction: column;

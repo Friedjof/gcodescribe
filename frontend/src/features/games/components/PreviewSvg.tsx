@@ -1,16 +1,27 @@
+import { useMemo } from "react";
 import type { Calibration } from "../../../api";
 import { toPath, type Pt } from "../../paint/lib/geometry";
 
-export default function GamePreviewSvg({ cal, lines, solutionLines, className = "" }: {
+export default function GamePreviewSvg({ cal, lines, solutionLines, strokeWidth, className = "" }: {
   cal: Calibration;
   lines: Pt[][];
   solutionLines?: Pt[][];
+  strokeWidth?: number;
   className?: string;
 }) {
   const W = cal.plot_width;
   const H = cal.plot_height;
   const pad = Math.max(W, H) * 0.04 + 4;
-  const stroke = Math.max(Math.max(W, H) * 0.004, 0.45);
+  const stroke = strokeWidth ?? Math.max(Math.max(W, H) * 0.004, 0.45);
+  // Independent subpaths can share one SVG element. A city with tens of
+  // thousands of roads should not need tens of thousands of DOM nodes.
+  const paths = useMemo(() => {
+    const batches: string[] = [];
+    for (let i = 0; i < lines.length; i += 256) {
+      batches.push(lines.slice(i, i + 256).map(toPath).join(" "));
+    }
+    return batches;
+  }, [lines]);
   const grid = Math.max(10, Math.round(Math.min(W, H) / 10 / 5) * 5);
   const major = grid * 5;
   return (
@@ -29,10 +40,10 @@ export default function GamePreviewSvg({ cal, lines, solutionLines, className = 
         <rect x={0} y={0} width={W} height={H} rx={1.5} fill="#101013" stroke="var(--accent)" strokeWidth={0.6} />
         <rect x={0} y={0} width={W} height={H} fill="url(#games-grid-major)" />
 
-        {lines.map((line, index) => (
+        {paths.map((path, index) => (
           <path
             key={index}
-            d={toPath(line)}
+            d={path}
             fill="none"
             stroke="var(--busy)"
             strokeWidth={stroke}

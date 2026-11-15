@@ -16,6 +16,7 @@ describe("buildOsmMapTemplate", () => {
       metadata: {
         line_count: 2,
         point_count: 7,
+        geometry_mm: 1234,
       },
     }, t);
 
@@ -24,8 +25,9 @@ describe("buildOsmMapTemplate", () => {
     expect(template.height).toBe(120);
     expect(template.lines).toHaveLength(2);
     expect(template.details).toEqual([
-      { label: "games.osm.roads", value: "2" },
+      { label: "games.osm.strokes", value: "2" },
       { label: "games.osm.points", value: "7" },
+      { label: "games.osm.geometryLength", value: "1.23 m" },
     ]);
   });
 });

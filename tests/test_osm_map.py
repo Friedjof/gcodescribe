@@ -10,6 +10,22 @@ from plotter.osm.overpass import build_overpass_query, fetch_overpass
 from plotter.osm.types import OsmMapRequest
 
 
+@pytest.fixture(autouse=True)
+def clear_map_caches(tmp_path, monkeypatch):
+    import plotter.osm.overpass as overpass
+    from plotter.osm.generate import _cached_map, _cached_roads
+
+    monkeypatch.setenv("PLOTTER_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(overpass, "_preferred_url", overpass.OVERPASS_URL)
+    _cached_map.cache_clear()
+    _cached_roads.cache_clear()
+    fetch_overpass.cache_clear()
+    yield
+    _cached_map.cache_clear()
+    _cached_roads.cache_clear()
+    fetch_overpass.cache_clear()
+
+
 def _merc_y(lat: float) -> float:
     return math.log(math.tan(math.pi / 4 + math.radians(lat) / 2))
 
@@ -44,6 +60,7 @@ def test_build_overpass_query_roads_in_bbox():
     # roads-only: no building/waterway selectors any more
     assert "building" not in query
     assert "waterway" not in query
+    assert "out skel geom qt;" in query
 
 
 def test_build_overpass_query_uses_area_id_when_given():
@@ -118,7 +135,7 @@ def test_fit_detail_budget_simplifies_without_dropping(monkeypatch):
     monkeypatch.setattr(osm_generate, "MAX_POINTS", 10)
     # Three wiggly lines, well over the point budget. The budget must simplify
     # them down — but never drop a whole line (that would re-create islands).
-    lines = [[(float(i), float(i % 2)) for i in range(20)] for _ in range(3)]
+    lines = [[(float(i), float(i % 2) + j * 10) for i in range(20)] for j in range(3)]
     out, reduced = osm_generate._fit_detail_budget(lines, 0)
 
     assert reduced is True
@@ -129,11 +146,10 @@ def test_fit_detail_budget_simplifies_without_dropping(monkeypatch):
 def test_osm_map_route_contract_and_plot_area_clamp(workspace, monkeypatch):
     from fastapi.testclient import TestClient
 
-    import plotter.osm.generate as osm_generate
     from plotter.core.calibration import Calibration
     from plotter.web.app import create_app
 
-    monkeypatch.setattr(osm_generate, "fetch_overpass", lambda _query: SAMPLE_OVERPASS)
+    monkeypatch.setattr("plotter.osm.overpass.fetch_overpass", lambda _query: SAMPLE_OVERPASS)
     Calibration(plot_width=150.0, plot_height=120.0).save()
     client = TestClient(create_app())
     payload = client.get(
@@ -191,7 +207,7 @@ def _component_count(lines, tol=0.5) -> int:
     return len({find(i) for i in range(len(lines))})
 
 
-def test_generate_connects_disconnected_roads():
+def test_generate_keeps_disconnected_roads_separate():
     data = {
         "elements": [
             {"type": "way", "id": 1, "tags": {"highway": "residential"},
@@ -205,19 +221,19 @@ def test_generate_connects_disconnected_roads():
         width=200, height=200, detail=1,
     )
     result = generate_osm_map(req, fetcher=lambda _query: data)
-    # The two separate roads are linked into ONE connected network (no islands).
-    assert _component_count(result.lines) == 1
+    # Separate roads remain separate; map routing must not invent ink bridges.
+    assert _component_count(result.lines) == 2
 
 
 def test_osm_map_gcode_endpoint_returns_score_and_3d(workspace, monkeypatch):
     from fastapi.testclient import TestClient
 
-    import plotter.osm.generate as osm_generate
     from plotter.core.calibration import Calibration
     from plotter.web.app import create_app
 
-    monkeypatch.setattr(osm_generate, "fetch_overpass", lambda _query: SAMPLE_OVERPASS)
-    Calibration(plot_width=150.0, plot_height=120.0).save()
+    monkeypatch.setattr("plotter.osm.overpass.fetch_overpass", lambda _query: SAMPLE_OVERPASS)
+    cal = Calibration(plot_width=150.0, plot_height=120.0)
+    cal.save()
     client = TestClient(create_app())
     payload = client.get(
         "/api/osm-map/gcode",
@@ -232,6 +248,7 @@ def test_osm_map_gcode_endpoint_returns_score_and_3d(workspace, monkeypatch):
         },
     ).json()
     assert "gcode3d" in payload
+    assert payload["gcode3d"]["bed"] == [cal.bed_width, cal.bed_height]
     assert isinstance(payload["score"]["total"], int)
     # One connected network drawn as a single stroke → a single pen-down.
     assert payload["metrics"]["pen_lifts"] == 1
@@ -255,3 +272,435 @@ def test_geocode_parses_and_computes_area_id():
     assert (results[0].bbox.west, results[0].bbox.east) == (7.0, 7.2)
     assert results[1].area_id == 5 + 2_400_000_000
     assert results[2].area_id is None  # nodes have no enclosing area
+
+
+def test_overpass_partial_response_is_not_cached(monkeypatch):
+    import plotter.osm.overpass as overpass
+
+    replies = iter([
+        {"elements": SAMPLE_OVERPASS["elements"], "remark": "runtime error: timed out"},
+        {"elements": SAMPLE_OVERPASS["elements"], "remark": "runtime error: timed out"},
+        SAMPLE_OVERPASS,
+    ])
+
+    class Response:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return next(replies)
+
+    monkeypatch.setattr(overpass.httpx, "post", lambda *a, **kw: Response())
+    with pytest.raises(overpass.OverpassResourceError):
+        fetch_overpass("partial-city")
+    assert fetch_overpass("partial-city") == SAMPLE_OVERPASS
+
+
+def test_overpass_invalid_json_becomes_readable_error(monkeypatch):
+    import plotter.osm.overpass as overpass
+
+    class Response:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            raise ValueError("invalid JSON")
+
+    monkeypatch.setattr(overpass.httpx, "post", lambda *a, **kw: Response())
+    with pytest.raises(ValueError, match="invalid response"):
+        fetch_overpass("invalid-json")
+
+
+def test_large_query_fallback_keeps_boundary_and_deduplicates():
+    from plotter.osm.overpass import OverpassResourceError, fetch_roads
+
+    queries = []
+
+    def load(query):
+        queries.append(query)
+        if len(queries) == 1:
+            raise OverpassResourceError("timeout")
+        return SAMPLE_OVERPASS
+
+    data = fetch_roads(BBox(52.3, 13.0, 52.5, 13.3), 3600062422, fetcher=load)
+    assert len(queries) == 3
+    assert data == SAMPLE_OVERPASS  # the way appears in both tiles, once in the result
+    for query in queries[1:]:
+        assert "(area.searchArea)(" in query
+        assert "area(3600062422)->.searchArea;" in query
+    assert "[timeout:25]" in queries[1]
+    assert "(52.3000000,13.0000000,52.5000000,13.1500000)" in queries[1]
+    assert "(52.3000000,13.1500000,52.5000000,13.3000000)" in queries[-1]
+
+
+def test_failed_tile_does_not_return_partial_city():
+    from plotter.osm.overpass import OverpassResourceError, fetch_roads
+
+    calls = 0
+
+    def load(query):
+        nonlocal calls
+        calls += 1
+        if calls != 2:
+            raise OverpassResourceError("timeout")
+        return SAMPLE_OVERPASS
+
+    with pytest.raises(OverpassResourceError):
+        fetch_roads(BBox(52.3, 13.0, 52.7, 13.8), 3600062422, fetcher=load)
+
+
+def test_repeated_map_and_detail_changes_reuse_prepared_geometry(monkeypatch):
+    from dataclasses import replace
+
+    import plotter.osm.generate as osm
+
+    downloads = []
+    preparations = []
+    prepare = osm._road_lines
+
+    def load(query):
+        downloads.append(query)
+        return SAMPLE_OVERPASS
+
+    def roads(*args):
+        preparations.append(True)
+        return prepare(*args)
+
+    monkeypatch.setattr("plotter.osm.overpass.fetch_overpass", load)
+    monkeypatch.setattr(osm, "_road_lines", roads)
+    req = OsmMapRequest(BBox(52.50, 13.35, 52.52, 13.39), 160, 120, detail=1)
+    result = generate_osm_map(req)
+    assert generate_osm_map(req) is result
+    generate_osm_map(replace(req, detail=0.1, include_frame=True))
+    assert len(downloads) == len(preparations) == 1
+
+
+def test_concurrent_map_requests_prepare_once(monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+
+    downloads = []
+
+    def load(query):
+        downloads.append(query)
+        return SAMPLE_OVERPASS
+
+    monkeypatch.setattr("plotter.osm.overpass.fetch_overpass", load)
+    req = OsmMapRequest(BBox(52.50, 13.35, 52.52, 13.39), 160, 120)
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        results = list(executor.map(lambda _: generate_osm_map(req), range(8)))
+    assert len(downloads) == 1
+    assert all(result is results[0] for result in results)
+
+
+def test_simplification_preserves_interior_junctions_and_frame(monkeypatch):
+    import plotter.osm.generate as osm
+
+    frame = [(0, 0), (10, 0), (10, 10), (0, 10), (0, 0)]
+    roads = [[(0, 5), (3, 5), (5, 5), (7, 5), (10, 5)], [(5, 5), (5, 10)]]
+    simplified = osm._simplify_network(roads, 2)
+    assert simplified == [[(0, 5), (5, 5), (10, 5)], [(5, 5), (5, 10)]]
+    monkeypatch.setattr(osm, "MAX_POINTS", 10)
+    reduced, _ = osm._fit_detail_budget([frame, *roads], 1)
+    assert reduced[0] == frame
+    assert (5, 5) in reduced[1]
+    assert len(reduced) == 3
+
+
+def test_shared_interior_vertices_do_not_add_artificial_connectors():
+    from plotter.osm.generate import _connect_components
+
+    roads = [[(0, 0), (5, 0), (10, 0)], [(5, 0), (5, 5)]]
+    assert _connect_components(roads, 0.001) == roads
+
+
+def test_dense_islands_connect_when_nearest_neighbors_are_all_local():
+    from plotter.osm.generate import _connect_components
+
+    roads = [[(float(i) + offset, 0.0) for i in range(40)] for offset in (0, 100, 200)]
+    connected = _connect_components(roads, 0.001)
+    assert _component_count(connected, tol=0.001) == 1
+    assert {point for line in roads for point in line} <= {
+        point for line in connected for point in line
+    }
+
+
+def test_maximum_detail_retains_original_road_vertices():
+    from plotter.osm.generate import _simplify_network, _simplify_tolerance
+
+    road = [(0, 0), (0.01, 0.001), (0.02, 0)]
+    assert _simplify_network([road], _simplify_tolerance(1)) == [road]
+
+
+def test_boundary_mode_still_validates_coordinate_order():
+    req = OsmMapRequest(BBox(52.7, 13.0, 52.3, 13.8), 180, 180, area_id=3600062422)
+    with pytest.raises(ValueError, match="south < north"):
+        generate_osm_map(req, fetcher=lambda _: SAMPLE_OVERPASS)
+
+
+def test_server_timeout_switches_to_working_backend_and_keeps_it(monkeypatch):
+    import httpx
+
+    import plotter.osm.overpass as overpass
+
+    urls = []
+
+    def post(url, **kwargs):
+        urls.append(url)
+        request = httpx.Request("POST", url)
+        if url == overpass.OVERPASS_URL:
+            return httpx.Response(504, request=request)
+        return httpx.Response(200, json=SAMPLE_OVERPASS, request=request)
+
+    monkeypatch.setattr(overpass.httpx, "post", post)
+    assert fetch_overpass("first-city") == SAMPLE_OVERPASS
+    assert fetch_overpass("second-city") == SAMPLE_OVERPASS
+    assert urls == [overpass.OVERPASS_URL, overpass.OVERPASS_FALLBACK_URL,
+                    overpass.OVERPASS_FALLBACK_URL]
+
+
+def test_service_outage_does_not_trigger_recursive_queries(monkeypatch):
+    import plotter.osm.overpass as overpass
+
+    calls = []
+
+    def unavailable(query):
+        calls.append(query)
+        raise overpass.OverpassUnavailableError("offline")
+
+    with pytest.raises(overpass.OverpassUnavailableError):
+        overpass.fetch_roads(BBox(52.3, 13.0, 52.5, 13.2), fetcher=unavailable)
+    assert len(calls) == 1
+
+
+def test_timed_out_subtile_is_split_again_without_losing_roads():
+    from plotter.osm.overpass import OverpassResourceError, fetch_roads
+
+    queries = []
+
+    def load(query):
+        queries.append(query)
+        if len(queries) in (1, 2):
+            raise OverpassResourceError("timeout")
+        return {"elements": [{**SAMPLE_OVERPASS["elements"][0], "id": len(queries)}]}
+
+    result = fetch_roads(BBox(52.3, 13.0, 52.5, 13.2), 3600062422, fetcher=load)
+    assert len(queries) == 5
+    assert {element["id"] for element in result["elements"]} == {3, 4, 5}
+    assert all("(area.searchArea)(" in query for query in queries[1:])
+
+
+def test_exceptionally_large_region_starts_with_small_tiles():
+    from plotter.osm.overpass import fetch_roads
+
+    queries = []
+
+    def load(query):
+        queries.append(query)
+        return SAMPLE_OVERPASS
+
+    assert fetch_roads(BBox(50, 10, 52, 14), 3600062422, fetcher=load) == SAMPLE_OVERPASS
+    assert len(queries) == 8
+    assert all("(area.searchArea)(" in query and "[timeout:25]" in query for query in queries)
+
+
+def test_download_request_limit_stops_retries(monkeypatch):
+    import plotter.osm.overpass as overpass
+
+    calls = []
+
+    def load(query):
+        calls.append(query)
+        raise overpass.OverpassResourceError("timeout")
+
+    monkeypatch.setattr(overpass, "MAX_TILE_REQUESTS", 2)
+    with pytest.raises(overpass.OverpassResourceError, match="nicht vollständig"):
+        overpass.fetch_roads(BBox(52.3, 13.0, 52.5, 13.2), fetcher=load)
+    assert len(calls) == 2
+
+
+def test_disk_cache_survives_memory_cache_reset(monkeypatch):
+    import plotter.osm.overpass as overpass
+
+    calls = []
+
+    def load(query):
+        calls.append(query)
+        return SAMPLE_OVERPASS
+
+    monkeypatch.setattr(overpass, "fetch_overpass", load)
+    box = BBox(52.50, 13.35, 52.52, 13.39)
+    assert overpass.fetch_roads(box) == SAMPLE_OVERPASS
+    from plotter.osm.generate import _cached_map, _cached_roads
+
+    _cached_map.cache_clear()
+    _cached_roads.cache_clear()
+
+    def offline(query):
+        raise AssertionError("Complete cached cities should not need the network")
+
+    monkeypatch.setattr(overpass, "fetch_overpass", offline)
+    assert overpass.fetch_roads(box) == SAMPLE_OVERPASS
+    assert len(calls) == 1
+
+
+def test_incomplete_download_is_not_written_to_disk(monkeypatch):
+    import plotter.osm.overpass as overpass
+    from plotter.osm.cache import read_roads
+
+    calls = 0
+
+    def load(query):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return SAMPLE_OVERPASS
+        raise overpass.OverpassUnavailableError("offline")
+
+    box = BBox(50, 10, 52, 14)
+    monkeypatch.setattr(overpass, "fetch_overpass", load)
+    with pytest.raises(overpass.OverpassUnavailableError):
+        overpass.fetch_roads(box, 3600062422)
+    assert read_roads(box, 3600062422, overpass.ROADS_SELECTOR) is None
+
+
+def test_corrupt_or_expired_disk_cache_allows_download(monkeypatch):
+    import os
+    import time
+
+    import plotter.osm.cache as cache
+    import plotter.osm.overpass as overpass
+
+    box = BBox(52.50, 13.35, 52.52, 13.39)
+    path = cache._path(box, None, overpass.ROADS_SELECTOR)
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"broken gzip")
+    monkeypatch.setattr(overpass, "fetch_overpass", lambda _: SAMPLE_OVERPASS)
+    assert overpass.fetch_roads(box) == SAMPLE_OVERPASS
+    assert cache.read_roads(box, None, overpass.ROADS_SELECTOR) == SAMPLE_OVERPASS
+    expired = time.time() - cache.CACHE_TTL_SECONDS - 1
+    os.utime(path, (expired, expired))
+    assert cache.read_roads(box, None, overpass.ROADS_SELECTOR) is None
+
+
+def test_cache_write_error_does_not_fail_complete_download(monkeypatch):
+    import plotter.osm.cache as cache
+    import plotter.osm.overpass as overpass
+
+    def unwritable(*args, **kwargs):
+        raise OSError("Read-only filesystem")
+
+    monkeypatch.setattr(cache.tempfile, "NamedTemporaryFile", unwritable)
+    monkeypatch.setattr(overpass, "fetch_overpass", lambda _: SAMPLE_OVERPASS)
+    assert overpass.fetch_roads(BBox(52.50, 13.35, 52.52, 13.39)) == SAMPLE_OVERPASS
+
+
+def test_rate_limit_waits_once_before_retrying(monkeypatch):
+    import httpx
+
+    import plotter.osm.overpass as overpass
+
+    calls = []
+    waits = []
+
+    def post(url, **kwargs):
+        calls.append(url)
+        request = httpx.Request("POST", url)
+        if len(calls) <= 2:
+            return httpx.Response(429, headers={"Retry-After": "5"}, request=request)
+        return httpx.Response(200, json=SAMPLE_OVERPASS, request=request)
+
+    monkeypatch.setattr(overpass.httpx, "post", post)
+    monkeypatch.setattr(overpass.time, "sleep", waits.append)
+    assert fetch_overpass("rate-limited-city") == SAMPLE_OVERPASS
+    assert waits == [5]
+    assert len(calls) == 3
+    assert calls[-1] == overpass.OVERPASS_FALLBACK_URL
+
+
+def test_rate_limit_does_not_wait_beyond_download_budget(monkeypatch):
+    import httpx
+
+    import plotter.osm.overpass as overpass
+
+    calls = []
+    waits = []
+
+    def post(url, **kwargs):
+        calls.append(url)
+        return httpx.Response(429, headers={"Retry-After": "5"}, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(overpass.httpx, "post", post)
+    monkeypatch.setattr(overpass.time, "sleep", waits.append)
+    monkeypatch.setattr(overpass, "_remaining_seconds", lambda: 4)
+    with pytest.raises(overpass.OverpassUnavailableError):
+        fetch_overpass("rate-limited-budget")
+    assert waits == []
+    assert len(calls) == 2
+
+
+def test_request_timeout_respects_remaining_download_budget(monkeypatch):
+    import plotter.osm.overpass as overpass
+
+    timeouts = []
+
+    class Response:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return SAMPLE_OVERPASS
+
+    def post(url, **kwargs):
+        timeouts.append(kwargs["timeout"])
+        return Response()
+
+    monkeypatch.setattr(overpass.httpx, "post", post)
+    monkeypatch.setattr(overpass, "_remaining_seconds", lambda: 3)
+    assert fetch_overpass("[out:json][timeout:90];out;") == SAMPLE_OVERPASS
+    assert timeouts[0].read == 3
+    assert timeouts[0].connect == 3
+
+
+def test_retry_reuses_completed_tiles_after_failed_download(monkeypatch):
+    import plotter.osm.overpass as overpass
+
+    first_calls = []
+
+    def failing(query):
+        first_calls.append(query)
+        if len(first_calls) > 1:
+            raise overpass.OverpassUnavailableError("offline")
+        return SAMPLE_OVERPASS
+
+    box = BBox(50, 10, 52, 14)
+    monkeypatch.setattr(overpass, "fetch_overpass", failing)
+    with pytest.raises(overpass.OverpassUnavailableError):
+        overpass.fetch_roads(box, 3600062422)
+    second_calls = []
+
+    def success(query):
+        second_calls.append(query)
+        return SAMPLE_OVERPASS
+
+    monkeypatch.setattr(overpass, "fetch_overpass", success)
+    assert overpass.fetch_roads(box, 3600062422) == SAMPLE_OVERPASS
+    assert len(second_calls) == 7  # the complete first tile survived the failure
+    assert first_calls[0] not in second_calls
+
+
+@pytest.mark.parametrize("endpoint", ["/api/osm-map", "/api/osm-map/gcode"])
+def test_osm_service_outage_is_not_reported_as_invalid_map(workspace, monkeypatch, endpoint):
+    from fastapi.testclient import TestClient
+
+    from plotter.osm.overpass import OverpassUnavailableError
+    from plotter.web.app import create_app
+
+    def unavailable(*args, **kwargs):
+        raise OverpassUnavailableError("Die Kartendaten-Server sind momentan ausgelastet.")
+
+    monkeypatch.setattr("plotter.osm.generate.fetch_roads", unavailable)
+    response = TestClient(create_app()).get(endpoint, params={
+        "south": 52.5, "west": 13.35, "north": 52.52, "east": 13.39,
+    })
+    assert response.status_code == 503
+    assert "ausgelastet" in response.json()["detail"]

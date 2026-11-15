@@ -48,6 +48,11 @@ export interface OsmMapRequest {
   detail: number;
   includeFrame?: boolean;
   areaId?: number | null;
+  layers?: ("roads" | "rail" | "waterways")[];
+  roadLevel?: "motorways" | "major" | "collector" | "local" | "all";
+  railLevel?: "main" | "all";
+  waterLevel?: "major" | "streams" | "all";
+  minLengthMm?: number;
 }
 
 export interface GeocodeResult {
@@ -67,6 +72,7 @@ export interface OsmMapGcode {
   gcode3d: GcodePreview3D;
   score: GalleryScore;
   metrics: GalleryMetrics;
+  route?: { retrace_mm: number; retrace_percent: number };
 }
 
 export interface OsmMapResponse {

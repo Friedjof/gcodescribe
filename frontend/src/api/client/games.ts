@@ -13,6 +13,11 @@ function osmParams(map: OsmMapRequest) {
     include_frame: String(Boolean(map.includeFrame)),
   });
   if (map.areaId != null) params.set("area_id", String(map.areaId));
+  if (map.layers) params.set("layers", map.layers.join(","));
+  if (map.roadLevel) params.set("road_level", map.roadLevel);
+  if (map.railLevel) params.set("rail_level", map.railLevel);
+  if (map.waterLevel) params.set("water_level", map.waterLevel);
+  if (map.minLengthMm != null) params.set("min_length_mm", String(map.minLengthMm));
   return params;
 }
 
@@ -37,13 +42,13 @@ export const gamesClient = {
     const params = new URLSearchParams({ function: fn, mode, seed: String(seed), width: String(Math.round(width)), height: String(Math.round(height)), complexity: String(complexity), show_seed: String(showSeed) });
     return req<ColoringPageResponse>(`/api/coloring-pages?${params.toString()}`);
   },
-  getOsmMap: (map: OsmMapRequest) => {
-    return req<OsmMapResponse>(`/api/osm-map?${osmParams(map).toString()}`);
+  getOsmMap: (map: OsmMapRequest, signal?: AbortSignal) => {
+    return req<OsmMapResponse>(`/api/osm-map?${osmParams(map).toString()}`, { signal });
   },
-  getOsmMapGcode: (map: OsmMapRequest, continuous: boolean) => {
+  getOsmMapGcode: (map: OsmMapRequest, continuous: boolean, signal?: AbortSignal) => {
     const params = osmParams(map);
     params.set("continuous", String(continuous));
-    return req<OsmMapGcode>(`/api/osm-map/gcode?${params.toString()}`);
+    return req<OsmMapGcode>(`/api/osm-map/gcode?${params.toString()}`, { signal });
   },
   geocodePlace: (q: string) => {
     const params = new URLSearchParams({ q });

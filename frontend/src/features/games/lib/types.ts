@@ -70,6 +70,7 @@ export type TemplateSpec = {
   width: number;
   height: number;
   details: TemplateDetail[];
+  continuous?: boolean;
 };
 
 export type GeneratedPreview = {

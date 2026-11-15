@@ -1,15 +1,17 @@
 from __future__ import annotations
 
-import numpy as np
+from typing import Literal
+
 from fastapi import APIRouter, HTTPException, Query
 
-from plotter.artwork.drawing import Drawing, placed_gcode
 from plotter.artwork.pipeline import PlotterError
 from plotter.core.calibration import Calibration
 from plotter.gcode.metrics import evaluate_gcode
 from plotter.gcode.preview import parse_gcode_3d_text
+from plotter.gcode.scene import scene_gcode
 
 from ...osm import BBox, OsmMapRequest, generate_osm_map, geocode
+from ...osm.overpass import OverpassResourceError, OverpassUnavailableError
 from ...services.upload_validation import MAX_GCODE_BYTES
 
 router = APIRouter(tags=["osm-map"])
@@ -52,6 +54,11 @@ def osm_map(
     detail: float = Query(0.5, ge=0.0, le=1.0),
     include_frame: bool = Query(False),
     area_id: int | None = Query(None, ge=0),
+    layers: str = Query("roads", pattern=r"^(roads|rail|waterways)(,(roads|rail|waterways))*$"),
+    road_level: Literal["motorways", "major", "collector", "local", "all"] = "all",
+    rail_level: Literal["main", "all"] = "main",
+    water_level: Literal["major", "streams", "all"] = "all",
+    min_length_mm: float = Query(0.0, ge=0.0, le=10.0),
 ) -> dict:
     cal = Calibration.load()
     width = max(20.0, min(width, cal.plot_width))
@@ -65,8 +72,13 @@ def osm_map(
                 detail=detail,
                 include_frame=include_frame,
                 area_id=area_id,
+                layers=tuple(sorted(set(layers.split(",")))),
+                road_level=road_level, rail_level=rail_level, water_level=water_level,
+                min_length_mm=min_length_mm,
             )
         )
+    except (OverpassResourceError, OverpassUnavailableError) as exc:
+        raise HTTPException(503, str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     return {
@@ -89,13 +101,17 @@ def osm_map_gcode(
     detail: float = Query(0.5, ge=0.0, le=1.0),
     include_frame: bool = Query(False),
     area_id: int | None = Query(None, ge=0),
-    continuous: bool = Query(True),
+    continuous: bool = Query(False),
+    layers: str = Query("roads", pattern=r"^(roads|rail|waterways)(,(roads|rail|waterways))*$"),
+    road_level: Literal["motorways", "major", "collector", "local", "all"] = "all",
+    rail_level: Literal["main", "all"] = "main",
+    water_level: Literal["major", "streams", "all"] = "all",
+    min_length_mm: float = Query(0.0, ge=0.0, le=10.0),
 ) -> dict:
     """Generate plotter G-code for the map and return its 3D preview + score.
 
-    Mirrors how the map will actually plot (scaled to fill the plot area), so the
-    score and pen-lift count are real. ``continuous`` draws the whole network in
-    one stroke for maximum plottability.
+    Shares placement and routing with the editor's imported map page.
+    ``continuous`` retraces existing edges to reduce lifts per connected network.
     """
     cal = Calibration.load()
     width = max(20.0, min(width, cal.plot_width))
@@ -109,25 +125,30 @@ def osm_map_gcode(
                 detail=detail,
                 include_frame=include_frame,
                 area_id=area_id,
+                layers=tuple(sorted(set(layers.split(",")))),
+                road_level=road_level, rail_level=rail_level, water_level=water_level,
+                min_length_mm=min_length_mm,
             )
         )
         if not result.lines:
-            raise HTTPException(422, "No roads found here — try another place.")
-        polylines = [
-            np.array([complex(x, y) for x, y in line]) for line in result.lines if len(line) >= 2
-        ]
-        drawing = Drawing(polylines, result.width, result.height)
-        bx0, by0, bx1, by1 = drawing.bounds()
-        bw, bh = bx1 - bx0, by1 - by0
-        if bw <= 0 or bh <= 0:
-            raise HTTPException(422, "The map has no plottable area.")
-        scale = min(cal.plot_width / bw, cal.plot_height / bh)
-        gcode = placed_gcode(
-            drawing, cal, x=cal.origin_x, y=cal.origin_y,
-            width=bw * scale, name="osm-map", continuous=continuous,
-        )
+            raise HTTPException(422, "No lines found for these map filters.")
+        # Use the same placement and route planner as the imported editor page.
+        gcode = scene_gcode({
+            "name": "osm-map", "continuous": continuous,
+            "objects": [{"data": {"template": "osmMap"}, "cachedPolylines": result.lines}],
+        }, cal)
+    except (OverpassResourceError, OverpassUnavailableError) as exc:
+        raise HTTPException(503, str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     except PlotterError as exc:
         raise HTTPException(422, str(exc)) from exc
-    return {"gcode3d": parse_gcode_3d_text(gcode), **evaluate_gcode(gcode, MAX_GCODE_BYTES)}
+    evaluated = evaluate_gcode(gcode, MAX_GCODE_BYTES)
+    draw_mm = evaluated["metrics"]["draw_mm"]
+    retrace_mm = max(0.0, draw_mm - float(result.metadata["geometry_mm"])) if continuous else 0.0
+    return {
+        "gcode3d": {**parse_gcode_3d_text(gcode),
+                    "bed": [cal.bed_width, cal.bed_height]}, **evaluated,
+        "route": {"retrace_mm": round(retrace_mm, 1),
+                  "retrace_percent": round(100 * retrace_mm / max(draw_mm, 1e-9), 1)},
+    }

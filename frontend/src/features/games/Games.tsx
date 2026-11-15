@@ -249,7 +249,10 @@ export default function Games({ visible = true, onOpenPaint, desktop = false }: 
   const createPageFromTemplate = (gameId: GameId, template: TemplateSpec) => {
     setBusy(true); setErr(null);
     api.createPage(template.name)
-      .then((page) => api.savePage(page.id, { objects: [templateObject(gameId, template.lines)] }))
+      .then((page) => api.savePage(page.id, {
+        objects: [templateObject(gameId, template.lines)],
+        ...(template.continuous != null ? { continuous: template.continuous } : {}),
+      }))
       .then(() => { setPreview(null); onOpenPaint(); })
       .catch(fail)
       .finally(() => setBusy(false));

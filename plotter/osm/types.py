@@ -13,14 +13,17 @@ class BBox:
     north: float
     east: float
 
-    def validate(self) -> None:
+    def validate(self, *, check_span: bool = True) -> None:
         if not (-90.0 <= self.south <= 90.0 and -90.0 <= self.north <= 90.0):
             raise ValueError("Latitude must be between -90 and 90 degrees.")
         if not (-180.0 <= self.west <= 180.0 and -180.0 <= self.east <= 180.0):
             raise ValueError("Longitude must be between -180 and 180 degrees.")
         if self.south >= self.north or self.west >= self.east:
             raise ValueError("Bounding box must use south < north and west < east.")
-        if self.north - self.south > MAX_BBOX_SPAN_DEG or self.east - self.west > MAX_BBOX_SPAN_DEG:
+        if check_span and (
+            self.north - self.south > MAX_BBOX_SPAN_DEG
+            or self.east - self.west > MAX_BBOX_SPAN_DEG
+        ):
             raise ValueError("Map area is too large. Search a place to use its boundary.")
 
 
@@ -34,6 +37,11 @@ class OsmMapRequest:
     # When set, roads are queried within this OSM area (whole city/boundary,
     # city-roads style) instead of the bbox rectangle.
     area_id: int | None = None
+    layers: tuple[str, ...] = ("roads",)
+    road_level: str = "all"
+    rail_level: str = "main"
+    water_level: str = "all"
+    min_length_mm: float = 0.0
 
 
 @dataclass(frozen=True)
