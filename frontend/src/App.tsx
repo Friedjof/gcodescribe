@@ -220,6 +220,7 @@ function AdminApp() {
         <SettingsDialog
           onClose={() => setSettingsOpen(false)}
           onSaved={(saved: EffectiveSettings) => {
+            void refreshStatus();
             if (saved.ai.enabled && !aiStatus?.enabled) {
               api.aiImageStatus().then((s) => {
                 setAiStatus(s);

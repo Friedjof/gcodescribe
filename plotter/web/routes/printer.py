@@ -72,13 +72,9 @@ def serial_probe(req: SerialProbeRequest) -> dict:
 @router.get("/printer/octoprint/check")
 def octoprint_check() -> dict:
     """Probe OctoPrint reachability with the currently saved settings."""
-    from plotter.core.config import load_settings
-
     from ...printer.octoprint import OctoPrintClient, OctoPrintError
-    from ...services.settings_store import load_saved
 
-    cfg = load_settings(load_saved()).printer
-    client = OctoPrintClient(base_url=cfg.octoprint_url, api_key=cfg.octoprint_api_key)
+    client = OctoPrintClient()
     if not client.configured:
         return {
             "ok": False,

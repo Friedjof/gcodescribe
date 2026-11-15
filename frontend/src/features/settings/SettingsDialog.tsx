@@ -53,7 +53,7 @@ export default function SettingsDialog({
     }
     api
       .resetSetting(sec, field)
-      .then((d) => setData(d))
+      .then((d) => { setData(d); onSaved?.(d); })
       .catch((e) => setErr(String(e.message ?? e)));
   };
 

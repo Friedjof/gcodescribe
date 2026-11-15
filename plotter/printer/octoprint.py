@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-import os
 import threading
 import time
 from pathlib import Path
 
 import httpx
+
+from plotter.core.config import load_settings
+from plotter.services.settings_store import load_saved
 
 from .base import PrinterError, require_manual_motion
 
@@ -34,14 +36,25 @@ class OctoPrintClient:
     """Thin wrapper around the OctoPrint REST API."""
 
     def __init__(self, base_url: str | None = None, api_key: str | None = None):
-        self.base_url = (base_url or os.environ.get("OCTOPRINT_URL", "")).rstrip("/")
-        self.api_key = api_key or os.environ.get("OCTOPRINT_API_KEY", "")
-        # Set OCTOPRINT_VERIFY_SSL=false to skip cert verification (self-signed / internal CA).
-        verify_env = os.environ.get("OCTOPRINT_VERIFY_SSL", "true").lower()
-        self.verify_ssl: bool | str = verify_env not in ("false", "0", "no")
+        self._base_url_override = base_url
+        self._api_key_override = api_key
+        self._refresh_config()
+
+    def _refresh_config(self) -> None:
+        # The manager lives for the process lifetime. Re-read effective settings
+        # so saving credentials also updates that existing client, without
+        # resetting the manager or interrupting a serial worker.
+        cfg = load_settings(load_saved()).printer
+        url = cfg.octoprint_url if self._base_url_override is None else self._base_url_override
+        self.base_url = url.rstrip("/")
+        self.api_key = (
+            cfg.octoprint_api_key if self._api_key_override is None else self._api_key_override
+        )
+        self.verify_ssl = cfg.octoprint_verify_ssl
 
     @property
     def configured(self) -> bool:
+        self._refresh_config()
         return bool(self.base_url and self.api_key)
 
     def _key(self) -> tuple:
@@ -50,7 +63,7 @@ class OctoPrintClient:
     def _client(self) -> httpx.Client:
         if not self.configured:
             raise OctoPrintError(
-                "OctoPrint is not configured (set OCTOPRINT_URL and OCTOPRINT_API_KEY)."
+                "OctoPrint is not configured (save a URL and API key in settings)."
             )
         key = self._key()
         with _pool_lock:
