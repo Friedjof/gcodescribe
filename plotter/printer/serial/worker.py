@@ -601,17 +601,11 @@ _worker: SerialWorker | None = None
 
 
 def get_worker(
-    port: str | None = None,
-    baud: int | None = None,
+    port: str = DEFAULT_PORT,
+    baud: int = DEFAULT_BAUD,
     transport_factory: TransportFactory | None = None,
 ) -> SerialWorker:
     global _worker
-    from plotter.core.config import load_settings
-    from plotter.services.settings_store import load_saved
-
-    cfg = load_settings(load_saved()).printer
-    port = cfg.serial_port if port is None else port
-    baud = cfg.serial_baud if baud is None else baud
     with _worker_lock:
         if _worker is None:
             _worker = SerialWorker(port, baud, transport_factory)

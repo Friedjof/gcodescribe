@@ -1,119 +1,92 @@
+"""Construct drivers from explicit settings; application lifetime lives in services."""
+
 from __future__ import annotations
 
-import os
-import threading
-
-from plotter.core.config import PrinterSettings, load_settings
+from plotter.core.config import PrinterSettings
 
 from .base import PrinterBackend
-from .manager import OCTOPRINT, SERIAL, PrinterManager, load_active
+from .manager import OCTOPRINT, SERIAL, PrinterManager
 
 
-def _settings() -> PrinterSettings:
-    from plotter.services.settings_store import load_saved
-
-    return load_settings(load_saved()).printer
-
-
-def _truthy(value: str | None) -> bool:
-    return (value or "").strip().lower() in ("1", "true", "yes", "on")
-
-
-def use_serial() -> bool:
-    """Back-compat flag: whether serial is enabled."""
-    return serial_enabled()
-
-
-def serial_enabled() -> bool:
-    return _settings().serial_enabled
-
-
-def octoprint_configured() -> bool:
-    cfg = _settings()
-    return bool(cfg.octoprint_url and cfg.octoprint_api_key)
-
-
-_manager_lock = threading.Lock()
-_manager: PrinterManager | None = None
-_manager_settings: PrinterSettings | None = None
-
-
-def _serial_config(cfg: PrinterSettings) -> tuple:
-    return cfg.serial_enabled, cfg.serial_port, cfg.serial_baud
-
-
-def get_printer_client() -> PrinterBackend:
-    """Keep connection settings current, deferring serial changes during a job."""
-    global _manager, _manager_settings
-    with _manager_lock:
-        cfg = _settings()
-        if _manager is None:
-            _manager = _build_manager(cfg)
-            _manager_settings = cfg
-        elif (
-            _manager_settings is not None
-            and (_serial_config(cfg), cfg.default_backend)
-            != (_serial_config(_manager_settings), _manager_settings.default_backend)
-            and not _manager._job_active()
-        ):
-            previous = _manager
-            serial_changed = _serial_config(cfg) != _serial_config(_manager_settings)
-            if serial_changed:
-                previous._release_serial()
-            # Retain an explicit current selection while adding/editing an idle
-            # connection. If it was unconfigured, choose an available backend.
-            preferred = previous.active_id if previous.active().configured else None
-            if cfg.default_backend != _manager_settings.default_backend:
-                preferred = None
-            _manager = _build_manager(cfg, preferred=preferred)
-            _manager_settings = cfg
-            switched = previous.active_id != _manager.active_id
-            if switched and previous.active_id == SERIAL and not serial_changed:
-                previous._release_serial()
-            if switched or (serial_changed and previous.active_id == SERIAL):
-                previous._invalidate_position()
-        return _manager
-
-
-def reset_manager() -> None:
-    """Drop the cached manager (used by tests after changing settings)."""
-    global _manager, _manager_settings
-    with _manager_lock:
-        _manager = None
-        _manager_settings = None
-
-
-def _build_manager(
-    cfg: PrinterSettings | None = None,
+def build_backends(
+    cfg: PrinterSettings,
     *,
-    preferred: str | None = None,
-) -> PrinterManager:
+    previous: PrinterSettings | None = None,
+    manager: PrinterManager | None = None,
+) -> dict[str, PrinterBackend]:
+    """Reuse unchanged clients so an unrelated edit never resets a connection."""
     from .octoprint import OctoPrintClient
+    from .serial import SerialClient
 
-    cfg = cfg or _settings()
-    backends: dict[str, PrinterBackend] = {OCTOPRINT: OctoPrintClient()}
+    octo = manager.backend(OCTOPRINT) if manager else None
+    if (
+        octo is None
+        or previous is None
+        or (cfg.octoprint_url, cfg.octoprint_api_key, cfg.octoprint_verify_ssl)
+        != (previous.octoprint_url, previous.octoprint_api_key, previous.octoprint_verify_ssl)
+    ):
+        octo = OctoPrintClient(
+            cfg.octoprint_url, cfg.octoprint_api_key, verify_ssl=cfg.octoprint_verify_ssl
+        )
+    backends: dict[str, PrinterBackend] = {OCTOPRINT: octo}
     if cfg.serial_enabled:
-        from .serial import SerialClient
+        serial = manager.backend(SERIAL) if manager else None
+        if (
+            serial is None
+            or previous is None
+            or (cfg.serial_port, cfg.serial_baud) != (previous.serial_port, previous.serial_baud)
+        ):
+            serial = SerialClient(port=cfg.serial_port, baud=cfg.serial_baud)
+        backends[SERIAL] = serial
+    return backends
 
-        backends[SERIAL] = SerialClient(port=cfg.serial_port, baud=cfg.serial_baud)
-    active = preferred if preferred in backends else _resolve_initial_active(backends, cfg)
-    return PrinterManager(backends, active)
 
-
-def _resolve_initial_active(
+def resolve_initial_active(
     backends: dict[str, PrinterBackend],
-    cfg: PrinterSettings | None = None,
+    cfg: PrinterSettings,
+    *,
+    saved: str | None = None,
+    legacy_serial: bool = False,
 ) -> str:
-    # Priority: explicit selection -> effective default -> legacy flag -> configured backend.
-    saved = load_active()
+    """Selection priority, with all persistence/environment values supplied."""
     if saved in backends:
         return saved
-    cfg = cfg or _settings()
     if cfg.default_backend in backends:
         return cfg.default_backend
-    if _truthy(os.environ.get("PRINTER_USE_SERIAL")) and SERIAL in backends:
+    if legacy_serial and SERIAL in backends:
         return SERIAL
     for pref in (OCTOPRINT, SERIAL):
         if pref in backends and backends[pref].configured:
             return pref
     return next(iter(backends), OCTOPRINT)
+
+
+# Compatibility entry points used by controllers, MCP and the web app. Imports
+# stay lazy so low-level printer modules do not depend on application services.
+def get_printer_client() -> PrinterManager:
+    from plotter.services.printer_runtime import get_printer_client as get
+
+    return get()
+
+
+def reset_manager() -> None:
+    from plotter.services.printer_runtime import reset_manager as reset
+
+    reset()
+
+
+def serial_enabled() -> bool:
+    from plotter.services.printer_runtime import printer_settings
+
+    return printer_settings().serial_enabled
+
+
+def use_serial() -> bool:
+    return serial_enabled()
+
+
+def octoprint_configured() -> bool:
+    from plotter.services.printer_runtime import printer_settings
+
+    cfg = printer_settings()
+    return bool(cfg.octoprint_url and cfg.octoprint_api_key)

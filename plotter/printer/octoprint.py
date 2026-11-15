@@ -6,27 +6,14 @@ from pathlib import Path
 
 import httpx
 
-from plotter.core.config import load_settings
-from plotter.services.settings_store import load_saved
-
 from .base import PrinterError, require_manual_motion
-from .types import PrinterStatus
+from .types import PrinterJob, PrinterStatus
 
 # A short connect timeout keeps an unreachable/slow printer from tying up a
 # request worker for 30s (the old default) — the status loop polls every few
 # seconds, so a dead relay must fail fast or it starves the whole threadpool.
 _TIMEOUT = httpx.Timeout(connect=3.0, read=8.0, write=8.0, pool=3.0)
 _STATUS_TTL = 2.0  # seconds; collapse rapid status polls into one upstream call
-
-# Persistent, connection-pooled client keyed by config. Reusing it keeps the
-# TCP+TLS connection alive across requests instead of re-handshaking every call
-# (the status snapshot alone made three sequential requests).
-_pool_lock = threading.Lock()
-_pool: dict[tuple, httpx.Client] = {}
-
-# Cached status snapshot shared across PrinterController instances.
-_status_lock = threading.Lock()
-_status_cache: dict[tuple, tuple[float, PrinterStatus]] = {}
 
 
 class OctoPrintError(PrinterError):
@@ -36,48 +23,46 @@ class OctoPrintError(PrinterError):
 class OctoPrintClient:
     """Thin wrapper around the OctoPrint REST API."""
 
-    def __init__(self, base_url: str | None = None, api_key: str | None = None):
-        self._base_url_override = base_url
-        self._api_key_override = api_key
-        self._refresh_config()
-
-    def _refresh_config(self) -> None:
-        # The manager lives for the process lifetime. Re-read effective settings
-        # so saving credentials also updates that existing client, without
-        # resetting the manager or interrupting a serial worker.
-        cfg = load_settings(load_saved()).printer
-        url = cfg.octoprint_url if self._base_url_override is None else self._base_url_override
-        self.base_url = url.rstrip("/")
-        self.api_key = (
-            cfg.octoprint_api_key if self._api_key_override is None else self._api_key_override
-        )
-        self.verify_ssl = cfg.octoprint_verify_ssl
+    def __init__(self, base_url: str = "", api_key: str = "", *, verify_ssl: bool = True):
+        # The application supplies one connection snapshot. Reading properties
+        # or sending consecutive requests must never reload/change credentials.
+        self.base_url = base_url.rstrip("/")
+        self.api_key = api_key
+        self.verify_ssl = verify_ssl
+        self._lock = threading.Lock()
+        self._http: httpx.Client | None = None
+        self._status_cache: tuple[float, PrinterStatus] | None = None
+        self._last_known_job: PrinterJob | None = None
 
     @property
     def configured(self) -> bool:
-        self._refresh_config()
         return bool(self.base_url and self.api_key)
-
-    def _key(self) -> tuple:
-        return (self.base_url, self.api_key, self.verify_ssl)
 
     def _client(self) -> httpx.Client:
         if not self.configured:
             raise OctoPrintError(
                 "OctoPrint is not configured (save a URL and API key in settings)."
             )
-        key = self._key()
-        with _pool_lock:
-            client = _pool.get(key)
-            if client is None:
-                client = httpx.Client(
+        with self._lock:
+            if self._http is None:
+                self._http = httpx.Client(
                     base_url=self.base_url,
                     headers={"X-Api-Key": self.api_key},
                     timeout=_TIMEOUT,
                     verify=self.verify_ssl,
                 )
-                _pool[key] = client
-            return client
+            return self._http
+
+    def close(self) -> None:
+        """Release the connection pool when replaced or on app shutdown."""
+        with self._lock:
+            client, self._http = self._http, None
+            self._status_cache = None
+        if client is not None:
+            client.close()
+
+    def version(self) -> dict:
+        return self._request("GET", "/api/version").json()
 
     def _request(self, method: str, path: str, **kwargs) -> httpx.Response:
         try:
@@ -92,7 +77,7 @@ class OctoPrintClient:
 
     # --- status ----------------------------------------------------------
 
-    def status(self) -> PrinterStatus:
+    def status(self, *, fresh: bool = False) -> PrinterStatus:
         """Combined connection / printer / job snapshot for the UI.
 
         Cached for a couple of seconds: the UI polls this every few seconds and
@@ -101,16 +86,26 @@ class OctoPrintClient:
         """
         if not self.configured:
             return {"configured": False, "backend": "octoprint"}
-        key = self._key()
         now = time.monotonic()
-        with _status_lock:
-            cached = _status_cache.get(key)
-            if cached and now - cached[0] < _STATUS_TTL:
+        with self._lock:
+            cached = self._status_cache
+            if not fresh and cached and now - cached[0] < _STATUS_TTL:
                 return cached[1]
         snapshot = self._fetch_status()
-        with _status_lock:
-            _status_cache[key] = (time.monotonic(), snapshot)
+        with self._lock:
+            self._status_cache = (time.monotonic(), snapshot)
         return snapshot
+
+    def reconfiguration_status(self) -> PrinterStatus:
+        """Refresh the job guard; retain a known job across connection failures.
+
+        An unreachable, previously idle/unconfigured connection must still be
+        editable. Losing connectivity during a known plot must not unlock it.
+        """
+        status = self.status(fresh=True)
+        if status.get("job") is None and self._last_known_job is not None:
+            return {**status, "job": self._last_known_job}
+        return status
 
     def _fetch_status(self) -> PrinterStatus:
         out: PrinterStatus = {"configured": True, "backend": "octoprint", "url": self.base_url}
@@ -128,6 +123,7 @@ class OctoPrintClient:
             out["printer"] = None  # printer offline / not operational
         try:
             out["job"] = self._request("GET", "/api/job").json()
+            self._last_known_job = out["job"]
         except OctoPrintError:
             out["job"] = None
         return out

@@ -1,21 +1,25 @@
 from __future__ import annotations
 
-from unittest.mock import patch
+import threading
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
+from dataclasses import replace
+from unittest.mock import Mock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 import plotter.printer.factory as factory
+from plotter.core.config import load_settings
 from plotter.core.position import get_tracker
-from plotter.printer.base import PrinterBackend
+from plotter.printer.base import PrinterBackend, PrinterError
 from plotter.printer.manager import (
     OCTOPRINT,
     SERIAL,
     BackendBusyError,
     BackendUnavailableError,
     PrinterManager,
-    load_active,
 )
+from plotter.services.settings_store import load_active_backend, save_active_backend
 
 
 class FakeBackend:
@@ -49,11 +53,18 @@ class FakeBackend:
     def gcode(self, commands):
         self.calls.append(("gcode", commands))
 
+    def close(self):
+        self.calls.append(("close",))
+
 
 def _manager(active=OCTOPRINT, **kw) -> tuple[PrinterManager, FakeBackend, FakeBackend]:
     octo = FakeBackend(**kw.get("octo", {}))
     ser = FakeBackend(**kw.get("ser", {}))
-    return PrinterManager({OCTOPRINT: octo, SERIAL: ser}, active), octo, ser
+    return PrinterManager(
+        {OCTOPRINT: octo, SERIAL: ser}, active,
+        on_selection=save_active_backend,
+        on_connection_changed=kw.get("on_connection_changed", get_tracker().invalidate),
+    ), octo, ser
 
 
 # -- protocol + delegation -------------------------------------------------
@@ -88,9 +99,10 @@ def test_set_active_switches_and_persists(workspace):
     mgr, octo, ser = _manager(active=OCTOPRINT)
     mgr.set_active(SERIAL)
     assert mgr.active_id == SERIAL
-    assert load_active() == SERIAL
+    assert load_active_backend() == SERIAL
     mgr.gcode(["G28"])
-    assert ser.calls and not octo.calls
+    assert ser.calls == [("gcode", ["G28"])]
+    assert octo.calls == [("close",)]
 
 
 def test_set_active_unknown_backend(workspace):
@@ -136,39 +148,139 @@ def test_switch_invalidates_position(workspace):
 
 
 def test_leaving_serial_releases_port(workspace):
-    mgr, _, _ = _manager(active=SERIAL)
-    with patch.object(PrinterManager, "_release_serial") as release:
-        mgr.set_active(OCTOPRINT)
-    release.assert_called_once()
+    mgr, _, serial = _manager(active=SERIAL)
+    mgr.set_active(OCTOPRINT)
+    assert serial.calls == [("close",)]
 
 
 def test_switch_to_same_backend_is_noop(workspace):
-    mgr, _, _ = _manager(active=OCTOPRINT)
-    with patch.object(PrinterManager, "_invalidate_position") as inv:
-        mgr.set_active(OCTOPRINT)
+    inv = Mock()
+    mgr, _, _ = _manager(active=OCTOPRINT, on_connection_changed=inv)
+    mgr.set_active(OCTOPRINT)
     inv.assert_not_called()
+
+
+def test_failed_activation_keeps_previous_selection(workspace):
+    mgr, octo, serial = _manager()
+    serial.ensure_started = Mock(side_effect=RuntimeError("cannot activate"))
+    with pytest.raises(RuntimeError, match="cannot activate"):
+        mgr.set_active(SERIAL)
+    assert mgr.active() is octo
+    assert load_active_backend() is None
+    assert serial.calls == [("close",)]
+
+
+def test_old_inactive_serial_is_closed_before_its_replacement_starts(workspace):
+    mgr, octo, serial = _manager()
+    events = []
+    serial.close = lambda: events.append("close-old-serial")
+    replacement = FakeBackend()
+    replacement.ensure_started = lambda: events.append("start-new-serial")
+    assert mgr.reconfigure({OCTOPRINT: octo, SERIAL: replacement}, SERIAL)
+    assert events == ["close-old-serial", "start-new-serial"]
+
+
+def test_configuration_refresh_preserves_a_newer_explicit_selection(workspace):
+    mgr, _, serial = _manager()
+    prepared = {OCTOPRINT: FakeBackend(), SERIAL: serial}
+    mgr.set_active(SERIAL)
+    serial.calls.clear()
+    assert mgr.reconfigure(prepared, OCTOPRINT, preserve_selection=True)
+    assert mgr.active() is serial
+    assert serial.calls == []
+
+
+def test_reconfiguration_waits_for_upload_and_keeps_the_started_job(workspace):
+    entered, finish, attempted = threading.Event(), threading.Event(), threading.Event()
+    mgr, octo, _ = _manager()
+
+    def upload(path, *, start):
+        entered.set()
+        assert finish.wait(timeout=3)
+        octo._job_state = "Printing"
+        return {"done": True}
+
+    octo.upload = upload
+
+    def reconfigure():
+        attempted.set()
+        return mgr.reconfigure({OCTOPRINT: FakeBackend()}, OCTOPRINT)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        sending = pool.submit(mgr.upload, workspace / "plot.gcode", start=True)
+        try:
+            assert entered.wait(timeout=3)
+            replacing = pool.submit(reconfigure)
+            assert attempted.wait(timeout=3)
+            with pytest.raises(TimeoutError):
+                replacing.result(timeout=0.05)
+        finally:
+            finish.set()
+        assert sending.result(timeout=3) == {"done": True}
+        assert replacing.result(timeout=3) is False
+    assert mgr.active() is octo
+    assert octo.calls == []
+
+
+def test_slow_status_poll_does_not_block_cancel(workspace):
+    entered, finish = threading.Event(), threading.Event()
+    mgr, octo, _ = _manager()
+
+    def status():
+        entered.set()
+        assert finish.wait(timeout=3)
+        return {"configured": True, "job": {"state": "Printing"}}
+
+    octo.status = status
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        polling = pool.submit(mgr.status)
+        try:
+            assert entered.wait(timeout=3)
+            cancelling = pool.submit(mgr.job_command, "cancel")
+            cancelling.result(timeout=1)
+            assert octo.calls == [("job", "cancel")]
+        finally:
+            finish.set()
+        assert polling.result(timeout=3)["job"]["state"] == "Printing"
+
+
+def test_closed_manager_cannot_reopen_old_connections(workspace):
+    mgr, octo, serial = _manager()
+    mgr.close()
+    mgr.close()
+    assert octo.calls == serial.calls == [("close",)]
+    with pytest.raises(PrinterError, match="closed"):
+        mgr.job_command("cancel")
+    with pytest.raises(PrinterError, match="closed"):
+        mgr.set_active(SERIAL)
 
 
 # -- initial active resolution --------------------------------------------
 
 
 def test_resolve_persisted_wins(workspace, monkeypatch):
-    from plotter.printer.manager import save_active
-
-    save_active(SERIAL)
+    save_active_backend(SERIAL)
     monkeypatch.setenv("PRINTER_DEFAULT_BACKEND", OCTOPRINT)
-    assert factory._resolve_initial_active({OCTOPRINT: 1, SERIAL: 2}) == SERIAL
+    assert factory.resolve_initial_active(
+        {OCTOPRINT: FakeBackend(), SERIAL: FakeBackend()}, load_settings().printer,
+        saved=load_active_backend(),
+    ) == SERIAL
 
 
 def test_resolve_env_default(workspace, monkeypatch):
     monkeypatch.setenv("PRINTER_DEFAULT_BACKEND", SERIAL)
-    assert factory._resolve_initial_active({OCTOPRINT: 1, SERIAL: 2}) == SERIAL
+    assert factory.resolve_initial_active(
+        {OCTOPRINT: FakeBackend(), SERIAL: FakeBackend()}, load_settings().printer,
+    ) == SERIAL
 
 
 def test_resolve_backcompat_use_serial(workspace, monkeypatch):
     monkeypatch.delenv("PRINTER_DEFAULT_BACKEND", raising=False)
     monkeypatch.setenv("PRINTER_USE_SERIAL", "true")
-    assert factory._resolve_initial_active({OCTOPRINT: 1, SERIAL: 2}) == SERIAL
+    assert factory.resolve_initial_active(
+        {OCTOPRINT: FakeBackend(), SERIAL: FakeBackend()},
+        replace(load_settings().printer, default_backend=""), legacy_serial=True,
+    ) == SERIAL
 
 
 def test_serial_enabled_flag(monkeypatch):

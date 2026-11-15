@@ -4,11 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from plotter.core.config import load_settings
-from plotter.printer.serial.transport import TransportFactory
-from plotter.printer.serial.worker import SerialWorker, get_worker, peek_worker
+from plotter.printer.serial.transport import DEFAULT_BAUD, DEFAULT_PORT, TransportFactory
+from plotter.printer.serial.worker import SerialWorker, get_worker, peek_worker, shutdown_worker
 from plotter.printer.types import PrinterStatus
-from plotter.services.settings_store import load_saved
 
 
 class SerialClient:
@@ -16,13 +14,12 @@ class SerialClient:
 
     def __init__(
         self,
-        port: str | None = None,
-        baud: int | None = None,
+        port: str = DEFAULT_PORT,
+        baud: int = DEFAULT_BAUD,
         transport_factory: TransportFactory | None = None,
     ):
-        cfg = load_settings(load_saved()).printer
-        self.port = cfg.serial_port if port is None else port
-        self.baud = cfg.serial_baud if baud is None else baud
+        self.port = port
+        self.baud = baud
         self._transport_factory = transport_factory
 
     @property
@@ -36,6 +33,9 @@ class SerialClient:
         """Start (and connect) the worker — called when serial becomes active."""
         if self.configured:
             self._worker()
+
+    def close(self) -> None:
+        shutdown_worker()
 
     def status(self) -> PrinterStatus:
         if not self.configured:

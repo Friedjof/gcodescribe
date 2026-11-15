@@ -6,7 +6,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from plotter.printer import factory
-from plotter.printer.manager import PrinterManager
 from plotter.printer.serial import SerialClient
 from plotter.services.settings_store import patch_saved
 from plotter.web.app import create_app
@@ -14,6 +13,7 @@ from plotter.web.app import create_app
 
 @pytest.fixture
 def serial_settings(workspace, monkeypatch):
+    release = Mock()
     for key in (
         "OCTOPRINT_URL",
         "OCTOPRINT_API_KEY",
@@ -38,6 +38,9 @@ def serial_settings(workspace, monkeypatch):
         def ensure_started(self):
             self.started += 1
 
+        def close(self):
+            release()
+
         def status(self):
             return {
                 "configured": self.configured,
@@ -48,8 +51,6 @@ def serial_settings(workspace, monkeypatch):
             }
 
     monkeypatch.setattr("plotter.printer.serial.SerialClient", FakeSerial)
-    release = Mock()
-    monkeypatch.setattr(PrinterManager, "_release_serial", release)
     return release
 
 
@@ -140,21 +141,53 @@ def test_saved_serial_disable_overrides_environment(serial_settings, monkeypatch
     assert [b["id"] for b in factory.get_printer_client().backends()] == ["octoprint"]
 
 
-def test_serial_client_uses_saved_port_and_baud_without_opening_port(serial_settings):
+def test_serial_client_uses_explicit_values_without_loading_saved_settings(serial_settings):
+    from plotter.printer.serial.transport import DEFAULT_BAUD, DEFAULT_PORT
+
     patch_saved({"printer.serial_port": "/dev/ttyACM7", "printer.serial_baud": 250000})
     client = SerialClient()
-    assert (client.port, client.baud) == ("/dev/ttyACM7", 250000)
+    assert (client.port, client.baud) == (DEFAULT_PORT, DEFAULT_BAUD)
     explicit = SerialClient(port="", baud=57600)
     assert explicit.configured is False
     assert explicit.baud == 57600
 
 
-def test_worker_defaults_use_saved_connection(serial_settings, monkeypatch):
+def test_worker_uses_explicit_connection_without_loading_saved_settings(
+    serial_settings, monkeypatch
+):
     from plotter.printer.serial import worker
 
     patch_saved({"printer.serial_port": "/dev/ttyACM8", "printer.serial_baud": 250000})
     constructor = Mock()
     monkeypatch.setattr(worker, "SerialWorker", constructor)
     monkeypatch.setattr(worker, "_worker", None)
-    assert worker.get_worker() is constructor.return_value
+    assert worker.get_worker("/dev/ttyACM8", 250000) is constructor.return_value
     constructor.assert_called_once_with("/dev/ttyACM8", 250000, None)
+
+
+def test_pending_serial_edits_apply_only_the_latest_snapshot(serial_settings):
+    patch_saved({"printer.serial_enabled": True, "printer.serial_port": "/dev/original"})
+    manager = factory.get_printer_client()
+    original = manager.active()
+    original.state = "Printing"
+    serial_settings.reset_mock()
+    patch_saved({"printer.serial_port": "/dev/intermediate"})
+    assert factory.get_printer_client().active() is original
+    patch_saved({"printer.serial_port": "/dev/latest", "printer.serial_baud": 250000})
+    assert factory.get_printer_client().active() is original
+    serial_settings.assert_not_called()
+    original.state = "Operational"
+    assert factory.get_printer_client() is manager
+    assert manager.active().port == "/dev/latest"
+    assert manager.active().baud == 250000
+    assert manager.active().started == 1
+    serial_settings.assert_called_once()
+
+
+def test_runtime_shutdown_releases_connection_once(serial_settings):
+    patch_saved({"printer.serial_enabled": True})
+    factory.get_printer_client()
+    serial_settings.reset_mock()
+    factory.reset_manager()
+    factory.reset_manager()
+    serial_settings.assert_called_once()
