@@ -40,9 +40,9 @@ export default function OverlayLayer({
       {/* live draft preview */}
       {draftWorld.map((line, i) => (
         <path key={`d${i}`} d={toPath(line as Pt[])}
-          fill={draftTool === "areaFill" ? "var(--busy)" : "none"}
+          fill={draftTool === "areaFill" ? "var(--ink)" : "none"}
           fillOpacity={draftTool === "areaFill" ? 0.14 : undefined}
-          stroke={draftTool === "erase" || draftTool === "eraseLine" ? "var(--err)" : "var(--busy)"}
+          stroke={draftTool === "erase" || draftTool === "eraseLine" ? "var(--err)" : "var(--ink)"}
           strokeWidth={draftTool === "erase" || draftTool === "eraseLine" ? effRadius * 2 : STROKE}
           strokeDasharray={draftTool === "eraseLine" ? `${STROKE * 2} ${STROKE}` : undefined}
           strokeLinejoin="round" strokeLinecap="round" />

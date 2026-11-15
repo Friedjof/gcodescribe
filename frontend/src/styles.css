@@ -16,3 +16,5 @@
 @import "./styles/font-editor.css";
 @import "./styles/editor-tokens.css";
 @import "./styles/editor-shell.css";
+
+@import "./styles/editor-workspace.css";

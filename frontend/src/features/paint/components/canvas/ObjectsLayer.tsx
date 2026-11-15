@@ -31,14 +31,14 @@ const ObjectView = memo(function ObjectView({ obj, selected, stroke, interactive
         fill="none" stroke="var(--accent)" strokeWidth={stroke / scale}
         strokeDasharray={`${stroke * 4 / scale} ${stroke * 3 / scale}`} />}
     {pressurePaths ? pressurePaths.map((path, i) => path && <path key={i} d={path} fill="none"
-      stroke={obj.plotted ? "var(--muted)" : "var(--busy)"} strokeOpacity={0.35 + i / 7 * 0.65}
+      stroke={obj.plotted ? "var(--muted)" : "var(--ink)"} strokeOpacity={0.35 + i / 7 * 0.65}
       strokeWidth={stroke / scale} strokeLinejoin="round" strokeLinecap="round" />) : raster ? <>
       <defs><mask id={maskId} maskUnits="userSpaceOnUse" x={raster.x} y={raster.y} width={raster.width} height={raster.height}>
         <image href={raster.url} x={raster.x} y={raster.y} width={raster.width} height={raster.height} preserveAspectRatio="none" />
       </mask></defs>
-      <rect x={raster.x} y={raster.y} width={raster.width} height={raster.height} fill={obj.plotted ? "var(--muted)" : "var(--busy)"} mask={`url(#${maskId})`} />
-    </> : <path d={d} fill={mask ? "#101013" : "none"} fillOpacity={mask ? 0.92 : undefined}
-      stroke={mask ? selected ? "var(--accent)" : "rgba(255,255,255,0.45)" : obj.plotted ? "var(--muted)" : "var(--busy)"}
+      <rect x={raster.x} y={raster.y} width={raster.width} height={raster.height} fill={obj.plotted ? "var(--muted)" : "var(--ink)"} mask={`url(#${maskId})`} />
+    </> : <path d={d} fill={mask ? "var(--paper)" : "none"} fillOpacity={mask ? 0.92 : undefined}
+      stroke={mask ? selected ? "var(--accent)" : "var(--paper-mask)" : obj.plotted ? "var(--muted)" : "var(--ink)"}
       strokeWidth={stroke / scale} strokeDasharray={mask ? `${stroke * 2 / scale} ${stroke / scale}` : undefined}
       strokeLinejoin="round" strokeLinecap="round" />}
   </g>;

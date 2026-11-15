@@ -17,6 +17,10 @@
   --busy: #455b8a;
   --workspace: #e6e9ed;
   --paper: #ffffff;
+  --paper-grid-minor: #dce2e9;
+  --paper-grid-major: #b7c3d0;
+  --paper-border: #858f9c;
+  --paper-mask: #78828e;
   --ink: #171a20;
   --active-bg: #e4efff;
   --focus: #155db8;
@@ -64,3 +68,7 @@ input[aria-invalid="true"] { border-color: var(--err); }
 .modal { border-radius: 7px; background: var(--panel); color: var(--text); }
 .modal-backdrop { background: #17202d66; backdrop-filter: none; }
 code { background: var(--panel-2); color: var(--text); border-radius: 3px; }
+/* Segmented choices are flat and use the same selection treatment as tabs. */
+.seg .seg-indicator { background: var(--active-bg); border: 1px solid var(--border); box-shadow: none; transition: none; }
+.seg button.active, .seg button[data-active="true"] { color: var(--accent); text-shadow: none; box-shadow: none; }
+.seg button:hover:not(:disabled) { transform: none; }

@@ -1,4 +1,13 @@
 const de: Record<string, string> = {
+  "interface.canvasView": "Arbeitsfläche",
+  "interface.pages": "Seiten",
+  "interface.properties": "Eigenschaften",
+  "interface.rulers": "Lineale",
+  "interface.canvasPadding": "Papierrand",
+  "interface.resizePages": "Breite der Seitenleiste ändern",
+  "interface.resizeProperties": "Breite der Eigenschaften ändern",
+  "interface.fitPage": "Seite einpassen",
+
     "lang.de": "Deutsch",
     "lang.en": "English",
     "lang.ba": "Bayerisch",

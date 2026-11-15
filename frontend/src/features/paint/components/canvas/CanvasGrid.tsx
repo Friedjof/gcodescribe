@@ -9,6 +9,7 @@ export default function CanvasGrid({
   pad,
   step,
   major,
+  gridVisible = true,
 }: {
   W: number;
   H: number;
@@ -16,6 +17,7 @@ export default function CanvasGrid({
   pad: number;
   step: number;
   major: number;
+  gridVisible?: boolean;
 }) {
   const { t } = useI18n();
   return (
@@ -23,18 +25,18 @@ export default function CanvasGrid({
       <defs>
         <pattern id="pc-grid-minor" width={step} height={step} patternUnits="userSpaceOnUse">
           <path d={`M ${step} 0 L 0 0 L 0 ${step}`} fill="none"
-            stroke="rgba(255,255,255,0.06)" strokeWidth={0.25} />
+            stroke="var(--paper-grid-minor)" strokeWidth={0.25} />
         </pattern>
         <pattern id="pc-grid-major" width={major} height={major} patternUnits="userSpaceOnUse">
           <rect width={major} height={major} fill="url(#pc-grid-minor)" />
           <path d={`M ${major} 0 L 0 0 L 0 ${major}`} fill="none"
-            stroke="rgba(255,255,255,0.13)" strokeWidth={0.4} />
+            stroke="var(--paper-grid-major)" strokeWidth={0.4} />
         </pattern>
       </defs>
-      <rect x={0} y={0} width={W} height={H} rx={1.5} fill="#101013"
-        stroke="var(--accent)" strokeWidth={0.6} />
-      <rect x={0} y={0} width={W} height={H} fill="url(#pc-grid-major)" />
-      <g pointerEvents="none" aria-hidden="true">
+      <rect x={0} y={0} width={W} height={H} fill="var(--paper)"
+        stroke="var(--paper-border)" strokeWidth={0.6} />
+      {gridVisible && <rect x={0} y={0} width={W} height={H} fill="url(#pc-grid-major)" />}
+      {pad > 0 && <g pointerEvents="none" aria-hidden="true">
         <g className="canvas-orientation-marker">
           <path d={`M ${W / 2 - S * 0.055} ${-pad * 0.45} L ${W / 2} ${-pad * 0.7} L ${W / 2 + S * 0.055} ${-pad * 0.45}`} />
           <text x={W / 2} y={-pad * 0.14} textAnchor="middle">{t("paint.orientationTop")}</text>
@@ -43,7 +45,7 @@ export default function CanvasGrid({
           fill="var(--muted)" textAnchor="middle">
           {W.toFixed(0)} × {H.toFixed(0)} mm
         </text>
-      </g>
+      </g>}
     </>
   );
 }

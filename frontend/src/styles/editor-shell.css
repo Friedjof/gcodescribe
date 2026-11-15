@@ -45,19 +45,6 @@ html, body, #root { height: 100%; min-height: 0; }
 .tab-order-actions { display: flex; align-items: center; gap: 4px; }
 .tab-order-actions > button:last-child { font-size: 11px; min-height: 28px; }
 .app .background-tasks { bottom: 28px; border-radius: 4px; background: var(--panel); }
-/* The shell owns height; individual workspaces must not subtract guessed header sizes. */
-.app .paint { height: 100%; min-height: 0; gap: 0; grid-template-columns: 220px minmax(0, 1fr); }
-.app .paint.pages-collapsed { grid-template-columns: 54px minmax(0, 1fr); }
-.app .paint-pages { border: 0; border-right: 1px solid var(--border); border-radius: 0; box-shadow: none; padding: 8px; }
-.app .paint-editor { border: 0; border-radius: 0; box-shadow: none; padding: 8px; min-width: 0; }
-.app .paint-workspace { grid-template-columns: 40px minmax(0, 1fr) 260px; gap: 8px; }
-.app .paint-context-panel, .app .paint-tool-rail, .app .paint-canvas { border-radius: 3px; }
-.app .paint-tool-rail { padding: 4px 2px; gap: 4px; }
-.app .paint-profile-context { font-size: 11px; margin: 2px 0 6px; }
-.app .paint-toolbar { gap: 6px; margin: 0 0 6px; }
-.app .paint-toolbar h2 { font-size: 13px; margin: 0; }
-.app .paint-toolbar button { min-height: 28px; padding: 4px 8px; font-size: 11px; }
-.app .paint-zoom-controls { border-radius: 4px; background: var(--panel); backdrop-filter: none; box-shadow: none; }
 .app .paper-grid { padding: 12px; gap: 12px; }
 @media (max-width: 1100px) { .app-titlebar .notify-enable .notify-label { display: none; } .workspace-customize span { display: none; } }
 @media (max-width: 820px) {
@@ -65,10 +52,6 @@ html, body, #root { height: 100%; min-height: 0; }
   .app-titlebar .header-actions { gap: 3px; }
   .app-brand { font-size: 12px; }
   .app-titlebar .lang-select { max-width: 64px; }
-  .app .paint { grid-template-columns: 1fr; height: auto; }
-  .app .paint-pages { max-height: 220px; }
-  .app .paint-workspace { grid-template-columns: 1fr; }
-  .app .paint-canvas-wrap { min-height: 380px; }
   .tab-settings-list > li { gap: 6px; }
   .tab-order-actions { gap: 2px; }
 }

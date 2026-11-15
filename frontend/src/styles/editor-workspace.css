@@ -1,0 +1,38 @@
+/* The editor owns its available height. Panes can shrink without hiding controls. */
+.paint .paint-pages { border: 0; border-right: 1px solid var(--border); border-radius: 0; box-shadow: none; padding: var(--panel-pad); }
+.paint .paint-editor { border: 0; border-radius: 0; box-shadow: none; padding: 0; min-width: 0; overflow: hidden; }
+.paint.properties-collapsed .paint-workspace { grid-template-columns: 40px minmax(0, 1fr); }
+.paint-layout-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 3px; padding: 4px 8px; background: var(--panel-2); border-bottom: 1px solid var(--border); }
+.paint-layout-controls button { gap: 5px; min-height: 26px; padding: 3px 7px; font-size: 11px; background: transparent; border-color: transparent; }
+.paint-layout-controls button[aria-pressed="true"] { background: var(--active-bg); border-color: var(--border); color: var(--accent); }
+.paint-layout-controls label { margin-left: auto; display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; }
+.paint-layout-controls select { padding: 3px; min-height: 25px; font-size: 11px; width: 66px; }
+.toolbar-divider { width: 1px; height: 18px; margin: 0 5px; background: var(--border); }
+.panel-resize-handle { min-width: 5px; height: 100%; cursor: col-resize; touch-action: none; background: var(--panel-2); position: relative; z-index: 2; }
+.panel-resize-handle:hover, .panel-resize-handle.dragging { background: var(--accent); }
+.panel-resize-handle:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.paint .paint-toolbar { flex: 0 0 auto; gap: 6px; padding: 7px 10px; margin: 0; border-bottom: 1px solid var(--border); }
+.paint .paint-toolbar h2 { font-size: 13px; margin: 0; }
+.paint .paint-toolbar button { min-height: 28px; padding: 4px 8px; font-size: 11px; }
+.paint .paint-profile-context { flex: 0 0 auto; padding: 4px 10px; margin: 0; font-size: 11px; }
+.paint .paint-context-panel { border: 0; border-radius: 0; background: var(--panel); padding: var(--panel-pad); }
+.paint .ctx-header { border-color: var(--border); }
+.paint .paint-tool-rail { border: 0; border-right: 1px solid var(--border); border-radius: 0; background: var(--panel-2); padding: 3px 2px; gap: 3px; overflow-y: auto; }
+.paint .paint-tool-rail .seg button { color: var(--text); border-radius: 3px; min-height: 26px; }
+.paint .paint-tool-rail .seg button.active { color: var(--accent); }
+.paint .paint-tool-rail .seg { gap: 2px; }
+.paint .paint-tool-rail .rail-group { flex-shrink: 0; }
+.paint .paint-canvas { border: 0; }
+.paint .paint-zoom-controls { border-radius: 0; box-shadow: none; }
+.paint .save-status, .paint .paint-plot-error { margin: 4px 8px; }
+@media (max-width: 820px) {
+  .paint, .paint.pages-collapsed { grid-template-columns: 1fr; height: auto; }
+  .paint .paint-pages { max-height: 220px; border-bottom: 1px solid var(--border); }
+  .paint .paint-workspace, .paint.properties-collapsed .paint-workspace { grid-template-columns: 1fr; }
+  .paint .panel-resize-handle { display: none; }
+  .paint .paint-tool-rail { flex-direction: row; overflow-x: auto; padding: 4px; }
+  .paint .paint-canvas-wrap { min-height: 420px; }
+  .paint .paint-canvas > svg { min-height: 360px; height: auto; }
+  .paint .paint-context-panel { max-height: 420px; border-top: 1px solid var(--border); }
+  .paint .paint-layout-controls label { margin-left: 0; }
+}

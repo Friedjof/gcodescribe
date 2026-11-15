@@ -117,10 +117,9 @@ it("keeps handle targets in screen pixels through zoom and window resize", () =>
   const before = targetWidth() / viewWidth();
   fireEvent.wheel(view.svg, { deltaY: -250, clientX: 40, clientY: 30 });
   expect(targetWidth() / viewWidth()).toBeCloseTo(before);
-  const oldTarget = targetWidth();
   vi.mocked(view.svg.getBoundingClientRect).mockReturnValue({ x: 0, y: 0, width: 400, height: 300, top: 0, left: 0, right: 400, bottom: 300, toJSON: () => ({}) });
   fireEvent.resize(window);
-  expect(targetWidth()).toBeCloseTo(oldTarget * 2);
+  expect(targetWidth() / viewWidth() * 400).toBeCloseTo(before * 800);
 });
 it("does not steal Space from focused toolbar buttons", () => {
   const view = setup();
@@ -202,4 +201,21 @@ it("rotates a constrained group without moving or shrinking its objects independ
   expect(first.rotation).toBeCloseTo(Math.PI / 4);
   expect(second.x - first.x).toBeCloseTo((65 - 60) / Math.sqrt(2) * factor);
   expect(second.y - first.y).toBeCloseTo((65 + 60) / Math.sqrt(2) * factor);
+});
+
+it("cancels a pending object edit when a dock resize changes pointer mapping", () => {
+  const view = setup();
+  fireEvent.pointerDown(view.moveHit(), { clientX: 40, clientY: 30, button: 0, pointerId: 1 });
+  view.move(55, 45);
+  vi.mocked(view.svg.getBoundingClientRect).mockReturnValue({ x: 0, y: 0, width: 400, height: 300, top: 0, left: 0, right: 400, bottom: 300, toJSON: () => ({}) });
+  fireEvent.resize(window); fireEvent.pointerUp(view.svg, { pointerId: 1 });
+  expect(view.props.onUpdateMany).not.toHaveBeenCalled();
+  expect(view.props.onEditStart).not.toHaveBeenCalled();
+});
+it("lets the user hide rulers and grid independently of snapping", () => {
+  const view = setup();
+  view.rerender(<PaintCanvas {...view.props} gridVisible={false} showRulers={false} padding={0} />);
+  expect(view.container.querySelector(".canvas-rulers")).toBeNull();
+  expect(view.container.querySelector('rect[fill="url(#pc-grid-major)"]')).toBeNull();
+  expect(view.container.querySelector('rect[fill="var(--paper)"]')).not.toBeNull();
 });

@@ -29,10 +29,13 @@ import {
   resizeLocals,
 } from "./lib/viewTransform";
 import { boundedSelectionTransforms, clampedTransform, gestureRotation, moveSelection, resizeTransform, sameTransform } from "./lib/canvasTransforms";
-import { useCanvasMetrics } from "./hooks/useCanvasMetrics";
+import { useCanvasSize } from "./hooks/useCanvasSize";
 import CanvasGestureReadout from "./components/canvas/CanvasGestureReadout";
 import type { GestureFeedback, RotationHint } from "./components/canvas/CanvasGestureReadout";
 import { geometryTask } from "./lib/geometryTasks";
+import { canvasUnitsPerPixel } from "./lib/canvasTransforms";
+import { fitCanvasView } from "./lib/canvasViewport";
+import CanvasRulers from "./components/canvas/CanvasRulers";
 import CanvasGrid from "./components/canvas/CanvasGrid";
 import ObjectsLayer from "./components/canvas/ObjectsLayer";
 import OverlayLayer from "./components/canvas/OverlayLayer";
@@ -74,6 +77,9 @@ const ERASER_RADIUS = 2.5;
 
 function PaintCanvas({
   visible = true,
+  gridVisible = true,
+  showRulers = true,
+  padding = 32,
   cal,
   page,
   tool,
@@ -96,6 +102,9 @@ function PaintCanvas({
   eraserIsPoint = false,
 }: {
   visible?: boolean;
+  gridVisible?: boolean;
+  showRulers?: boolean;
+  padding?: number;
   cal: Calibration;
   page: Page;
   tool: Tool;
@@ -125,15 +134,11 @@ function PaintCanvas({
   const step = page.grid?.step ?? 10;
   const snapOn = page.grid?.snap ?? false;
   const major = step * 5;
-  const pad = Math.max(W, H) * 0.04 + 4;
+  const pad = padding / 32 * (Math.max(W, H) * 0.04 + 4);
   const S = Math.max(W, H);
   const viewBounds = rotatedBounds(W, H, viewRotation);
-  const baseView: ViewBox = {
-    x: viewBounds[0] - pad,
-    y: viewBounds[1] - pad,
-    w: viewBounds[2] - viewBounds[0] + 2 * pad,
-    h: viewBounds[3] - viewBounds[1] + 2 * pad,
-  };
+  const size = useCanvasSize(svgRef, () => cancelGesture());
+  const baseView: ViewBox = fitCanvasView(viewBounds, size, padding + (showRulers ? 20 : 0));
 
   const [draft, setDraft] = useState<Draft | null>(null);
   const [marquee, setMarquee] = useState<Marquee | null>(null);
@@ -178,7 +183,7 @@ function PaintCanvas({
       frame.current = null;
       clearTimeout(zoomTimer.current);
     };
-  }, [page.id, visible, tool, viewRotation, W, H]);
+  }, [page.id, visible, tool, viewRotation, W, H, padding, showRulers]);
   const displayObjects = useMemo(() => page.objects.map((obj) => {
     const transform = previewTransforms.get(obj.id);
     return transform ? { ...obj, transform } : obj;
@@ -186,7 +191,7 @@ function PaintCanvas({
   const zoom = baseView.w / view.w;
   // Stylus eraser tip or barrel eraser button overrides the active tool.
   const effectiveTool: Tool = stylusErasing ? "erase" : tool;
-  const pixel = useCanvasMetrics(svgRef, view);
+  const pixel = canvasUnitsPerPixel(view, size);
   const STROKE = pixel * 1.3;
   const LINE_STROKE = (S * 0.0045) / zoom;
   const HANDLE = pixel * 11;
@@ -763,9 +768,10 @@ function PaintCanvas({
   return (
     <div className="paint-canvas">
       <div className="paint-zoom-controls">
-        <button className="ghost tiny" type="button" title={t("paint.zoomOut")} onClick={() => zoomAt(1 / 1.2)}>−</button>
+        <button className="ghost tiny" type="button" onClick={() => { cancelGesture(); setView(baseView); }} title={t("interface.fitPage")}>{t("interface.fitPage")}</button>
+        <button className="ghost tiny" type="button" aria-label={t("paint.zoomOut")} title={t("paint.zoomOut")} onClick={() => zoomAt(1 / 1.2)}>−</button>
         <span>{t("paint.zoomLevel", { pct: String(Math.round(zoom * 100)) })}</span>
-        <button className="ghost tiny" type="button" title={t("paint.zoomIn")} onClick={() => zoomAt(1.2)}>+</button>
+        <button className="ghost tiny" type="button" aria-label={t("paint.zoomIn")} title={t("paint.zoomIn")} onClick={() => zoomAt(1.2)}>+</button>
         <button
           className="ghost tiny canvas-rotate-button"
           type="button"
@@ -793,7 +799,7 @@ function PaintCanvas({
         onDrop={onDrop}
       >
         <g transform={canvasRotationTransform}>
-        <CanvasGrid W={W} H={H} S={S} pad={pad} step={step} major={major} />
+        <CanvasGrid W={W} H={H} S={S} pad={pad} step={step} major={major} gridVisible={gridVisible} />
 
         <ObjectsLayer objects={objectsByZ} selectedIds={selectedIds} stroke={LINE_STROKE} active={visible} interactive={previewTransforms.size > 0 || panning || zooming} />
 
@@ -828,6 +834,7 @@ function PaintCanvas({
         )}
 
         </g>
+        {showRulers && <CanvasRulers view={view} pixel={pixel} rotation={viewRotation} width={W} height={H} />}
         <CanvasGestureReadout objects={displayObjects.filter(obj => selectedIds.includes(obj.id))}
           feedback={feedback} rotationHint={rotationHint} draft={draft}
           pixel={pixel} view={view} width={W} height={H} viewRotation={viewRotation} />

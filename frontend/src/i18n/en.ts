@@ -1,4 +1,13 @@
 const en: Record<string, string> = {
+  "interface.canvasView": "Canvas view",
+  "interface.pages": "Pages",
+  "interface.properties": "Properties",
+  "interface.rulers": "Rulers",
+  "interface.canvasPadding": "Paper margin",
+  "interface.resizePages": "Resize pages panel",
+  "interface.resizeProperties": "Resize properties panel",
+  "interface.fitPage": "Fit page",
+
     "lang.de": "Deutsch",
     "lang.en": "English",
     "lang.ba": "Bavarian",

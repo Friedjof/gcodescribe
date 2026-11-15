@@ -4,6 +4,9 @@ import { startImport } from "../../api/assetTasks";
 import { errorMessage, isAbortError } from "../../api/errors";
 import { discardEdits, flushEdits, queueObjects, rememberPage } from "../../api/pageEdits";
 import type { PrinterStatus } from "../../api/types/printer";
+import PanelResizeHandle from "../../components/editor/PanelResizeHandle";
+import { useInterface } from "../../interface/InterfaceProvider";
+import PaintLayoutControls from "./components/PaintLayoutControls";
 import DelayedLoading from "../../components/DelayedLoading";
 import type { Gcode3DView } from "../../components/Gcode3D";
 import Gcode3DOverlay from "../../components/Gcode3DOverlay";
@@ -78,9 +81,12 @@ export default function Paint({
   const [viewRotation, setViewRotation] = useState<ViewRotation>(0);
   const [sizeLinked, setSizeLinked] = useState(true);
   const [infoOpen, setInfoOpen] = useState(false);
-  const [pagesCollapsed, setPagesCollapsed] = useState(() => {
-    try { return localStorage.getItem("paint-pages-collapsed") === "1"; } catch { return false; }
-  });
+  const { preferences, update: updateInterface } = useInterface();
+  const pagesCollapsed = !preferences.pagesPanel.open;
+  const [pagesWidth, setPagesWidth] = useState(preferences.pagesPanel.width);
+  const [propertiesWidth, setPropertiesWidth] = useState(preferences.propertiesPanel.width);
+  useEffect(() => setPagesWidth(preferences.pagesPanel.width), [preferences.pagesPanel.width]);
+  useEffect(() => setPropertiesWidth(preferences.propertiesPanel.width), [preferences.propertiesPanel.width]);
   const [coloringOpen, setColoringOpen] = useState(false);
   const globalLive = useLiveRegistryState();
   const { confirm, ConfirmNode } = useConfirm();
@@ -262,16 +268,11 @@ export default function Paint({
     : null;
   const selectedStyle = ops.pendingStyle ?? (selectedObjects.length > 0 ? objectStyle(selectedObjects[0]) : DEFAULT_VECTOR_STYLE);
 
-  const togglePagesCollapsed = () => {
-    setPagesCollapsed((v) => {
-      const next = !v;
-      try { localStorage.setItem("paint-pages-collapsed", next ? "1" : "0"); } catch {}
-      return next;
-    });
-  };
+  const togglePagesCollapsed = () => updateInterface(p => ({ ...p, pagesPanel: { ...p.pagesPanel, open: !p.pagesPanel.open } }));
 
   return (
-    <div className={`paint${pagesCollapsed ? " pages-collapsed" : ""}`}>
+    <div className={`paint${pagesCollapsed ? " pages-collapsed" : ""}${!preferences.propertiesPanel.open ? " properties-collapsed" : ""}`}
+      style={{ "--pages-width": `${pagesWidth}px`, "--properties-width": `${propertiesWidth}px` } as React.CSSProperties}>
       <PaintObjectMenu menu={menu} objects={page.objects} ops={ops} onClose={() => setMenu(null)} />
       {imageImport && (
         <PaintImageModal
@@ -308,7 +309,10 @@ export default function Paint({
         onToggleSidebar={togglePagesCollapsed}
       />
 
+      {!pagesCollapsed && <PanelResizeHandle label={t("interface.resizePages")} width={pagesWidth} min={180} max={400}
+        onChange={setPagesWidth} onCommit={width => updateInterface(p => ({ ...p, pagesPanel: { ...p.pagesPanel, width } }))} />}
       <section className="card paint-editor">
+        <PaintLayoutControls />
         <PaintToolbar
           page={page}
           desktop={desktop}
@@ -370,6 +374,9 @@ export default function Paint({
             )}
             <PaintCanvas
               visible={visible}
+              gridVisible={preferences.canvas.gridVisible}
+              showRulers={preferences.canvas.rulers}
+              padding={preferences.canvas.padding}
               cal={cal}
               page={page}
               tool={tool}
@@ -384,6 +391,9 @@ export default function Paint({
             />
           </div>
 
+          {preferences.propertiesPanel.open && <>
+          <PanelResizeHandle label={t("interface.resizeProperties")} width={propertiesWidth} min={240} max={400} direction={-1}
+            onChange={setPropertiesWidth} onCommit={width => updateInterface(p => ({ ...p, propertiesPanel: { ...p.propertiesPanel, width } }))} />
           <PaintContextPanel key={page.id}
             tool={tool}
             activeToolLabel={activeToolMeta ? activeToolMeta.label : ""}
@@ -403,6 +413,7 @@ export default function Paint({
             onOpenMarkdown={() => setMdOpen(true)}
             onPickImage={pickImage}
           />
+          </>}
         </div>
 
         <p className="muted hint">
