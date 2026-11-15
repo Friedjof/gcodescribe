@@ -39,6 +39,8 @@ def build_asset(
     original = item_dir / f"original{suffix}"
     original.write_bytes(data)
     pages, mode_used = build_pages(original, item_dir, suffix, mode, detail)
+    if kind == "xopp" and len(pages) != 1:
+        raise PlotterError("Bitte Xournal++-Seiten vor dem Import auswählen.")
     first = pages[0]
     return {
         "id": item_id,
@@ -50,7 +52,7 @@ def build_asset(
         "status": "active",
         "mode": mode_used,
         "detail": detail,
-        "continuous": True,
+        "continuous": kind != "xopp",
         "pages": pages,
         "width": first["width"],
         "height": first["height"],
@@ -78,7 +80,7 @@ def build_submission(
 
     profile = ProfileService().active()
     active_meta = profile_meta(profile)
-    cal = Calibration().merged(profile["calibration"])
+    cal = Calibration.from_dict(profile["calibration"])
     gcode = profile_comment(active_meta) + fitted_gcode(drawing, cal, name=filename)
     if len(gcode.encode()) > MAX_GCODE_BYTES:
         raise UploadTooLarge(
@@ -164,7 +166,7 @@ def rerender_submission(
 
     profile = ProfileService().active()
     active_meta = profile_meta(profile)
-    cal = Calibration().merged(profile["calibration"])
+    cal = Calibration.from_dict(profile["calibration"])
     gcode = profile_comment(active_meta) + fitted_gcode(
         drawing, cal, name=meta.get("filename") or meta["id"], continuous=continuous
     )

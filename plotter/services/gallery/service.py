@@ -5,16 +5,21 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import tempfile
+import threading
 import time
 import uuid
+from functools import wraps
 from pathlib import Path
 
 from plotter.artwork.drawing import load_svg_drawing
 from plotter.artwork.pipeline import PlotterError
+from plotter.artwork.xopp import read_xopp
 from plotter.core.calibration import Calibration, data_dir
 from plotter.core.jobmeta import profile_comment
+from plotter.gcode.scene import scene_gcode
 from plotter.services.asset_pages import (
     DESIGNER_POINTS,
     VALID_MODES,
@@ -43,6 +48,16 @@ from plotter.services.upload_validation import (
     sniff_asset_kind,
     sniff_kind,
 )
+
+_metadata_lock = threading.RLock()
+
+
+def _metadata_write(method):
+    @wraps(method)
+    def locked(*args, **kwargs):
+        with _metadata_lock:
+            return method(*args, **kwargs)
+    return locked
 
 
 class GalleryService:
@@ -187,6 +202,8 @@ class GalleryService:
                 "stl_params": params,
             }
         )
+        meta["render_revision"] = uuid.uuid4().hex
+        meta.pop("derived_dir", None)
         (item_dir / "meta.json").write_text(json.dumps(meta, indent=2))
         return meta
 
@@ -230,8 +247,45 @@ class GalleryService:
                     meta, item_dir, tmp, pages, mode_used, detail, continuous
                 )
         updated["original"] = {**original_info, "size": original.stat().st_size}
+        updated.pop("derived_dir", None)
+        updated["render_revision"] = uuid.uuid4().hex
         (item_dir / "meta.json").write_text(json.dumps(updated, indent=2))
         return updated
+
+    @_metadata_write
+    def publish_task(self, staged: Path, meta: dict, token: str,
+                     expected_revision: str | float | None = None) -> dict:
+        """Install a complete generation; readers see the old or new metadata."""
+        item_id = meta["id"]
+        destination = self.root / item_id
+        if expected_revision is None:
+            if not destination.exists():
+                meta["render_revision"] = token
+                (staged / "meta.json").write_text(json.dumps(meta))
+                os.replace(staged, destination)
+            return self.get(item_id)
+        current = self.get(item_id)
+        if current.get("render_revision") == token:
+            return current  # recovery after publication, before task acknowledgement
+        if current.get("render_revision", current.get("created")) != expected_revision:
+            raise ServiceError("Das Bild wurde inzwischen neu gerendert. Bitte erneut starten.")
+        generation = destination / "generations" / token
+        generation.parent.mkdir(exist_ok=True)
+        if not generation.exists():
+            os.replace(staged, generation)
+        meta = {**meta, "title": current["title"], "status": current["status"],
+                "render_revision": token, "derived_dir": f"generations/{token}"}
+        meta["pages"] = [{**p, "file": f"generations/{token}/{p['file']}"}
+                         for p in meta["pages"]]
+        tmp = destination / f"meta-{token}.tmp"
+        tmp.write_text(json.dumps(meta))
+        os.replace(tmp, destination / "meta.json")
+        # Retain one previous generation for requests already reading it.
+        keep = {token, str(current.get("render_revision", ""))}
+        for old in generation.parent.iterdir():
+            if old.is_dir() and old.name not in keep:
+                shutil.rmtree(old, ignore_errors=True)
+        return meta
 
     # -- queries ---------------------------------------------------------------
 
@@ -277,30 +331,79 @@ class GalleryService:
         return path, info
 
     def gcode_path(self, item_id: str) -> Path:
-        path = self.root / item_id / GCODE_FILE
+        meta = self.get(item_id)
+        path = self.root / item_id / meta.get("derived_dir", "") / GCODE_FILE
         if not path.exists():
             raise ServiceError(f"Einreichung nicht gefunden: {item_id}")
         return path
 
     def gcode_preview_text(self, item_id: str, page: int = 1) -> str:
         """Stored submission G-code, or transient fitted G-code for admin assets."""
-        path = self.root / item_id / GCODE_FILE
+        meta = self.get(item_id)
+        path = self.root / item_id / meta.get("derived_dir", "") / GCODE_FILE
         if path.exists():
             return path.read_text(errors="replace")
         meta = self.get(item_id)
         entry = records.page_entry(meta, page)
-        drawing = load_svg_drawing(self.root / item_id / entry["file"], quantization_mm=0.25)
+        if meta.get("kind") == "xopp":
+            original, _ = self.original_path(item_id)
+            drawing = read_xopp(original)[page - 1]
+        else:
+            drawing = load_svg_drawing(self.root / item_id / entry["file"], quantization_mm=0.25)
         if drawing.is_empty():
             raise PlotterError("Die Seite enthält keine plottbaren Linien.")
         profile = ProfileService().active()
         active_meta = profile_meta(profile)
-        cal = Calibration().merged(profile["calibration"])
+        cal = Calibration.from_dict(profile["calibration"])
+        if meta.get("kind") == "xopp":
+            scale = min(1.0, cal.plot_width * 0.9 / max(drawing.width, 1.0),
+                        cal.plot_height * 0.9 / max(drawing.height, 1.0))
+            local = [
+                [[float(p.real) - drawing.width / 2, float(p.imag) - drawing.height / 2]
+                 for p in line]
+                for line in drawing.polylines
+            ]
+            return profile_comment(active_meta) + scene_gcode({
+                "name": meta.get("filename") or item_id,
+                "objects": [{
+                    "type": "image", "plotted": False,
+                    "data": {"strokeOrder": "source"}, "cachedPolylines": local,
+                    "transform": {
+                        "x": cal.plot_width / 2, "y": cal.plot_height / 2,
+                        "scale": scale, "rotation": 0,
+                    },
+                }],
+            }, cal)
         return profile_comment(active_meta) + fitted_gcode(
-            drawing, cal, name=meta.get("filename") or item_id
+            drawing, cal, name=meta.get("filename") or item_id,
         )
 
+    def original_strokes(self, item_id: str, page: int = 1) -> dict:
+        """Full-resolution Xournal++ pen trajectories for editor and quick plot."""
+        meta = self.get(item_id)
+        if meta.get("kind") != "xopp":
+            raise ServiceError("Der Eintrag ist kein Xournal++-Dokument.")
+        records.page_entry(meta, page)
+        original, _ = self.original_path(item_id)
+        drawing = read_xopp(original)[page - 1]
+        if drawing.is_empty():
+            raise PlotterError("Die Seite enthält keine plottbaren Stiftzüge.")
+        x0, y0, x1, y1 = drawing.bounds()
+        return {
+            "polylines": [
+                [[float(p.real), float(p.imag)] for p in line]
+                for line in drawing.polylines
+            ],
+            "bounds": [x0, y0, x1, y1],
+            "width": drawing.width,
+            "height": drawing.height,
+            "segmentPressures": drawing.segment_pressures,
+        }
+
     def svg_preview(self, item_id: str, *, max_points: int = FULL_PREVIEW_POINTS) -> dict:
-        return previews.svg_preview(self.root / item_id, item_id, max_points=max_points)
+        meta = self.get(item_id)
+        return previews.svg_preview(self.root / item_id / meta.get("derived_dir", ""),
+                                    item_id, max_points=max_points)
 
     def svg_thumbnail(self, item_id: str) -> dict:
         return self.svg_preview(item_id, max_points=THUMB_PREVIEW_POINTS)
@@ -313,17 +416,19 @@ class GalleryService:
         """
         meta = self.get(item_id)
         entry = records.page_entry(meta, page)
-        if entry["file"] == SVG_FILE:
+        if Path(entry["file"]).name == SVG_FILE:
             return self.svg_preview(item_id, max_points=max_points)
-        return preview_for(self.root / item_id, entry["file"], page, max_points)
+        file = Path(entry["file"])
+        return preview_for(self.root / item_id / file.parent, file.name, page, max_points)
 
     def thumbnail(self, item_id: str) -> dict:
         """Page-1 grid thumbnail for any item type."""
         meta = self.get(item_id)
         entry = records.page_entry(meta, 1)
-        if entry["file"] == SVG_FILE:
+        if Path(entry["file"]).name == SVG_FILE:
             return self.svg_thumbnail(item_id)
-        return thumbnail_for(self.root / item_id, entry["file"])
+        file = Path(entry["file"])
+        return thumbnail_for(self.root / item_id / file.parent, file.name)
 
     def svg_thumbnails(self) -> dict:
         """All grid thumbnails in one shot (disk-cached), so the gallery loads
@@ -346,11 +451,15 @@ class GalleryService:
     def set_title(self, item_id: str, title: str) -> dict:
         return self._update_meta(item_id, title=title.strip()[:MAX_TITLE_LEN])
 
+    @_metadata_write
     def _update_meta(self, item_id: str, **fields) -> dict:
         meta = self.get(item_id)
         meta.update(fields)
-        (self.root / item_id / "meta.json").write_text(json.dumps(meta, indent=2))
+        tmp = self.root / item_id / f"meta-{uuid.uuid4().hex}.tmp"
+        tmp.write_text(json.dumps(meta, indent=2))
+        os.replace(tmp, self.root / item_id / "meta.json")
         return meta
 
+    @_metadata_write
     def delete(self, item_id: str) -> None:
         shutil.rmtree(self.root / item_id, ignore_errors=True)

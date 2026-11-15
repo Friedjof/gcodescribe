@@ -22,8 +22,10 @@ export const galleryClient = {
   galleryThumbnail: (id: string) => req<GallerySvg>(`/api/gallery/${id}/thumbnail`),
   galleryThumbnails: () => req<Record<string, GallerySvg>>(`/api/gallery/thumbnails`),
   gallerySvg: (id: string) => req<GallerySvg>(`/api/gallery/${id}/svg`),
-  galleryPreview: (id: string, page: number) =>
-    req<GalleryPreview>(`/api/gallery/${id}/preview/${page}`),
+  galleryPreview: (id: string, page: number, signal?: AbortSignal) =>
+    req<GalleryPreview>(`/api/gallery/${id}/preview/${page}`, { signal }),
+  galleryStrokes: (id: string, page: number) =>
+    req<GalleryPreview>(`/api/gallery/${id}/strokes/${page}`),
   galleryOriginalUrl: (id: string) => `/api/gallery/${id}/original`,
   galleryOriginal: (id: string) => reqBlob(`/api/gallery/${id}/original`),
   galleryOriginalBuffer: (id: string) => reqArrayBuffer(`/api/gallery/${id}/original`),

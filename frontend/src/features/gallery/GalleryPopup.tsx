@@ -4,7 +4,6 @@ import {
   type Calibration,
   type GalleryItem,
   type GalleryPreview,
-  type GallerySvg,
   type GalleryUploader,
   type ProfileRef,
   type SceneObject,
@@ -17,6 +16,10 @@ import Modal from "../../components/Modal";
 import StlEditor from "../stl/StlEditor";
 import Segmented from "../../components/Segmented";
 import PolylinePreview from "../../components/PolylinePreview";
+import GalleryGrid from "./GalleryGrid";
+import LazyThumbnail from "./LazyThumbnail";
+import XoppImportDialog from "./XoppImportDialog";
+import { startImport, startRender } from "../../api/assetTasks";
 import ScoreBadge from "../../components/ScoreBadge";
 import { useToasts } from "../../components/Toasts";
 
@@ -27,9 +30,9 @@ const MAX_UPLOAD_MB = 15;
 const MAX_STL_MB = 20;
 // Admin popup accepts the full asset library: images/SVG plus PDF/Office, and
 // STL (which opens the orientation editor instead of uploading directly).
-const ALLOWED = /\.(svg|png|jpe?g|pdf|odt|ods|odp|docx?|xlsx?|pptx?)$/i;
+const ALLOWED = /\.(xopp|svg|png|jpe?g|pdf|odt|ods|odp|docx?|xlsx?|pptx?)$/i;
 const ACCEPT =
-  ".svg,.png,.jpg,.jpeg,.pdf,.odt,.ods,.odp,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.stl";
+  ".xopp,.svg,.png,.jpg,.jpeg,.pdf,.odt,.ods,.odp,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.stl";
 
 /** Designer popup over the unified gallery: upload, search/filter, browse and
  * insert an item (or one page of a multi-page asset) as an image object into
@@ -52,7 +55,6 @@ export default function GalleryPopup({
   const { t } = useI18n();
   const toast = useToasts();
   const [items, setItems] = useState<GalleryItem[]>([]);
-  const [thumbs, setThumbs] = useState<Record<string, GallerySvg>>({});
   const [filter, setFilter] = useState<UploaderFilter>("all");
   const [query, setQuery] = useState("");
   // Render controls applied to the next upload (admin asset path), matching the
@@ -68,17 +70,18 @@ export default function GalleryPopup({
   const [picker, setPicker] = useState<GalleryItem | null>(null);
   const [pagePreviews, setPagePreviews] = useState<Record<number, GalleryPreview>>({});
   const [stlNew, setStlNew] = useState<{ buf: ArrayBuffer; filename: string } | null>(null);
+  const [xoppFile, setXoppFile] = useState<File | null>(null);
   const [stlSaving, setStlSaving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const online = !!status?.online;
 
   const fail = (e: any) => setErr(String(e.message ?? e));
-  const loadThumbs = () => api.galleryThumbnails().then(setThumbs).catch(() => {});
   const load = () => api.galleryList(false).then(setItems).catch(fail);
 
   useEffect(() => {
     load();
-    loadThumbs();
+    window.addEventListener("gcs:asset-ready", load);
+    return () => window.removeEventListener("gcs:asset-ready", load);
   }, []);
 
   useEffect(() => {
@@ -109,11 +112,11 @@ export default function GalleryPopup({
     if (/\.stl$/i.test(file.name)) return openStl(file);
     if (!ALLOWED.test(file.name)) return setErr(t("upload.badType"));
     if (file.size > MAX_UPLOAD_MB * 1024 * 1024) return setErr(t("upload.tooLarge", { mb: String(MAX_UPLOAD_MB) }));
+    if (/\.xopp$/i.test(file.name)) { setXoppFile(file); return; }
     setBusy(true);
     setErr(null);
-    api
-      .galleryUpload(file, "", { mode, detail })
-      .then(() => Promise.all([load(), loadThumbs()]))
+    startImport(file, { mode, detail })
+      .then(() => load())
       .catch(fail)
       .finally(() => setBusy(false));
   };
@@ -123,10 +126,8 @@ export default function GalleryPopup({
     setBusy(true);
     setErr(null);
     setMsg(null);
-    api
-      .galleryRender(item.id, mode, detail, continuous)
-      .then(() => Promise.all([load(), loadThumbs()]))
-      .then(() => setMsg(t("gallery.rendered")))
+    startRender(item.id, mode, detail, continuous)
+      .then(() => load())
       .catch(fail)
       .finally(() => setBusy(false));
   };
@@ -155,7 +156,8 @@ export default function GalleryPopup({
     if (busy) return;
     setBusy(true);
     setErr(null);
-    const pv = preview ? Promise.resolve(preview) : api.galleryPreview(item.id, page);
+    const pv = item.kind === "xopp" ? api.galleryStrokes(item.id, page)
+      : preview ? Promise.resolve(preview) : api.galleryPreview(item.id, page);
     pv
       .then((p) => {
         onInsert(galleryPageObject(item, p, page, cal));
@@ -173,7 +175,8 @@ export default function GalleryPopup({
     setErr(null);
     setMsg(null);
     const name = item.title || item.filename.replace(/\.[^.]+$/, "");
-    const pv = preview ? Promise.resolve(preview) : api.galleryPreview(item.id, page);
+    const pv = item.kind === "xopp" ? api.galleryStrokes(item.id, page)
+      : preview ? Promise.resolve(preview) : api.galleryPreview(item.id, page);
     pv
       .then((p) =>
         api.createPage(name).then((created) => ({ created, obj: galleryPageObject(item, p, page, cal) }))
@@ -190,9 +193,10 @@ export default function GalleryPopup({
   };
 
   return (
+    <>
     <Modal
       title={picker ? picker.title || picker.filename : t("gallery.popupTitle")}
-      onClose={onClose}
+      onClose={xoppFile ? () => setXoppFile(null) : onClose}
       className="gallery-popup"
       bodyClassName="gallery-popup-body"
     >
@@ -280,13 +284,13 @@ export default function GalleryPopup({
             </label>
           </div>
 
-          <div
+          <GalleryGrid
+            items={visible} minWidth={180} gap={12} footerHeight={45}
             className={`gallery-popup-grid ${dragOver ? "drag-over" : ""}`}
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
             onDrop={(e) => { e.preventDefault(); setDragOver(false); upload(e.dataTransfer.files?.[0]); }}
-          >
-            {visible.map((item) => (
+            renderItem={(item) => (
               <div key={item.id} className="gallery-pop-card">
                 <button
                   className="gallery-item"
@@ -295,7 +299,7 @@ export default function GalleryPopup({
                   onClick={() => open(item)}
                 >
                   <div className="gallery-thumb">
-                    {thumbs[item.id] ? <PolylinePreview data={thumbs[item.id]} /> : <span className="muted">…</span>}
+                    <LazyThumbnail item={item} />
                     <ScoreBadge score={item.score} />
                     {item.pages.length > 1 && (
                       <span className="gallery-pagecount">{item.pages.length} ⤵</span>
@@ -327,9 +331,9 @@ export default function GalleryPopup({
                   {t("gallery.rerender")}
                 </button>
               </div>
-            ))}
-            {visible.length === 0 && <p className="muted gallery-popup-empty">{t("gallery.empty")}</p>}
-          </div>
+            )}
+          />
+          {visible.length === 0 && <p className="muted gallery-popup-empty">{t("gallery.empty")}</p>}
         </>
       )}
       {stlNew && (
@@ -343,7 +347,7 @@ export default function GalleryPopup({
           onSaveGallery={({ stl, filename, params, result }) => {
             setStlSaving(true);
             api.galleryCreateStl(stl, filename, params, resultToSvgLayers(result), filename.replace(/\.stl$/i, ""))
-              .then(() => Promise.all([load(), loadThumbs()]))
+              .then(() => load())
               .then(() => { setStlNew(null); setMsg(t("stl.saved")); })
               .catch(fail)
               .finally(() => setStlSaving(false));
@@ -351,6 +355,8 @@ export default function GalleryPopup({
         />
       )}
     </Modal>
+    {xoppFile && <XoppImportDialog file={xoppFile} onClose={() => setXoppFile(null)} onImported={load} />}
+    </>
   );
 }
 

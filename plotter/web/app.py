@@ -15,6 +15,7 @@ from ..services import ServiceError
 from .auth import require_admin
 from .routes import (
     ai_images,
+    asset_tasks,
     auth,
     calibration,
     coloring_pages,
@@ -44,6 +45,9 @@ async def _lifespan(_: FastAPI):
         # first protected UI/API request reaches the printer routes.
         get_printer_client()
     yield
+    from ..services.asset_tasks import shutdown_tasks
+
+    shutdown_tasks()
     # Release the serial port on shutdown/reload so the next start can reopen it
     # (a still-held port causes "Resource busy").
     if use_serial():
@@ -64,6 +68,7 @@ def create_app() -> FastAPI:
     app.include_router(mcp_server.router)
     protected_modules = (
         ai_images,
+        asset_tasks,
         calibration,
         coloring_pages,
         fonts,
@@ -86,7 +91,7 @@ def create_app() -> FastAPI:
     # the route handlers stay free of try/except boilerplate.
     @app.exception_handler(PrinterError)
     async def printer_error(_: Request, exc: PrinterError) -> JSONResponse:
-        return JSONResponse(status_code=502, content={"detail": str(exc)})
+        return JSONResponse(status_code=exc.status_code, content={"detail": str(exc)})
 
     @app.exception_handler(ServiceError)
     async def service_error(_: Request, exc: ServiceError) -> JSONResponse:

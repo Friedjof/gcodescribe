@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { startRender } from "../../api/assetTasks";
+import { useEffect, useRef, useState } from "react";
 import { api, type Calibration, type GalleryItem, type GalleryPreview, type GcodePreview3D } from "../../api";
 import { fmtBytes, fmtDuration } from "../../lib/format";
 import { useI18n } from "../../i18n";
-import { galleryItemObject } from "../paint/lib/insertAsset";
+import { galleryItemObject, galleryPageObject } from "../paint/lib/insertAsset";
 import { polylinesObject } from "../games/lib/utils";
 import { parseStl, prepareMesh, resultToSvgLayers, type EdgeModel, type Mesh, type StlParams } from "../stl/lib";
 import StlEditor from "../stl/StlEditor";
@@ -53,11 +54,13 @@ export default function GalleryDetail({
   const [gcode, setGcode] = useState<GcodePreview3D | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [showTravels, setShowTravels] = useState(true);
+  const [showBed, setShowBed] = useState(true);
   const [resetToken, setResetToken] = useState(0);
   const [renderMode, setRenderMode] = useState<RenderMode>((item.mode || "auto") as RenderMode);
   const [renderDetail, setRenderDetail] = useState(item.detail || 2);
   const [renderContinuous, setRenderContinuous] = useState(item.continuous !== false);
   const [gcode3dView, setGcode3dView] = useState<Gcode3DView>({ yaw: -0.7, pitch: 1.0, zoom: 1, panX: 0, panY: 0 });
+  const previewItemId = useRef(item.id);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [stlEdit, setStlEdit] = useState<{ buf: ArrayBuffer; params?: StlParams; cal: Calibration } | null>(null);
@@ -81,7 +84,10 @@ export default function GalleryDetail({
   };
 
   useEffect(() => {
-    setSvg(null);
+    let alive = true;
+    if (previewItemId.current !== item.id) setSvg(null);
+    previewItemId.current = item.id;
+    const controller = new AbortController();
     setGcode(null);
     setStlSpin(null);
     setRenderMode((item.mode || "auto") as RenderMode);
@@ -89,8 +95,9 @@ export default function GalleryDetail({
     setRenderContinuous(item.continuous !== false);
     // Page-1 preview works for every kind (single-image submissions and
     // multi-page admin assets alike); `/svg` only exists for image.svg items.
-    api.galleryPreview(item.id, 1).then(setSvg).catch(fail);
-  }, [item.id, item.mode, item.detail, item.continuous, item.lines]);
+    api.galleryPreview(item.id, 1, controller.signal).then((next) => { if (alive) setSvg(next); }).catch((error) => { if (alive) fail(error); });
+    return () => { alive = false; controller.abort(); };
+  }, [item.id, item.mode, item.detail, item.continuous, item.lines, item.render_revision]);
 
   // Load the original STL once, to show a slowly auto-rotating 3D preview.
   useEffect(() => {
@@ -119,10 +126,15 @@ export default function GalleryDetail({
     setBusy(true);
     setErr(null);
     const name = item.title || item.filename.replace(/\.[^.]+$/, "");
-    Promise.all([api.getCalibration(), api.createPage(name)])
-      .then(([cal, page]) =>
-        api.savePage(page.id, { objects: [galleryItemObject(item, svg, cal)] })
-      )
+    Promise.all([
+      api.getCalibration(),
+      item.kind === "xopp" ? api.galleryStrokes(item.id, 1) : Promise.resolve(svg),
+    ])
+      .then(([cal, drawing]) => api.createPage(name)
+        .then((page) => api.savePage(page.id, { objects: [
+          item.kind === "xopp" ? galleryPageObject(item, drawing, 1, cal)
+            : galleryItemObject(item, drawing, cal),
+        ] })))
       .then(() => onOpenPaint())
       .catch(fail)
       .finally(() => setBusy(false));
@@ -162,14 +174,7 @@ export default function GalleryDetail({
     if (busy) return;
     setBusy(true);
     setErr(null);
-    api
-      .galleryRender(item.id, renderMode, renderDetail, renderContinuous)
-      .then(() => {
-        setSvg(null);
-        setGcode(null);
-        return api.galleryPreview(item.id, 1).then(setSvg);
-      })
-      .then(onChanged)
+    startRender(item.id, renderMode, renderDetail, renderContinuous)
       .catch(fail)
       .finally(() => setBusy(false));
   };
@@ -198,10 +203,16 @@ export default function GalleryDetail({
       travel_feed: 1000,
       draw_feed: 1000,
       z_feed: 1000,
+      z_max_feedrate: 60,
       fit_to_area: true,
       flip_y: false,
       trust_axis_home: false,
       park_after_plot: true,
+      park_x: width / 2,
+      park_y: height,
+      park_lift_z: 5,
+      calibration_x: width / 2,
+      calibration_y: height / 2,
       paper_corners: {},
       paper_margin: 0,
       obstacles: [],
@@ -289,6 +300,11 @@ export default function GalleryDetail({
                   />
                   {t("g3d.travels")}
                 </label>
+                {gcode.bed && <label className="g3d-toggle">
+                  <input type="checkbox" checked={showBed}
+                    onChange={(e) => setShowBed(e.target.checked)} />
+                  {t("g3d.bed")}
+                </label>}
                 <button className="ghost" onClick={() => setResetToken((n) => n + 1)}>
                   {t("g3d.resetView")}
                 </button>
@@ -362,7 +378,8 @@ export default function GalleryDetail({
                 <p className="muted">{t("common.loading")}</p>
               )
             ) : gcode ? (
-              <Gcode3D data={gcode} chrome={false} showTravels={showTravels} resetToken={resetToken} viewState={gcode3dView} onViewChange={setGcode3dView} />
+              <Gcode3D data={gcode} chrome={false} showTravels={showTravels} showBed={showBed}
+                resetToken={resetToken} viewState={gcode3dView} onViewChange={setGcode3dView} />
             ) : (
               <p className="muted">{t("common.loading")}</p>
             )}
@@ -374,6 +391,10 @@ export default function GalleryDetail({
                 {t("stl.reedit")}
               </button>
             </div>
+          ) : item.kind === "xopp" ? (
+          <div className="gallery-render-controls">
+            <span className="muted">{t("gallery.xopp.original", { count: item.lines })}</span>
+          </div>
           ) : (
           <div className="gallery-render-controls">
             <span className="muted">{t("gallery.renderMode")}</span>
@@ -441,7 +462,9 @@ export default function GalleryDetail({
         </div>
       </Modal>
       {fullscreen && gcode && (
-        <Gcode3DOverlay data={gcode} showTravels={showTravels} viewState={gcode3dView} onViewChange={setGcode3dView} onClose={() => setFullscreen(false)} />
+        <Gcode3DOverlay data={gcode} showTravels={showTravels} showBed={showBed}
+          onShowBedChange={setShowBed} viewState={gcode3dView} onViewChange={setGcode3dView}
+          onClose={() => setFullscreen(false)} />
       )}
       {stlEdit && (
         <StlEditor

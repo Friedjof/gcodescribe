@@ -30,6 +30,7 @@ export interface GalleryOriginal {
 }
 
 export interface GalleryItem {
+  render_revision?: string;
   id: string;
   title: string;
   filename: string;
@@ -64,6 +65,8 @@ export interface StlLayerPayload {
 
 export interface GallerySvg {
   polylines: number[][][];
+  /** Relative Xournal pressure per segment; null means a fixed-width stroke. */
+  segmentPressures?: (number[] | null)[];
   width: number;
   height: number;
 }
@@ -72,6 +75,7 @@ export interface GallerySvg {
  * `bounds`; multi-page admin assets carry the page's content bounds. */
 export interface GalleryPreview {
   polylines: number[][][];
+  segmentPressures?: (number[] | null)[];
   bounds?: [number, number, number, number] | null;
   width: number;
   height: number;

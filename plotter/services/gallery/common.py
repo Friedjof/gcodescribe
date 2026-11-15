@@ -24,6 +24,7 @@ _ORIGINAL_MIME = {
     "jpeg": "image/jpeg",
     "jpg": "image/jpeg",
     "pdf": "application/pdf",
+    "xopp": "application/x-xopp",
     "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     "stl": "model/stl",
@@ -45,7 +46,8 @@ def original_meta(filename: str, stored: str, kind: str, size: int) -> dict:
     }
 
 
-def fitted_gcode(drawing, cal: Calibration, *, name: str, continuous: bool = True) -> str:
+def fitted_gcode(drawing, cal: Calibration, *, name: str, continuous: bool = True,
+                 preserve_order: bool = False) -> str:
     """G-code with the drawing scaled to fill the calibrated plot area."""
     bx0, by0, bx1, by1 = drawing.bounds()
     bw, bh = bx1 - bx0, by1 - by0
@@ -54,7 +56,7 @@ def fitted_gcode(drawing, cal: Calibration, *, name: str, continuous: bool = Tru
     scale = min(cal.plot_width / bw, cal.plot_height / bh)
     return placed_gcode(
         drawing, cal, x=cal.origin_x, y=cal.origin_y, width=bw * scale,
-        name=name, continuous=continuous,
+        name=name, continuous=continuous, preserve_order=preserve_order,
     )
 
 

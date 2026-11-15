@@ -1,20 +1,24 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { api, onAppEvent, type AiImageStatus, type EffectiveSettings } from "./api";
 import StatusPill from "./components/StatusPill";
-import AiImageDesigner from "./features/ai-designer/AiImageDesigner";
+import QuickStopPlot, { canStopPlot } from "./components/QuickStopPlot";
+const AiImageDesigner = lazy(() => import("./features/ai-designer/AiImageDesigner"));
 import AuthGate from "./features/auth/AuthGate";
-import Convert from "./features/convert/Convert";
-import Paint from "./features/paint/Paint";
-import FontEditor from "./features/font-editor/components/FontEditor";
-import Games from "./features/games/Games";
-import Gallery from "./features/gallery/Gallery";
-import Calibrate from "./features/control/Calibrate";
-import Control from "./features/control/Control";
-import Paper from "./features/control/Paper";
+const Convert = lazy(() => import("./features/convert/Convert"));
+const Paint = lazy(() => import("./features/paint/Paint"));
+const FontEditor = lazy(() => import("./features/font-editor/components/FontEditor"));
+const Games = lazy(() => import("./features/games/Games"));
+const Gallery = lazy(() => import("./features/gallery/Gallery"));
+const Calibrate = lazy(() => import("./features/control/Calibrate"));
+const Control = lazy(() => import("./features/control/Control"));
+const Paper = lazy(() => import("./features/control/Paper"));
 import Segmented from "./components/Segmented";
-import SettingsDialog from "./features/settings/SettingsDialog";
+const SettingsDialog = lazy(() => import("./features/settings/SettingsDialog"));
 import { useToasts } from "./components/Toasts";
 import { useI18n } from "./i18n";
+
+import BackgroundTasks from "./components/BackgroundTasks";
+import DelayedLoading from "./components/DelayedLoading";
 
 type Tab = "paint" | "games" | "gallery" | "ai" | "convert" | "paper" | "calibrate" | "control" | "font";
 
@@ -35,6 +39,7 @@ const PLOT_PROGRESS_THRESHOLDS = [25, 50, 90, 100];
 function AdminApp() {
   const { lang, setLang, t } = useI18n();
   const toast = useToasts();
+  const [galleryResult, setGalleryResult] = useState<string>();
   const [tab, setTab] = useState<Tab>("paint");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [visited, setVisited] = useState<Set<Tab>>(() => new Set<Tab>(["paint"]));
@@ -63,7 +68,7 @@ function AdminApp() {
   }, []);
 
   const notificationsActive = notificationPermission === "granted";
-  const refreshStatus = () => api.octoStatus().then(setStatus).catch(() => setStatus(null));
+  const refreshStatus = useCallback(() => api.octoStatus().then(setStatus).catch(() => setStatus(null)), []);
 
   // Surface a toast whenever a connected agent triggers an MCP tool. The data
   // those tools change is refreshed live by each view (e.g. the designer) via
@@ -202,6 +207,7 @@ function AdminApp() {
           </select>
           <button className="settings-btn" onClick={() => setSettingsOpen(true)} title={t("settings.headerButton")}>⚙</button>
           <StatusPill status={status} />
+          {canStopPlot(status) && <QuickStopPlot status={status} onAction={refreshStatus} />}
         </div>
       </header>
 
@@ -209,6 +215,7 @@ function AdminApp() {
         <Segmented<Tab> className="nav" value={tab} onChange={setTab} options={tabs} />
       </nav>
 
+      <Suspense fallback={<DelayedLoading />}>
       {settingsOpen && (
         <SettingsDialog
           onClose={() => setSettingsOpen(false)}
@@ -226,15 +233,18 @@ function AdminApp() {
         />
       )}
 
+      </Suspense>
+      <BackgroundTasks onOpenResult={(id) => { setGalleryResult(id); setTab("gallery"); }} />
       <main>
         {/* Kept alive: rendered once visited, hidden (not unmounted) when inactive.
             `display: contents` keeps the layout/height chain identical to before. */}
         {KEEP_ALIVE.map((value) =>
           visited.has(value) ? (
             <div key={value} style={{ display: tab === value ? "contents" : "none" }}>
+              <Suspense fallback={<DelayedLoading />}>
               {value === "paint" && <Paint visible={tab === "paint"} status={status} onAction={refreshStatus} desktop={desktop} />}
               {value === "games" && <Games visible={tab === "games"} onOpenPaint={() => setTab("paint")} desktop={desktop} />}
-              {value === "gallery" && <Gallery visible={tab === "gallery"} onOpenPaint={() => setTab("paint")} onOpenAiDesigner={aiStatus?.enabled ? openInAiDesigner : undefined} aiEnabled={aiStatus?.enabled ?? false} desktop={desktop} />}
+              {value === "gallery" && <Gallery initialItemId={galleryResult} visible={tab === "gallery"} onOpenPaint={() => setTab("paint")} onOpenAiDesigner={aiStatus?.enabled ? openInAiDesigner : undefined} aiEnabled={aiStatus?.enabled ?? false} desktop={desktop} />}
               {value === "ai" && (
                 <AiImageDesigner status={aiStatus} visible={tab === "ai"} onOpenPaint={() => setTab("paint")} initialFile={aiInitialFile} />
               )}
@@ -246,10 +256,11 @@ function AdminApp() {
               )}
               {value === "calibrate" && <Calibrate />}
               {value === "font" && <FontEditor visible={tab === "font"} />}
+              </Suspense>
             </div>
           ) : null
         )}
-        {tab === "control" && <Control status={status} onAction={refreshStatus} />}
+        {tab === "control" && <Suspense fallback={<DelayedLoading />}><Control status={status} onAction={refreshStatus} /></Suspense>}
       </main>
     </div>
   );

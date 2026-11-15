@@ -465,3 +465,11 @@ input[type="checkbox"]:disabled {
   letter-spacing: 0.08em;
 }
 
+.xopp-import-modal { width: min(900px, 96vw); }
+.xopp-import-modal .modal-body { flex-direction: column; overflow-y: auto; }
+.xopp-import-actions { display: flex; align-items: center; gap: .6rem; margin: .7rem 0; }
+.xopp-import-grid { display: grid; width: 100%; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); align-content: start; gap: .75rem; overflow-y: auto; }
+.xopp-import-page { display: flex; flex-direction: column; gap: .4rem; padding: .55rem; min-width: 0; background: var(--panel-2); border: 2px solid var(--border); border-radius: .55rem; text-align: left; cursor: pointer; }
+.xopp-import-page.selected { border-color: var(--accent); }
+.xopp-import-page:disabled { opacity: .45; cursor: default; }
+.xopp-import-page .poly-preview { display: block; width: 100%; height: 130px; }

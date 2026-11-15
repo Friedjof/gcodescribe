@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, type Calibration, type GalleryItem, type GallerySvg, type GalleryUploader } from "../../api";
+import { api, type Calibration, type GalleryItem, type GalleryUploader } from "../../api";
 import { useI18n } from "../../i18n";
 import { polylinesObject } from "../games/lib/utils";
 import { resultToSvgLayers } from "../stl/lib";
@@ -7,7 +7,10 @@ import GalleryAccessDialog from "./GalleryAccessDialog";
 import GalleryDetail from "./GalleryDetail";
 import StlEditor from "../stl/StlEditor";
 import { useLiveRegistryState } from "../stream/lib/liveRegistry";
-import PolylinePreview from "../../components/PolylinePreview";
+import GalleryGrid from "./GalleryGrid";
+import LazyThumbnail from "./LazyThumbnail";
+import XoppImportDialog from "./XoppImportDialog";
+import { startImport } from "../../api/assetTasks";
 import ScoreBadge from "../../components/ScoreBadge";
 import Segmented from "../../components/Segmented";
 import { useToasts } from "../../components/Toasts";
@@ -15,16 +18,15 @@ import { useToasts } from "../../components/Toasts";
 type UploaderFilter = "all" | GalleryUploader;
 const MAX_UPLOAD_MB = 15;
 const MAX_STL_MB = 20;
-const ALLOWED = /\.(svg|png|jpe?g|pdf|odt|ods|odp|docx?|xlsx?|pptx?)$/i;
+const ALLOWED = /\.(xopp|svg|png|jpe?g|pdf|odt|ods|odp|docx?|xlsx?|pptx?)$/i;
 const ACCEPT =
-  ".svg,.png,.jpg,.jpeg,.pdf,.odt,.ods,.odp,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.stl";
+  ".xopp,.svg,.png,.jpg,.jpeg,.pdf,.odt,.ods,.odp,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.stl";
 
 // Thumbnails are tiny polyline sets; cache them across tab switches.
-const thumbCache = new Map<string, GallerySvg>();
 // Keep the last list so re-opening the tab renders instantly while we refetch.
 let listCache: GalleryItem[] = [];
 
-export default function Gallery({ visible = true, onOpenPaint, onOpenAiDesigner, aiEnabled = false, desktop = false }: { visible?: boolean; onOpenPaint: () => void; onOpenAiDesigner?: (itemId: string) => void; aiEnabled?: boolean; desktop?: boolean }) {
+export default function Gallery({ visible = true, initialItemId, onOpenPaint, onOpenAiDesigner, aiEnabled = false, desktop = false }: { visible?: boolean; initialItemId?: string; onOpenPaint: () => void; onOpenAiDesigner?: (itemId: string) => void; aiEnabled?: boolean; desktop?: boolean }) {
   const { t, lang } = useI18n();
   const toast = useToasts();
   const [items, setItems] = useState<GalleryItem[]>(listCache);
@@ -37,11 +39,9 @@ export default function Gallery({ visible = true, onOpenPaint, onOpenAiDesigner,
   const globalLive = useLiveRegistryState();
   const [err, setErr] = useState<string | null>(null);
   const [stlNew, setStlNew] = useState<{ buf: ArrayBuffer; filename: string; cal: Calibration } | null>(null);
+  const [xoppFile, setXoppFile] = useState<File | null>(null);
   const [stlSaving, setStlSaving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  // Bump to re-render once batched thumbnails have landed in the cache.
-  const [, setThumbTick] = useState(0);
-
   const refresh = () =>
     api
       .galleryList(true)
@@ -49,25 +49,19 @@ export default function Gallery({ visible = true, onOpenPaint, onOpenAiDesigner,
         listCache = list;
         setItems(list);
         setErr(null);
-        // One request for every thumbnail instead of one per card.
-        const missing = list.some((i) => !thumbCache.has(i.id));
-        if (missing) {
-          api
-            .galleryThumbnails()
-            .then((thumbs) => {
-              for (const [id, svg] of Object.entries(thumbs)) thumbCache.set(id, svg);
-              setThumbTick((n) => n + 1);
-            })
-            .catch(() => {});
-        }
+
       })
       .catch((e) => setErr(String(e.message ?? e)));
 
+  useEffect(() => { if (initialItemId) setSelectedId(initialItemId); }, [initialItemId]);
   useEffect(() => {
+    if (!visible) return;
     refresh();
-    const id = setInterval(refresh, 15000); // pick up new event submissions
-    return () => clearInterval(id);
-  }, []);
+    const onReady = () => refresh();
+    const id = setInterval(() => { if (!document.hidden) refresh(); }, 15000);
+    window.addEventListener("gcs:asset-ready", onReady);
+    return () => { clearInterval(id); window.removeEventListener("gcs:asset-ready", onReady); };
+  }, [visible]);
 
   useEffect(() => {
     if (err) toast.error(err);
@@ -96,10 +90,10 @@ export default function Gallery({ visible = true, onOpenPaint, onOpenAiDesigner,
     if (file.size > MAX_UPLOAD_MB * 1024 * 1024) {
       return setErr(t("upload.tooLarge", { mb: String(MAX_UPLOAD_MB) }));
     }
+    if (/\.xopp$/i.test(file.name)) { setXoppFile(file); resetFileInput(); return; }
     setUploading(true);
     setErr(null);
-    api
-      .galleryUpload(file, "")
+    startImport(file)
       .then(() => refresh())
       .catch((e) => setErr(String(e.message ?? e)))
       .finally(() => {
@@ -120,7 +114,6 @@ export default function Gallery({ visible = true, onOpenPaint, onOpenAiDesigner,
   // title) and closes by itself once the item is deleted.
   const selected = items.find((i) => i.id === selectedId) ?? null;
   const refreshSelected = () => {
-    if (selectedId) thumbCache.delete(selectedId);
     refresh();
   };
 
@@ -179,13 +172,10 @@ export default function Gallery({ visible = true, onOpenPaint, onOpenAiDesigner,
 
         {visibleItems.length === 0 && <p className="muted">{t("gallery.empty")}</p>}
 
-        <div className="gallery-scroll">
-          <div className="gallery-grid">
-            {visibleItems.map((item) => (
-              <GalleryCard key={item.id} item={item} lang={lang} onOpen={() => setSelectedId(item.id)} />
-            ))}
-          </div>
-        </div>
+        <GalleryGrid className="gallery-scroll" items={visibleItems} renderItem={(item) =>
+          <GalleryCard active={visible} item={item} lang={lang} onOpen={() => setSelectedId(item.id)} />
+        } />
+
       </section>
 
       {selected && (
@@ -202,6 +192,7 @@ export default function Gallery({ visible = true, onOpenPaint, onOpenAiDesigner,
         />
       )}
       {accessOpen && <GalleryAccessDialog onClose={() => setAccessOpen(false)} />}
+      {xoppFile && <XoppImportDialog file={xoppFile} onClose={() => setXoppFile(null)} onImported={refresh} />}
 
       {stlNew && (
         <StlEditor
@@ -231,15 +222,16 @@ export default function Gallery({ visible = true, onOpenPaint, onOpenAiDesigner,
 
 function GalleryCard({
   item,
+  active,
   lang,
   onOpen,
 }: {
   item: GalleryItem;
+  active: boolean;
   lang: string;
   onOpen: () => void;
 }) {
   const { t } = useI18n();
-  const svg = thumbCache.get(item.id) ?? null;
 
   return (
     <button
@@ -247,7 +239,7 @@ function GalleryCard({
       onClick={onOpen}
     >
       <div className="gallery-thumb">
-        {svg ? <PolylinePreview data={svg} /> : <span className="muted">…</span>}
+        <LazyThumbnail item={item} active={active} />
         <ScoreBadge score={item.score} />
         <span className={`gallery-uploader uploader-${item.uploader}`}>
           {item.uploader === "admin" ? t("gallery.byAdmin") : t("gallery.byUser")}

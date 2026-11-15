@@ -4,8 +4,8 @@ import Modal from "../../components/Modal";
 import { useI18n } from "../../i18n";
 import { fontLabel, useTextFonts } from "../paint/hooks/useTextFonts";
 
-type Section = "printer" | "ai" | "fonts" | "storage" | "auth" | "server" | "mcp";
-const SECTIONS: Section[] = ["printer", "ai", "fonts", "storage", "auth", "server", "mcp"];
+type Section = "printer" | "ai" | "fonts" | "mcp" | "storage" | "auth" | "server";
+const SECTIONS: Section[] = ["printer", "ai", "fonts", "mcp", "storage", "auth", "server"];
 
 // Computed server-side flags — rendered read-only, never patchable.
 const READONLY_FIELDS = new Set(["ai.enabled"]);

@@ -5,8 +5,10 @@ import json
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 from plotter.artwork.pipeline import PlotterError
+from plotter.core.calibration import Calibration
 from plotter.core.config import load_settings
 from plotter.gcode.preview import parse_gcode, parse_gcode_3d_text
 from plotter.web.deps import gallery_service
@@ -64,7 +66,7 @@ async def create_submission(
     data = await file.read(MAX_UPLOAD_BYTES + 1)
     uploader = "admin" if session else "public"
     # mode/detail only apply to the admin asset path; public uploads ignore them.
-    return gallery_service().create(
+    return await run_in_threadpool(gallery_service().create,
         file.filename, data, title=title, uploader=uploader, mode=mode, detail=detail
     )
 
@@ -134,6 +136,11 @@ def submission_page_preview(item_id: str, page: int, _: dict = Depends(require_a
     return gallery_service().preview(item_id, page)
 
 
+@router.get("/gallery/{item_id}/strokes/{page}")
+def submission_original_strokes(item_id: str, page: int, _: dict = Depends(require_admin)) -> dict:
+    return gallery_service().original_strokes(item_id, page)
+
+
 @router.get("/gallery/{item_id}/thumbnail")
 def submission_thumbnail(item_id: str, _: dict = Depends(require_admin)) -> dict:
     return gallery_service().thumbnail(item_id)
@@ -160,7 +167,9 @@ def submission_gcode_preview_3d(
     page: int = 1,
     _: dict = Depends(require_admin),
 ) -> dict:
-    return parse_gcode_3d_text(gallery_service().gcode_preview_text(item_id, page))
+    cal = Calibration.load()
+    return {**parse_gcode_3d_text(gallery_service().gcode_preview_text(item_id, page)),
+            "bed": [cal.bed_width, cal.bed_height]}
 
 
 # -- admin actions (to be protected once the admin login exists) ---------------

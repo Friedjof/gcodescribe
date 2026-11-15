@@ -5,8 +5,9 @@
 // the first subscription and reconnects automatically.
 
 export type AppEvent =
+  | { type: "asset-task"; task: import("./assetTasks").AssetTask }
   | { type: "hello"; ts: number }
-  | { type: "document"; ts: number; action: "create" | "save" | "delete" | "active" | "reorder"; pageId?: string | null; mcp?: boolean }
+  | { type: "document"; ts: number; action: "create" | "save" | "delete" | "active" | "reorder" | "import"; pageId?: string | null; mcp?: boolean }
   | { type: "mcp"; ts: number; tool: string; ok: boolean; changed?: boolean };
 
 type Listener = (event: AppEvent) => void;

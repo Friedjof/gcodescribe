@@ -26,6 +26,22 @@ SVG = b"""<?xml version="1.0"?>
 </svg>
 """
 
+CAIRO_FILTER_SVG = b"""<svg xmlns="http://www.w3.org/2000/svg"
+    xmlns:xlink="http://www.w3.org/1999/xlink" width="100mm" height="50mm"
+    viewBox="0 0 100 50">
+  <defs>
+    <filter id="filter-0"><feImage xlink:href="#compositing-group-3"/></filter>
+    <g id="compositing-group-3" transform="translate(10, 20)">
+      <rect width="100" height="50" fill-opacity="0"/>
+      <path d="M 10 20 L 90 22 L 90 32 L 10 30 Z" fill="white"/>
+    </g>
+    <use xlink:href="#compositing-group-3"/>
+  </defs>
+  <g filter="url(#filter-0)" transform="translate(-10, -20)">
+    <rect width="100" height="50"/>
+  </g>
+</svg>"""
+
 GCODE = "\n".join(
     [
         "G21",
@@ -233,6 +249,26 @@ class TestGalleryService:
         assert preview["polylines"]
         assert svc.thumbnail(meta["id"])["polylines"]
 
+    def test_admin_svg_recovers_paths_hidden_in_cairo_filters(self, cal):
+        svc = GalleryService()
+        meta = svc.create("cairo.svg", CAIRO_FILTER_SVG, uploader="admin")
+        assert meta["pages"][0]["lines"] == 1
+        assert svc.preview(meta["id"], 1)["polylines"]
+
+        updated = svc.rerender(meta["id"], mode="handwriting", detail=2)
+        assert updated["mode"] == "handwriting"
+        assert updated["pages"][0]["file"] == "page-0001.svg"
+        strokes = svc.preview(meta["id"], 1)["polylines"]
+        assert strokes
+        assert all(line[0] != line[-1] for line in strokes)
+        assert max(abs(y - 26) for line in strokes for _, y in line) < 6
+        assert "G1 X" in svc.gcode_preview_text(meta["id"])
+
+    def test_admin_svg_without_plottable_lines_is_rejected(self, cal):
+        svc = GalleryService()
+        with pytest.raises(Exception, match="keine plottbaren Linien"):
+            svc.create("empty.svg", b'<svg xmlns="http://www.w3.org/2000/svg"/>', uploader="admin")
+
     def test_admin_asset_has_transient_gcode_preview(self, cal, workspace):
         from fastapi.testclient import TestClient
 
@@ -244,6 +280,7 @@ class TestGalleryService:
 
         assert response.status_code == 200
         assert response.json()["draws"]
+        assert response.json()["bed"] == [cal.bed_width, cal.bed_height]
         assert not (GalleryService().root / meta["id"] / "job.gcode").exists()
 
     def test_rerender_admin_asset_updates_pages_without_job(self, cal):

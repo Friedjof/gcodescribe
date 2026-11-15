@@ -3,6 +3,7 @@ import { api, type GcodePreview, type GcodePreview3D, type Job } from "../../api
 import { useI18n } from "../../i18n";
 import Modal from "../../components/Modal";
 import Gcode3D from "../../components/Gcode3D";
+import Gcode3DOverlay from "../../components/Gcode3DOverlay";
 import Segmented from "../../components/Segmented";
 import { useToasts } from "../../components/Toasts";
 import { useConfirm, usePrompt } from "../../components/dialogs";
@@ -113,13 +114,6 @@ export default function Convert({
   }, [viewMode]);
 
   useEffect(() => {
-    if (!fullscreen) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setFullscreen(false);
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [fullscreen]);
-
-  useEffect(() => {
     if (!deleteMenuOpen) return;
     const onDown = (e: MouseEvent) => {
       if (deleteMenuRef.current && !deleteMenuRef.current.contains(e.target as Node)) {
@@ -189,6 +183,7 @@ export default function Convert({
 
   const profileIssue = (j: Job): string | null => {
     if (!j.profile || j.profile.matchesActive) return null;
+    if (j.source?.project_id && j.issue) return j.issue;
     if (j.profile.legacy) return t("convert.profileLegacyHint");
     if (j.profile.missing) return t("convert.profileMissingHint", { name: j.profile.name ?? "?" });
     if (j.profile.archived) return t("convert.profileArchivedHint", { name: j.profile.name ?? "?" });
@@ -198,6 +193,8 @@ export default function Convert({
 
   const profileBadge = (j: Job): ReactNode => {
     if (!j.profile) return null;
+    if (j.source?.project_id && j.fits === false)
+      return <span className="pbadge pbadge-warn" title={j.issue ?? "Projekt-Job nicht plottbar"}>{j.profile.name}</span>;
     if (j.profile.legacy)
       return <span className="pbadge pbadge-muted" title={t("convert.profileLegacyHint")}>{t("convert.profileLegacy")}</span>;
     if (j.profile.missing)
@@ -633,11 +630,7 @@ export default function Convert({
                   )}
                 </Modal>
                 {fullscreen && preview.data && (
-                  <div className="g3d-fullscreen" onClick={() => setFullscreen(false)}>
-                    <div className="g3d-fullscreen-view" onClick={(e) => e.stopPropagation()}>
-                      <Gcode3D data={preview.data} chrome={false} />
-                    </div>
-                  </div>
+                  <Gcode3DOverlay data={preview.data} onClose={() => setFullscreen(false)} />
                 )}
               </>
             );
