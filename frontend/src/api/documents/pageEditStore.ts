@@ -149,12 +149,33 @@ export function createPageEditStore(transport: PageEditTransport) {
     }
     async function discardEdits(id: string) {
         const entry = entries.get(id);
-        if (entry?.running) await entry.running.catch(() => {});
+        if (entry?.running)
+            await entry.running.catch(() => { });
+        const version = entry?.version;
         clearTimeout(entry?.timer);
-        entries.delete(id);
-        const page = rememberPage(await transport.read(id));
-        emit();
-        return page;
+        // Keep the pending document until the replacement has actually loaded.
+        try {
+            const remote = await transport.read(id);
+            if (entries.get(id) !== entry || entry?.version !== version)
+                throw new Error("save.conflict");
+            if (entry) {
+                entry.base = remote;
+                entry.desired = undefined;
+                entry.error = undefined;
+                entry.conflict = false;
+            }
+            else
+                rememberPage(remote);
+            emit();
+            savedListeners.forEach((listener) => listener(id));
+            return cachedPage(id)!;
+        }
+        catch (error) {
+            if (entry)
+                entry.error = error instanceof Error ? error.message : String(error);
+            emit();
+            throw error;
+        }
     }
     async function refreshPage(id: string) {
         await flushEdits(id);
