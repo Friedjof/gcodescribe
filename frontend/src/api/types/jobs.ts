@@ -3,6 +3,7 @@ import type { JobProfileStatus } from "./calibration";
 
 export interface JobSource {
   kind?: string;
+  project_id?: string;
   // Coloring jobs carry the pen colour, its order and the editor session id so
   // the job list can badge and group them.
   color?: ColoringColor;
@@ -58,5 +59,6 @@ export interface GcodePreview3D {
   draws: number[][][]; // polylines of [x, y, z] mm where the pen draws
   travels: number[][][]; // pen-up moves incl. Z lifts
   bounds: [number, number, number, number, number, number] | null; // x,y,z min/max
+  bed?: [number, number] | null; // machine bed width/height in printer-space mm
   truncated: boolean;
 }

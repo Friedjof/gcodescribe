@@ -17,6 +17,7 @@ def write_job_meta(
     gcode_path: Path,
     source: dict | None = None,
     profile: dict | None = None,
+    calibration_snapshot: dict | None = None,
 ) -> dict:
     """Write the job sidecar; the profile defaults to the active one."""
     meta = {
@@ -25,6 +26,8 @@ def write_job_meta(
         "source": source or {"kind": "unknown"},
         "profile": profile or ProfileService().active_profile_meta(),
     }
+    if calibration_snapshot is not None:
+        meta["calibrationSnapshot"] = calibration_snapshot
     atomic_write_json(job_meta_path(gcode_path), meta)
     return meta
 

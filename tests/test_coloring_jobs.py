@@ -152,7 +152,7 @@ class TestColorGcode:
         )
         assert r.status_code == 422
 
-    def test_foreign_profile_is_blocked(self, client):
+    def test_global_profile_switch_does_not_block_slide_coloring(self, client):
         page_id = _page(client)
         other = ProfileService().create("Anderes")
         ProfileService().activate(other["id"])
@@ -161,8 +161,7 @@ class TestColorGcode:
             _colors({"color": "black", "label": "Schwarz", "order": 1,
                      "objects": [_line_object("o1", 10, 10, 50, 50)]}),
         )
-        assert r.status_code == 409
-        assert "gehört zu Profil" in r.json()["detail"]
+        assert r.status_code == 200
 
     def test_failed_color_rolls_back_created_jobs(self, client):
         page_id = _page(client)

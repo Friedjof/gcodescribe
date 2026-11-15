@@ -3,7 +3,11 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
+from plotter.core.calibration import Calibration
 from plotter.core.document import get_document_store
+from plotter.core.jobmeta import read_job_meta
+from plotter.core.storage import jobs_dir
+from plotter.gcode.preview import parse_gcode_3d
 from plotter.services.profiles import ProfileService
 
 
@@ -24,11 +28,14 @@ def _line_object(x0: float, y0: float, x1: float, y1: float) -> dict:
 
 
 class TestPageProfileBinding:
-    def test_new_page_gets_active_profile(self, client):
+    def test_new_page_gets_project_profile_after_global_switch(self, client):
+        project = client.get("/api/pages").json()["project"]
+        profiles = ProfileService()
+        project_profile = profiles.get(project["profileId"])
+        profiles.activate(profiles.create("Other global profile")["id"])
         page = client.post("/api/pages", json={"name": "Karte"}).json()
-        active = ProfileService().active_profile_meta()
-        assert page["profileId"] == active["id"]
-        assert page["profileFingerprint"] == active["fingerprint"]
+        assert page["profileId"] == project_profile["id"]
+        assert page["profileFingerprint"] == project_profile["fingerprint"]
 
     def test_page_list_reports_status(self, client):
         page = client.post("/api/pages", json={}).json()
@@ -37,13 +44,13 @@ class TestPageProfileBinding:
         assert meta["profileStatus"] == "active"
         assert index["activeProfile"]["id"] == page["profileId"]
 
-    def test_profile_switch_marks_page_as_other(self, client):
+    def test_global_profile_switch_does_not_change_project_page(self, client):
         page = client.post("/api/pages", json={}).json()
         svc = ProfileService()
         svc.activate(svc.create("Postkarte")["id"])
         index = client.get("/api/pages").json()
         meta = next(m for m in index["order"] if m["id"] == page["id"])
-        assert meta["profileStatus"] == "other"
+        assert meta["profileStatus"] == "active"
 
     def test_archived_profile_marks_page_as_archived(self, client):
         page = client.post("/api/pages", json={}).json()
@@ -93,36 +100,40 @@ class TestPageGcodeGuard:
         assert r.status_code == 200
         assert r.json()["profile"]["matchesActive"] is True
 
-    def test_foreign_page_is_blocked(self, client):
+    def test_global_profile_switch_does_not_block_plot(self, client):
         page = self._page_with_content(client)
         svc = ProfileService()
         svc.activate(svc.create("Postkarte")["id"])
         r = client.post(f"/api/pages/{page['id']}/gcode")
-        assert r.status_code == 409
-        assert "gehört zu Profil" in r.json()["detail"]
+        assert r.status_code == 200
 
-    def test_archived_page_is_blocked(self, client):
+    def test_archived_project_profile_blocks_render_without_erasing_slide_snapshot(self, client):
         page = self._page_with_content(client)
+        store = get_document_store()
+        snapshot = store.get_page(page["id"])["profileSnapshot"]
         svc = ProfileService()
         original = svc.active_id()
         other = svc.create("Postkarte")
         svc.activate(other["id"])
         svc.archive(original)
         r = client.post(f"/api/pages/{page['id']}/gcode")
-        assert r.status_code == 409
+        assert r.status_code == 422
         assert "archiviert" in r.json()["detail"]
+        assert store.get_page(page["id"])["profileSnapshot"] == snapshot
 
-    def test_missing_profile_page_is_blocked(self, client):
+    def test_missing_historical_profile_uses_current_project_profile(self, client):
         page = self._page_with_content(client)
         get_document_store().set_page_profile(
             page["id"],
             {"id": "prof-geloescht", "name": "Gelöscht", "fingerprint": "sha256:x"},
         )
         r = client.post(f"/api/pages/{page['id']}/gcode")
-        assert r.status_code == 409
-        assert "existiert nicht mehr" in r.json()["detail"]
+        assert r.status_code == 200
+        meta = read_job_meta(jobs_dir() / r.json()["filename"])
+        assert meta["profile"]["id"] == page["profileId"]
+        assert get_document_store().get_page(page["id"])["profileId"] == "prof-geloescht"
 
-    def test_stale_expected_profile_blocks_gcode(self, client):
+    def test_project_expected_profile_is_valid_after_global_switch(self, client):
         page = self._page_with_content(client)
         expected = client.get("/api/pages").json()["activeProfile"]
         svc = ProfileService()
@@ -134,26 +145,69 @@ class TestPageGcodeGuard:
                 "expected_profile_fingerprint": expected["fingerprint"],
             },
         )
-        assert r.status_code == 409
-        assert "Profil" in r.json()["detail"]
+        assert r.status_code == 200
 
-    def test_stale_page_is_blocked(self, client):
+    def test_pen_height_change_is_used_without_adopting_existing_slide(self, client):
         page = self._page_with_content(client)
-        svc = ProfileService()
-        svc.update(svc.active_id(), calibration={"pen_down_z": 2.2})
-        r = client.post(f"/api/pages/{page['id']}/gcode")
-        assert r.status_code == 409
-
-    def test_legacy_page_is_blocked(self, client):
         store = get_document_store()
-        page = store.create_page("Alt")  # no profile, like pre-profile data
+        snapshot = store.get_page(page["id"])["profileSnapshot"]
+        svc = ProfileService()
+        current = svc.update(page["profileId"], calibration={"pen_down_z": 2.2})
+        preview = client.post(f"/api/pages/{page['id']}/preview3d", json={})
+        assert preview.status_code == 200
+        assert {point[2] for line in preview.json()["draws"] for point in line} == {2.2}
+        r = client.post(f"/api/pages/{page['id']}/gcode")
+        assert r.status_code == 200
+        path = jobs_dir() / r.json()["filename"]
+        assert parse_gcode_3d(path)["draws"] == preview.json()["draws"]
+        meta = read_job_meta(path)
+        assert meta["calibrationSnapshot"]["calibration"]["pen_down_z"] == 2.2
+        assert meta["calibrationSnapshot"]["fingerprint"] == current["fingerprint"]
+        assert store.get_page(page["id"])["profileSnapshot"] == snapshot
+
+    def test_legacy_page_uses_project_profile_without_creating_historical_snapshot(self, client):
+        store = get_document_store()
+        page = store.create_page("Alt")
+        legacy = store.get_page(page["id"])
+        legacy.pop("profileSnapshot")
+        store._store.set(store._page_key(page["id"]), legacy)
         client.put(
             f"/api/pages/{page['id']}",
             json={"objects": [_line_object(10, 10, 50, 50)]},
         )
         r = client.post(f"/api/pages/{page['id']}/gcode")
-        assert r.status_code == 409
-        assert "Legacy" in r.json()["detail"]
+        assert r.status_code == 200
+        meta = read_job_meta(jobs_dir() / r.json()["filename"])
+        assert meta["profile"]["id"] == page["profileId"]
+        assert "profileSnapshot" not in store.get_page(page["id"])
+
+    def test_preview_and_gcode_use_changed_project_origin_despite_global_profile(self, client):
+        page = self._page_with_content(client)
+        store = get_document_store()
+        snapshot = store.get_page(page["id"])["profileSnapshot"]
+        profiles = ProfileService()
+        current = profiles.update(page["profileId"], calibration={
+            "origin_x": 65, "origin_y": 45, "plot_width": 120, "plot_height": 100,
+            "flip_y": False,
+        })
+        other = profiles.create("Other paper", calibration={
+            "origin_x": 0, "origin_y": 0, "plot_width": 200, "plot_height": 200,
+            "pen_down_z": 4,
+        })
+        profiles.activate(other["id"])
+        preview = client.post(f"/api/pages/{page['id']}/preview3d", json={})
+        assert preview.status_code == 200
+        assert preview.json()["draws"] == [[[75, 55, 1.4], [115, 95, 1.4]]]
+        job = client.post(f"/api/pages/{page['id']}/gcode")
+        assert job.status_code == 200
+        path = jobs_dir() / job.json()["filename"]
+        assert parse_gcode_3d(path)["draws"] == preview.json()["draws"]
+        meta = read_job_meta(path)
+        assert Calibration.from_dict(meta["calibrationSnapshot"]["calibration"]) == (
+            Calibration.from_dict(current["calibration"])
+        )
+        assert store.get_page(page["id"])["profileSnapshot"] == snapshot
+        assert profiles.active_id() == other["id"]
 
 
 class TestSelectionGcode:
@@ -201,12 +255,12 @@ class TestSelectionGcode:
         r = client.post(f"/api/pages/{ctx['page']['id']}/gcode", json={"objects": []})
         assert r.status_code == 400
 
-    def test_selection_still_obeys_profile_guard(self, client):
+    def test_selection_uses_project_profile_after_global_switch(self, client):
         ctx = self._two_object_page(client)
         svc = ProfileService()
         svc.activate(svc.create("Postkarte")["id"])
         r = client.post(f"/api/pages/{ctx['page']['id']}/gcode", json={"objects": [ctx["a"]]})
-        assert r.status_code == 409
+        assert r.status_code == 200
 
 
 class TestAdoptProfile:
@@ -233,6 +287,7 @@ class TestAdoptProfile:
         r = client.post(f"/api/pages/{page['id']}/adopt-profile", json={})
         assert r.status_code == 409
         assert "Plotbereich" in r.json()["detail"]
+        assert f"{cal.plot_width + 50:.1f}" in r.json()["detail"]
 
     def test_adopt_force_overrides_bounds(self, client, cal):
         store = get_document_store()
@@ -259,7 +314,7 @@ class TestAdoptProfile:
         page = store.create_page("Alt")
         expected = client.get("/api/pages").json()["activeProfile"]
         svc = ProfileService()
-        svc.activate(svc.create("Postkarte")["id"])
+        svc.update(expected["id"], calibration={"pen_down_z": 2.2})
         r = client.post(
             f"/api/pages/{page['id']}/adopt-profile",
             json={

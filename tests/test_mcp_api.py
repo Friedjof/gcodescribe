@@ -30,7 +30,7 @@ def _headers(token: str) -> dict[str, str]:
 
 def _call_tool(client: TestClient, token: str, name: str, arguments: dict | None = None) -> dict:
     result = _call_tool_raw(client, token, name, arguments)
-    assert result["isError"] is False
+    assert result["isError"] is False, result
     return json.loads(result["content"][0]["text"])
 
 
@@ -58,6 +58,7 @@ class FakePrinterController:
     moves: list[dict] = []
     pens: list[bool] = []
     commands: list[str] = []
+    home_calibrations: list[dict | None] = []
 
     def __init__(self):
         self.client = self
@@ -68,8 +69,9 @@ class FakePrinterController:
     def position(self) -> dict:
         return {"x": 0, "y": 0, "z": 0, "homed": True, "homed_axes": ["x", "y", "z"]}
 
-    def home(self, axes=None) -> dict:
+    def home(self, axes=None, *, cal=None) -> dict:
         self.__class__.homes += 1
+        self.__class__.home_calibrations.append(cal.as_dict() if cal is not None else None)
         return self.position()
 
     def move_to(self, x, y, *, pen_up_first=True, limit="bed") -> dict:
@@ -526,6 +528,184 @@ def test_mcp_plot_existing_page(monkeypatch, client):
     assert data["page"]["id"] == page_id
     assert data["job"]["filename"] in FakePrinterController.uploads
     assert FakePrinterController.homes == 1
+
+
+@pytest.mark.parametrize("tool_name", [
+    "plot_page", "create_page_and_plot_polylines", "add_polylines_to_page_and_plot",
+])
+def test_mcp_page_plot_uses_current_project_for_gcode_snapshot_and_homing(
+    monkeypatch, client, cal, workspace, tool_name,
+):
+    from plotter.core.jobmeta import read_job_meta
+    from plotter.gcode.preview import parse_gcode_3d
+    from plotter.services.profiles import ProfileService, profile_meta
+
+    FakePrinterController.uploads = []
+    FakePrinterController.homes = 0
+    FakePrinterController.home_calibrations = []
+    monkeypatch.setattr(plotter.services, "PrinterController", FakePrinterController)
+    token = _enable_mcp(client)
+    index = client.get("/api/pages").json()
+    page_id = index["activeId"]
+    original_snapshot = client.get(f"/api/pages/{page_id}").json()["profileSnapshot"]
+    polylines = [[[15, 15], [40, 15]]]
+    if tool_name == "plot_page":
+        client.put(f"/api/pages/{page_id}", json={"objects": [{
+            "id": "line", "type": "line", "cachedPolylines": polylines,
+            "transform": {"x": 0, "y": 0, "scale": 1, "rotation": 0},
+        }]})
+    profiles = ProfileService()
+    project_profile = profiles.update(index["project"]["profileId"], calibration={
+        "origin_x": 45, "plot_width": 140, "pen_down_z": 2.2, "pen_up_z": 9.4,
+    })
+    other = profiles.create("Globales Referenzprofil")
+    profiles.update(other["id"], calibration={
+        "origin_x": 5, "plot_width": 5, "pen_down_z": 3.3, "pen_up_z": 12.3,
+    })
+    profiles.activate(other["id"])
+
+    args = {"page_id": page_id} if tool_name == "plot_page" else {"polylines": polylines}
+    if tool_name == "add_polylines_to_page_and_plot":
+        args["page_id"] = page_id
+    data = _call_tool(client, token, tool_name, args)
+    path = workspace / "jobs" / data["job"]["filename"]
+    draws = parse_gcode_3d(path)["draws"]
+    points = [point for line in draws for point in line]
+    assert min(point[0] for point in points) == 60
+    assert max(point[0] for point in points) == 85
+    assert {point[2] for point in points} == {2.2}
+    page_id = data["page"]["id"]
+    preview = client.post(f"/api/pages/{page_id}/preview3d", json={})
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["draws"] == draws
+    meta = read_job_meta(path)
+    assert meta["profile"] == profile_meta(project_profile)
+    assert meta["calibrationSnapshot"]["calibration"]["origin_x"] == 45
+    assert meta["calibrationSnapshot"]["calibration"]["pen_down_z"] == 2.2
+    assert FakePrinterController.home_calibrations[0]["origin_x"] == 45
+    assert FakePrinterController.home_calibrations[0]["pen_up_z"] == 9.4
+    assert FakePrinterController.homes == 1
+    saved = client.get(f"/api/pages/{page_id}").json()
+    if tool_name == "create_page_and_plot_polylines":
+        assert saved["profileId"] == index["project"]["profileId"]
+        assert saved["profileSnapshot"]["calibration"]["origin_x"] == 45
+    else:
+        assert saved["profileSnapshot"] == original_snapshot
+
+
+def test_mcp_page_svg_uses_current_project_dimensions(client, cal):
+    from plotter.services.profiles import ProfileService
+
+    token = _enable_mcp(client)
+    index = client.get("/api/pages").json()
+    page_id = index["activeId"]
+    profiles = ProfileService()
+    profiles.update(index["project"]["profileId"], calibration={
+        "plot_width": 120, "plot_height": 95,
+    })
+    other = profiles.create("Anderes Referenzprofil")
+    profiles.update(other["id"], calibration={"plot_width": 7, "plot_height": 8})
+    profiles.activate(other["id"])
+    data = _call_tool(client, token, "get_page_svg", {"page_id": page_id})
+    assert data["width"] == 120
+    assert data["height"] == 95
+    assert 'viewBox="0 0 120.000 95.000"' in data["svg"]
+
+
+@pytest.mark.parametrize("tool_name", [
+    "plot_page", "create_page_and_plot_polylines", "add_polylines_to_page_and_plot",
+])
+def test_mcp_page_plot_bounds_follow_current_project_without_saving_or_uploading(
+    monkeypatch, client, cal, workspace, tool_name,
+):
+    from plotter.services.profiles import ProfileService
+
+    FakePrinterController.uploads = []
+    FakePrinterController.homes = 0
+    monkeypatch.setattr(plotter.services, "PrinterController", FakePrinterController)
+    token = _enable_mcp(client)
+    index = client.get("/api/pages").json()
+    page_id = index["activeId"]
+    polylines = [[[15, 15], [40, 15]]]
+    if tool_name == "plot_page":
+        client.put(f"/api/pages/{page_id}", json={"objects": [{
+            "id": "line", "type": "line", "cachedPolylines": polylines,
+            "transform": {"x": 0, "y": 0, "scale": 1, "rotation": 0},
+        }]})
+    before = client.get(f"/api/pages/{page_id}").json()
+    profiles = ProfileService()
+    profiles.update(index["project"]["profileId"], calibration={"plot_width": 30})
+    other = profiles.create("Breiteres Referenzprofil")
+    profiles.update(other["id"], calibration={"plot_width": 160})
+    profiles.activate(other["id"])
+    args = {"page_id": page_id} if tool_name == "plot_page" else {"polylines": polylines}
+    if tool_name == "add_polylines_to_page_and_plot":
+        args["page_id"] = page_id
+    result = _call_tool_raw(client, token, tool_name, args)
+    assert result["isError"] is True
+    error = json.loads(result["content"][0]["text"])
+    assert error["error"] == "outside_active_profile_plot_area"
+    assert error["active_profile"]["plot_width"] == 30
+    assert error["drawing_bounds"]["max_x"] == 40
+    assert client.get(f"/api/pages/{page_id}").json()["objects"] == before["objects"]
+    assert len(client.get("/api/pages").json()["order"]) == len(index["order"])
+    assert not list((workspace / "jobs").glob("*.gcode"))
+    assert not FakePrinterController.uploads
+    assert FakePrinterController.homes == 0
+
+
+@pytest.mark.parametrize("tool_name", [
+    "plot_page", "create_page_and_plot_polylines", "add_polylines_to_page_and_plot",
+])
+@pytest.mark.parametrize("change", ["machine_bed", "project_changed_during_render"])
+def test_mcp_project_jobs_revalidate_before_any_homing_or_upload(
+    monkeypatch, client, cal, workspace, tool_name, change,
+):
+    from plotter.gcode.scene import save_scene_job
+    from plotter.services.profiles import ProfileService
+
+    FakePrinterController.uploads = []
+    FakePrinterController.homes = 0
+    monkeypatch.setattr(plotter.services, "PrinterController", FakePrinterController)
+    token = _enable_mcp(client)
+    index = client.get("/api/pages").json()
+    page_id = index["activeId"]
+    project_profile_id = index["project"]["profileId"]
+    polylines = [[[15, 15], [40, 15]]]
+    if tool_name == "plot_page":
+        client.put(f"/api/pages/{page_id}", json={"objects": [{
+            "id": "line", "type": "line", "cachedPolylines": polylines,
+            "transform": {"x": 0, "y": 0, "scale": 1, "rotation": 0},
+        }]})
+    before = client.get(f"/api/pages/{page_id}").json()
+    profiles = ProfileService()
+    if change == "machine_bed":
+        machine = profiles.create("Kleineres Druckbett")
+        profiles.update(machine["id"], calibration={"bed_width": 45})
+        profiles.activate(machine["id"])
+    else:
+        def change_profile_after_render(*args, **kwargs):
+            path = save_scene_job(*args, **kwargs)
+            profiles.update(project_profile_id, calibration={"origin_x": 35})
+            return path
+
+        monkeypatch.setattr("plotter.gcode.scene.save_scene_job", change_profile_after_render)
+    args = {"page_id": page_id} if tool_name == "plot_page" else {"polylines": polylines}
+    if tool_name == "add_polylines_to_page_and_plot":
+        args["page_id"] = page_id
+    result = _call_tool_raw(client, token, tool_name, args)
+    assert result["isError"] is True
+    error = json.loads(result["content"][0]["text"])["error"]
+    if change == "project_changed_during_render":
+        assert "älteren Projektkalibrierung" in error
+    else:
+        assert "bed" in error.lower() or "bett" in error.lower()
+    assert not FakePrinterController.uploads
+    assert FakePrinterController.homes == 0
+    assert not list((workspace / "jobs").glob("*.gcode"))
+    assert not list((workspace / "jobs").glob("*.json"))
+    assert client.get(f"/api/pages/{page_id}").json()["objects"] == before["objects"]
+    assert len(client.get("/api/pages").json()["order"]) == len(index["order"])
 
 
 def test_mcp_create_page_and_plot_gallery_item(monkeypatch, client):

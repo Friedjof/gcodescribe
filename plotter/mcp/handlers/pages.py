@@ -15,7 +15,6 @@ from plotter.mcp.orchestration import (
     create_page_job_and_plot,
     gallery_object,
     line_object,
-    page_polylines_checked,
     placed_gallery_polylines,
     plot_existing_page,
     render_text_polylines,
@@ -75,18 +74,16 @@ def tool_delete_mcp_page(args: dict[str, Any]) -> dict:
 
 
 def tool_get_page_svg(args: dict[str, Any]) -> dict:
-    from plotter.core.calibration import Calibration
     from plotter.core.document import get_document_store
     from plotter.gcode.scene import page_polylines
     from plotter.services.errors import ServiceError
-    from plotter.services.profiles import ProfileService
+    from plotter.services.project_render import page_project_profile
 
     page_id = require_arg(args, "page_id")
     page = get_document_store().get_page(page_id)
     if not page:
         raise ServiceError(f"Seite nicht gefunden: {page_id}")
-    profile = ProfileService().active()
-    cal = Calibration().merged(profile["calibration"])
+    _, cal = page_project_profile(page)
     polylines = page_polylines(page)
     return {
         "page_id": page_id,
@@ -104,19 +101,14 @@ def tool_get_page_svg(args: dict[str, Any]) -> dict:
 
 
 def tool_plot_page(args: dict[str, Any]) -> dict:
-    from plotter.core.calibration import Calibration
     from plotter.core.document import get_document_store
     from plotter.services.errors import ServiceError
-    from plotter.services.profiles import ProfileService
 
     page_id = require_arg(args, "page_id")
     page = get_document_store().get_page(page_id)
     if not page:
         raise ServiceError(f"Seite nicht gefunden: {page_id}")
-    profile = ProfileService().active()
-    cal = Calibration().merged(profile["calibration"])
-    page_polylines_checked(page, cal)
-    return plot_existing_page(page, profile, cal)
+    return plot_existing_page(page)
 
 
 # ── create/add-and-plot family ───────────────────────────────────────────────
@@ -171,12 +163,12 @@ _SPECS: dict[str, dict[str, Any]] = {
 
 def _create_page_and_plot(kind: str, args: dict[str, Any]) -> dict:
     spec = _SPECS[kind]
-    profile, cal = active_profile_and_cal()
+    _, cal = active_profile_and_cal()
     polylines, meta = spec["produce"](args)
     validate_inside_plot(polylines, cal)
     name = str(args.get("name") or spec["default_name"](args, meta))[:80]
     obj = spec["make_obj"](polylines, meta, None)
-    return create_page_job_and_plot(name, [obj], profile, cal)
+    return create_page_job_and_plot(name, [obj])
 
 
 def _add_to_page_and_plot(kind: str, args: dict[str, Any]) -> dict:
@@ -184,14 +176,13 @@ def _add_to_page_and_plot(kind: str, args: dict[str, Any]) -> dict:
     from plotter.services.errors import ServiceError
 
     spec = _SPECS[kind]
-    profile, cal = active_profile_and_cal()
     page_id = require_arg(args, "page_id")
     page = get_document_store().get_page(page_id)
     if not page:
         raise ServiceError(f"Seite nicht gefunden: {page_id}")
     polylines, meta = spec["produce"](args)
     obj = spec["make_obj"](polylines, meta, spec["added_id"])
-    return update_page_and_plot(page, obj, profile, cal)
+    return update_page_and_plot(page, obj)
 
 
 def tool_create_page_and_plot_polylines(args: dict[str, Any]) -> dict:

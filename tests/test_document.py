@@ -191,6 +191,7 @@ class TestPagesApi:
 
             preview = c.post(f"/api/pages/{pid}/preview3d", json={"objects": [line]}).json()
             assert preview["draws"] and preview["bounds"]
+            assert preview["bed"] == [cal.bed_width, cal.bed_height]
             assert c.post(f"/api/pages/{pid}/preview3d", json={}).status_code == 400
 
             # neither endpoint persisted a job file

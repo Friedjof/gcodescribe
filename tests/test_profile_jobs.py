@@ -43,6 +43,18 @@ class TestSidecars:
         assert jobs[0]["profile"]["stale"] is False
         assert jobs[0]["profile"]["legacy"] is False
 
+    def test_3d_preview_uses_the_saved_slide_bed(self, client, workspace, cal):
+        filename = _make_job(client)
+        sidecar = job_meta_path(workspace / "jobs" / filename)
+        meta = json.loads(sidecar.read_text())
+        meta["calibrationSnapshot"] = {
+            "calibration": {**cal.as_dict(), "bed_width": 321, "bed_height": 287},
+        }
+        sidecar.write_text(json.dumps(meta))
+        preview = client.get(f"/api/jobs/{filename}/preview3d")
+        assert preview.status_code == 200
+        assert preview.json()["bed"] == [321, 287]
+
     def test_rename_moves_sidecar(self, client, workspace):
         filename = _make_job(client)
         r = client.post(f"/api/jobs/{filename}/rename", json={"name": "umbenannt"})

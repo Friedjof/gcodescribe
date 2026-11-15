@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from plotter.artwork.pipeline import PlotterError
 from plotter.core.calibration import Calibration
+from plotter.core.document import RevisionConflict
 from plotter.core.jobmeta import delete_job_meta, read_job_meta
 from plotter.core.storage import jobs_dir
 from plotter.gcode.metrics import evaluate_gcode
@@ -16,7 +17,8 @@ from plotter.gcode.scene import page_polylines, save_scene_job, scene_gcode
 from plotter.text import text_polylines
 from plotter.web.deps import document_store, profile_service
 
-from ...services.profiles import ProfileService, profile_meta
+from ...services.profiles import ProfileError, ProfileService, profile_meta
+from ...services.project_render import page_project_profile
 from ...services.upload_validation import MAX_GCODE_BYTES
 from .jobs import _job_info
 
@@ -45,10 +47,15 @@ def _page_profile_status(page: dict, active: dict, profiles: dict[str, dict]) ->
 
 
 def _index_response(index: dict) -> dict:
-    """Enrich a raw store index with per-page profile status + active profile,
+    """Enrich the active project's slide index with profile metadata,
     so any index-returning endpoint gives the frontend a complete PageIndex."""
     service = profile_service()
-    active = service.active_profile_meta()
+    project = index.get("project") or {}
+    active = (
+        profile_meta(service.get(project["profileId"]))
+        if project.get("profileId")
+        else service.active_profile_meta()
+    )
     profiles = _profiles_by_id(service)
     return {
         **index,
@@ -66,18 +73,89 @@ def list_pages() -> dict:
     return _index_response(document_store().list_pages())
 
 
+@router.get("/projects")
+def list_projects() -> list[dict]:
+    return document_store().projects()
+
+
+class ProjectCreateRequest(BaseModel):
+    name: str
+    templateProfileId: str | None = None
+    profileId: str | None = None
+
+
+@router.post("/projects")
+def create_project(req: ProjectCreateRequest) -> dict:
+    try:
+        return _index_response(
+            document_store().create_project(
+                req.name,
+                req.templateProfileId,
+                profile_id=req.profileId,
+            )
+        )
+    except ProfileError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc
+
+
+@router.post("/projects/{project_id}/activate")
+def activate_project(project_id: str) -> dict:
+    try:
+        return _index_response(document_store().activate_project(project_id))
+    except KeyError as exc:
+        raise HTTPException(404, "Projekt nicht gefunden") from exc
+
+
+class ProjectUpdateRequest(BaseModel):
+    name: str | None = None
+    archived: bool | None = None
+    profileId: str | None = None
+
+
+@router.put("/projects/{project_id}")
+def update_project(project_id: str, req: ProjectUpdateRequest) -> dict:
+    try:
+        return document_store().update_project(
+            project_id,
+            name=req.name,
+            archived=req.archived,
+            profile_id=req.profileId,
+        )
+    except ProfileError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(404, "Projekt nicht gefunden") from exc
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
 @router.get("/pages/{page_id}")
 def get_page(page_id: str) -> dict:
     page = document_store().get_page(page_id)
     if not page:
         raise HTTPException(404, "Seite nicht gefunden")
     service = profile_service()
-    active = service.active_profile_meta()
+    projects = document_store().projects()
+    project = next((p for p in projects if p["id"] == page.get("projectId")), None)
+    active = (
+        profile_meta(service.get(project["profileId"]))
+        if project
+        else service.active_profile_meta()
+    )
     return {**page, "profileStatus": _page_profile_status(page, active, _profiles_by_id(service))}
+
+
+@router.get("/pages/{page_id}/thumbnail")
+def get_page_thumbnail(page_id: str) -> dict:
+    thumbnail = document_store().get_thumbnail(page_id)
+    if thumbnail is None:
+        raise HTTPException(404, "Slide nicht gefunden")
+    return thumbnail
 
 
 class CreateRequest(BaseModel):
     name: str | None = None
+    folderId: str | None = None
 
 
 class ExpectedProfileRequest(BaseModel):
@@ -91,7 +169,8 @@ def _require_expected_profile(req: ExpectedProfileRequest | None, active: dict) 
     if req.expected_profile_id and req.expected_profile_id != active["id"]:
         raise HTTPException(
             409,
-            "Das aktive Profil wurde in der Zwischenzeit gewechselt. Bitte die Seite neu laden.",
+            "Das Projektprofil wurde seit der Anzeige gewechselt. "
+            "Bitte die Projektkalibrierung neu laden und die Vorschau erneut prüfen.",
         )
     if (
         req.expected_profile_fingerprint
@@ -99,13 +178,17 @@ def _require_expected_profile(req: ExpectedProfileRequest | None, active: dict) 
     ):
         raise HTTPException(
             409,
-            "Das aktive Profil wurde in der Zwischenzeit geändert. Bitte die Seite neu laden.",
+            "Das Profil dieses Projekts wurde seit der Anzeige geändert. "
+            "Bitte die Projektkalibrierung neu laden und die Vorschau erneut prüfen.",
         )
 
 
 @router.post("/pages")
 def create_page(req: CreateRequest) -> dict:
-    return document_store().create_page(req.name, profile=profile_service().active_profile_meta())
+    try:
+        return document_store().create_page(req.name, folder_id=req.folderId)
+    except KeyError as exc:
+        raise HTTPException(404, "Ordner oder Projekt nicht gefunden") from exc
 
 
 class SaveRequest(BaseModel):
@@ -117,7 +200,7 @@ class SaveRequest(BaseModel):
     # colour order), so the coloring editor restores its state per page.
     coloring: dict | None = None
     # Plot the page as one continuous stroke per connected component (eulerised,
-    # invisible retraces) — far fewer pen lifts. Auto-on for OSM map pages.
+    # retraces) — far fewer pen lifts. Map imports explicitly choose their mode.
     continuous: bool | None = None
 
 
@@ -135,6 +218,25 @@ class TextPreviewRequest(BaseModel):
 def save_page(page_id: str, req: SaveRequest) -> dict:
     try:
         return document_store().save_page(page_id, req.model_dump(exclude_none=True))
+    except KeyError as exc:
+        raise HTTPException(404, "Seite nicht gefunden") from exc
+
+
+class ObjectPatchRequest(BaseModel):
+    revision: int
+    mutation_id: str
+    changes: list[dict] = []
+    removed: list[str] = []
+
+
+@router.patch("/pages/{page_id}/objects")
+def patch_page_objects(page_id: str, req: ObjectPatchRequest) -> dict:
+    if not req.mutation_id or any(not isinstance(c.get("id"), str) for c in req.changes):
+        raise HTTPException(422, "Objekt-ID und Vorgangs-ID erforderlich.")
+    try:
+        return document_store().patch_objects(page_id, **req.model_dump())
+    except RevisionConflict as exc:
+        raise HTTPException(409, "Die Seite wurde zwischenzeitlich geändert.") from exc
     except KeyError as exc:
         raise HTTPException(404, "Seite nicht gefunden") from exc
 
@@ -168,6 +270,7 @@ def reorder_pages(req: ReorderRequest) -> dict:
 
 class GroupCreateRequest(BaseModel):
     name: str
+    parentId: str | None = None
 
 
 class GroupRenameRequest(BaseModel):
@@ -178,9 +281,38 @@ class PageGroupRequest(BaseModel):
     groupId: str | None = None
 
 
+class PageMoveRequest(BaseModel):
+    targetProjectId: str
+
+
+@router.post("/pages/{page_id}/move")
+def move_page(page_id: str, req: PageMoveRequest) -> dict:
+    try:
+        return _index_response(document_store().move_page_to_project(page_id, req.targetProjectId))
+    except KeyError as exc:
+        raise HTTPException(404, "Slide oder Zielprojekt nicht gefunden") from exc
+
+
 @router.post("/pages/groups")
 def create_group(req: GroupCreateRequest) -> dict:
-    return _index_response(document_store().create_group(req.name))
+    try:
+        return _index_response(document_store().create_group(req.name, req.parentId))
+    except KeyError as exc:
+        raise HTTPException(404, "Übergeordneter Ordner nicht gefunden") from exc
+
+
+class GroupParentRequest(BaseModel):
+    parentId: str | None = None
+
+
+@router.post("/pages/groups/{group_id}/parent")
+def set_group_parent(group_id: str, req: GroupParentRequest) -> dict:
+    try:
+        return _index_response(document_store().set_group_parent(group_id, req.parentId))
+    except KeyError as exc:
+        raise HTTPException(404, "Ordner nicht gefunden") from exc
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 @router.put("/pages/groups/{group_id}")
@@ -211,50 +343,10 @@ class PageGcodeRequest(ExpectedProfileRequest):
 def _require_active_page_profile(
     page: dict, req: ExpectedProfileRequest | None
 ) -> tuple[dict, dict, Calibration]:
-    """Guard a plot of ``page`` against the active profile.
-
-    Page and active profile must match exactly: same id, same fingerprint. A
-    page laid out for another plot area would silently draw at the wrong bed
-    position; the user has to activate or adopt the profile explicitly. Returns
-    ``(active_meta, profile, calibration)`` or raises the matching 409.
-    """
-    service = profile_service()
-    profile = service.active()
+    """Render with the same current project calibration shown in Paper/LiveView."""
+    profile, cal = page_project_profile(page)
     active = profile_meta(profile)
     _require_expected_profile(req, active)
-    status = _page_profile_status(page, active, _profiles_by_id(service))
-    if status == "missing":
-        if page.get("profileId"):
-            raise HTTPException(
-                409,
-                f"Das Profil „{page.get('profileName')}“ existiert nicht mehr. Bitte die "
-                "Seite explizit für das aktive Profil übernehmen.",
-            )
-        raise HTTPException(
-            409,
-            "Die Seite hat kein Profil (Legacy). Bitte sie zuerst explizit "
-            "für das aktive Profil übernehmen.",
-        )
-    if status == "other":
-        raise HTTPException(
-            409,
-            f"Die Seite gehört zu Profil „{page.get('profileName')}“ — aktiv "
-            f"ist „{active['name']}“. Bitte das passende Profil aktivieren.",
-        )
-    if status == "archived":
-        raise HTTPException(
-            409,
-            f"Die Seite gehört zu Profil „{page.get('profileName')}“, aber dieses Profil "
-            "ist archiviert. Bitte das Profil wiederherstellen oder die Seite explizit "
-            "für das aktive Profil übernehmen.",
-        )
-    if status == "stale":
-        raise HTTPException(
-            409,
-            f"Profil „{active['name']}“ wurde seit Erstellung der Seite "
-            "geändert. Bitte die Seite prüfen und das Profil neu übernehmen.",
-        )
-    cal = Calibration().merged(profile["calibration"])
     return active, profile, cal
 
 
@@ -348,9 +440,12 @@ def page_color_gcode(page_id: str, req: PageColorGcodeRequest) -> dict:
     created: list[Path] = []
     try:
         for item in sorted(items, key=lambda it: it.order):
-            safe_label = "".join(
-                c if c.isalnum() else "-" for c in (item.label or item.color).lower()
-            ).strip("-") or item.color
+            safe_label = (
+                "".join(
+                    c if c.isalnum() else "-" for c in (item.label or item.color).lower()
+                ).strip("-")
+                or item.color
+            )
             color_page = {**page, "objects": item.objects}
             created.append(
                 save_scene_job(
@@ -406,22 +501,32 @@ def adopt_profile(page_id: str, req: AdoptRequest) -> dict:
     page = document_store().get_page(page_id)
     if not page:
         raise HTTPException(404, "Seite nicht gefunden")
-    profile = profile_service().active()
+    project = next(
+        (p for p in document_store().projects() if p["id"] == page.get("projectId")), None
+    )
+    if not project:
+        raise HTTPException(404, "Projekt nicht gefunden")
+    profile = profile_service().get(project["profileId"])
     active = profile_meta(profile)
     _require_expected_profile(req, active)
     if not req.force:
-        cal = Calibration().merged(profile["calibration"])
+        cal = Calibration.from_dict(profile["calibration"])
         points = [pt for line in page_polylines(page) for pt in line]
         eps = 0.001
         if any(
             x < -eps or y < -eps or x > cal.plot_width + eps or y > cal.plot_height + eps
             for x, y in points
         ):
+            min_x = min(x for x, _ in points)
+            max_x = max(x for x, _ in points)
+            min_y = min(y for _, y in points)
+            max_y = max(y for _, y in points)
             raise HTTPException(
                 409,
-                "Die Seite ragt über den Plotbereich des aktiven Profils "
-                f"hinaus ({cal.plot_width:g} × {cal.plot_height:g} mm). "
-                "Inhalte werden nicht automatisch skaliert.",
+                "Der Slide ragt über den Plotbereich des Projektprofils hinaus: "
+                f"Inhalt X {min_x:.1f}–{max_x:.1f} mm, Y {min_y:.1f}–{max_y:.1f} mm; "
+                f"verfügbar X 0–{cal.plot_width:g} mm, Y 0–{cal.plot_height:g} mm. "
+                "Bitte die Zeichnung im Designer verkleinern oder verschieben und erneut prüfen.",
             )
     updated = document_store().set_page_profile(page_id, active)
     return {
@@ -434,7 +539,7 @@ def adopt_profile(page_id: str, req: AdoptRequest) -> dict:
     }
 
 
-class SceneRequest(BaseModel):
+class SceneRequest(ExpectedProfileRequest):
     """Optional live canvas objects, overriding the persisted page state."""
 
     objects: list | None = None
@@ -456,7 +561,8 @@ def page_score(page_id: str, req: SceneRequest) -> dict:
     """
     page = _page_for_preview(page_id, req.objects)
     try:
-        gcode = scene_gcode(page, Calibration.load())
+        _, _, cal = _require_active_page_profile(page, req)
+        gcode = scene_gcode(page, cal)
     except PlotterError as exc:
         return {"score": None, "metrics": None, "reason": str(exc)}
     return {**evaluate_gcode(gcode, MAX_GCODE_BYTES), "reason": None}
@@ -467,10 +573,11 @@ def page_preview_3d(page_id: str, req: SceneRequest) -> dict:
     """3D tool-path preview of the current canvas without saving a job."""
     page = _page_for_preview(page_id, req.objects)
     try:
-        gcode = scene_gcode(page, Calibration.load())
+        _, _, cal = _require_active_page_profile(page, req)
+        gcode = scene_gcode(page, cal)
     except PlotterError as exc:
         raise HTTPException(400, str(exc)) from exc
-    return parse_gcode_3d_text(gcode)
+    return {**parse_gcode_3d_text(gcode), "bed": [cal.bed_width, cal.bed_height]}
 
 
 @router.post("/paint/text-polylines")

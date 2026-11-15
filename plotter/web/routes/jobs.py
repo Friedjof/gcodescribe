@@ -3,6 +3,7 @@ from __future__ import annotations
 import shutil
 import tempfile
 import time
+import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
@@ -20,10 +21,12 @@ from plotter.core.jobmeta import (
     write_job_meta,
 )
 from plotter.core.storage import jobs_dir
+from plotter.gcode.pressure import job_uses_pressure
 from plotter.gcode.preview import parse_gcode, parse_gcode_3d
 from plotter.gcode.profile import TEST_PATTERNS, test_pattern
 from plotter.gcode.safety import GcodeSafetyChecker, SafetyViolation
 from plotter.web.deps import profile_service
+from plotter.web.project_context import active_project_profile
 
 from ...services.profiles import profile_meta
 
@@ -65,22 +68,49 @@ def _job_info(
 ) -> JobInfo:
     stat = path.stat()
     info = JobInfo(filename=path.name, size=stat.st_size, created=stat.st_mtime)
-    if cal is not None:
-        try:
-            GcodeSafetyChecker(cal).check(path.read_text(), name=path.name)
-            info.fits = True
-        except SafetyViolation as exc:
-            info.fits = False
-            info.issue = str(exc)
+    effective_cal = cal
+    meta = None
     if active_profile is not None:
         meta, meta_issue = read_job_meta_checked(path)
-        info.profile = JobProfileStatus(
-            **job_profile_status(meta, active_profile, profiles)
-        )
         info.source = (meta or {}).get("source")
         if meta_issue:
             info.fits = False
             info.issue = meta_issue
+        source = info.source or {}
+        if source.get("project_id") and source.get("kind") in (
+            "paint_page", "paint_coloring", "testpattern",
+        ):
+            from .printer import ProjectJobError, _project_job_calibration
+
+            ref = (meta or {}).get("profile") or {}
+            try:
+                effective_cal = _project_job_calibration(meta)
+                info.profile = JobProfileStatus(
+                    id=ref.get("id"), name=ref.get("name"),
+                    fingerprint=ref.get("fingerprint"), matchesActive=True,
+                )
+            except ProjectJobError as exc:
+                info.profile = JobProfileStatus(
+                    id=ref.get("id"), name=ref.get("name"),
+                    fingerprint=ref.get("fingerprint"), matchesActive=False,
+                )
+                info.fits = False
+                info.issue = str(exc)
+        else:
+            info.profile = JobProfileStatus(
+                **job_profile_status(meta, active_profile, profiles)
+            )
+    if effective_cal is not None and info.fits is not False:
+        try:
+            if meta is None:
+                meta, _ = read_job_meta_checked(path)
+            GcodeSafetyChecker(effective_cal, allow_pressure=job_uses_pressure(meta)).check(
+                path.read_text(), name=path.name,
+            )
+            info.fits = True
+        except SafetyViolation as exc:
+            info.fits = False
+            info.issue = str(exc)
     return info
 
 
@@ -94,7 +124,7 @@ def _job_path(filename: str) -> Path:
 def _active() -> tuple[Calibration, dict]:
     """Active profile's calibration + compact metadata, from one read."""
     profile = profile_service().active()
-    return Calibration().merged(profile["calibration"]), profile_meta(profile)
+    return Calibration.from_dict(profile["calibration"]), profile_meta(profile)
 
 
 def _profiles_by_id() -> dict[str, dict]:
@@ -192,16 +222,39 @@ def job_preview(filename: str) -> dict:
 
 @router.get("/jobs/{filename}/preview3d")
 def job_preview_3d(filename: str) -> dict:
-    return parse_gcode_3d(_job_path(filename))
+    path = _job_path(filename)
+    meta, _ = read_job_meta_checked(path)
+    snapshot = (meta or {}).get("calibrationSnapshot") or {}
+    saved_cal = snapshot.get("calibration") if isinstance(snapshot, dict) else None
+    if not isinstance(saved_cal, dict):
+        profile_id = ((meta or {}).get("profile") or {}).get("id")
+        profile = _profiles_by_id().get(profile_id) if isinstance(profile_id, str) else None
+        saved_cal = profile.get("calibration") if profile else None
+    cal = Calibration.from_dict(saved_cal) if isinstance(saved_cal, dict) else _active()[0]
+    return {**parse_gcode_3d(path), "bed": [cal.bed_width, cal.bed_height]}
 
 
 @router.post("/testpattern/{name}")
-def make_test_pattern(name: str) -> dict:
+def make_test_pattern(name: str, project_id: str | None = None) -> dict:
     if name not in TEST_PATTERNS:
         raise HTTPException(404, f"Unbekanntes Test-Pattern: {name}")
-    cal, active = _active()
+    snapshot = None
+    if project_id is None:
+        cal, active = _active()
+    else:
+        profile = active_project_profile(project_id)
+        cal = Calibration.from_dict(profile["calibration"])
+        active = profile_meta(profile)
+        snapshot = {
+            "profileId": profile["id"], "profileName": profile["name"],
+            "fingerprint": profile["fingerprint"], "calibration": profile["calibration"],
+            "capturedAt": time.time(),
+        }
     gcode = test_pattern(name, cal)
-    out = jobs_dir() / f"test-{name}-{int(time.time())}.gcode"
+    out = jobs_dir() / f"test-{name}-{int(time.time())}-{uuid.uuid4().hex[:8]}.gcode"
     out.write_text(profile_comment(active) + gcode)
-    write_job_meta(out, source={"kind": "testpattern", "name": name}, profile=active)
+    source = {"kind": "testpattern", "name": name}
+    if project_id is not None:
+        source["project_id"] = project_id
+    write_job_meta(out, source=source, profile=active, calibration_snapshot=snapshot)
     return _job_info(out, active_profile=active, profiles={active["id"]: active}).model_dump()

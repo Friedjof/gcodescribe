@@ -122,34 +122,35 @@ def require_printer_ready() -> dict:
     return {"controller": ctrl, "status": status}
 
 
-def plot_existing_page(page: dict, profile: dict, cal) -> dict:
-    from plotter.gcode.scene import save_scene_job
+def _validated_project_job_calibration(path: Path):
+    from plotter.core.jobmeta import read_job_meta_checked
+    from plotter.gcode.pressure import job_uses_pressure
+    from plotter.gcode.safety import GcodeSafetyChecker
+    from plotter.services.project_render import ProjectJobError, project_job_calibration
 
-    from ..services.profiles import profile_meta
-
-    active = profile_meta(profile)
-    page_profile_mismatch = (
-        page.get("profileId") != active["id"]
-        or page.get("profileFingerprint") != active["fingerprint"]
+    meta, issue = read_job_meta_checked(path)
+    if issue or meta is None:
+        raise ProjectJobError(issue or "Dem Projekt-Job fehlen die Kalibrierungsmetadaten.")
+    cal = project_job_calibration(meta)
+    GcodeSafetyChecker(cal, allow_pressure=job_uses_pressure(meta)).check(
+        path.read_text(), name=path.name,
     )
-    if page_profile_mismatch:
-        raise ToolPayloadError(
-            {
-                "error": "page_profile_mismatch",
-                "message": "Page does not match the active profile; nothing was plotted.",
-                "active_profile": active,
-                "page_profile": {
-                    "id": page.get("profileId"),
-                    "name": page.get("profileName"),
-                    "fingerprint": page.get("profileFingerprint"),
-                },
-            }
-        )
+    return cal
+
+
+def plot_existing_page(page: dict) -> dict:
+    from plotter.gcode.scene import save_scene_job
+    from plotter.services.profiles import profile_meta
+    from plotter.services.project_render import page_project_profile
+
+    profile, cal = page_project_profile(page)
+    page_polylines_checked(page, cal)
     ready = require_printer_ready()
     ctrl = ready["controller"]
-    path = save_scene_job(page, cal, profile=active)
+    path = save_scene_job(page, cal, profile=profile_meta(profile))
     try:
-        ctrl.home()
+        cal = _validated_project_job_calibration(path)
+        ctrl.home(cal=cal)
         upload = ctrl.client.upload(path, start=True)
     except Exception:
         from plotter.core.jobmeta import delete_job_meta
@@ -165,10 +166,11 @@ def plot_existing_page(page: dict, profile: dict, cal) -> dict:
     }
 
 
-def create_page_job_and_plot(name: str, objects: list[dict], profile: dict, cal) -> dict:
+def create_page_job_and_plot(name: str, objects: list[dict]) -> dict:
     from plotter.core.document import get_document_store
     from plotter.core.jobmeta import delete_job_meta
     from plotter.gcode.scene import save_scene_job
+    from plotter.services.project_render import page_project_profile
 
     from ..services.profiles import profile_meta
 
@@ -177,14 +179,16 @@ def create_page_job_and_plot(name: str, objects: list[dict], profile: dict, cal)
     store = get_document_store()
     page = store.create_page(
         name,
-        profile=profile_meta(profile),
         mcp={"created": True, "createdAt": time.time(), "tool": "mcp"},
     )
     path: Path | None = None
     try:
         page = store.save_page(page["id"], {"objects": objects})
+        profile, cal = page_project_profile(page)
+        page_polylines_checked(page, cal)
         path = save_scene_job(page, cal, profile=profile_meta(profile))
-        ctrl.home()
+        cal = _validated_project_job_calibration(path)
+        ctrl.home(cal=cal)
         upload = ctrl.client.upload(path, start=True)
         return {
             "ok": True,
@@ -200,17 +204,19 @@ def create_page_job_and_plot(name: str, objects: list[dict], profile: dict, cal)
         raise
 
 
-def update_page_and_plot(page: dict, obj: dict, profile: dict, cal) -> dict:
+def update_page_and_plot(page: dict, obj: dict) -> dict:
     from plotter.core.document import get_document_store
+    from plotter.services.project_render import page_project_profile
 
     store = get_document_store()
     original_objects = page.get("objects") or []
     obj = {**obj, "zOrder": next_z(page)}
     updated = {**page, "objects": [*original_objects, obj]}
+    _, cal = page_project_profile(page)
     page_polylines_checked(updated, cal)
     saved = store.save_page(page["id"], {"objects": updated["objects"]})
     try:
-        result = plot_existing_page(saved, profile, cal)
+        result = plot_existing_page(saved)
     except Exception:
         store.save_page(page["id"], {"objects": original_objects})
         raise
@@ -220,11 +226,13 @@ def update_page_and_plot(page: dict, obj: dict, profile: dict, cal) -> dict:
 
 def active_profile_and_cal() -> tuple[dict, Any]:
     from plotter.core.calibration import Calibration
+    from plotter.core.document import get_document_store
 
     from ..services.profiles import ProfileService
 
-    profile = ProfileService().active()
-    return profile, Calibration().merged(profile["calibration"])
+    project = get_document_store().list_pages()["project"]
+    profile = ProfileService().get(project["profileId"])
+    return profile, Calibration.from_dict(profile["calibration"])
 
 
 def render_text_polylines(args: dict[str, Any]) -> tuple[list[list[list[float]]], dict]:

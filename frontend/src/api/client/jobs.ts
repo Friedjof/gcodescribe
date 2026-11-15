@@ -16,8 +16,8 @@ export const jobsClient = {
     fd.append("file", file);
     return req<{ files: Job[] }>("/api/convert", { method: "POST", body: fd });
   },
-  testPattern: (name: string) =>
-    req<Job>(`/api/testpattern/${name}`, { method: "POST" }),
+  testPattern: (name: string, projectId?: string) =>
+    req<Job>(`/api/testpattern/${name}${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ""}`, { method: "POST" }),
   jobPreview: (filename: string) =>
     req<GcodePreview>(`/api/jobs/${encodeURIComponent(filename)}/preview`),
   jobPreview3D: (filename: string) =>
