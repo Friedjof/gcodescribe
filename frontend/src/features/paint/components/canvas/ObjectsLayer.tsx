@@ -1,53 +1,51 @@
+import { memo, useId, useMemo } from "react";
 import type { SceneObject } from "../../../../api";
-import { IDENTITY, toMultiPath, type Pt, type Transform } from "../../lib/geometry";
-
+import { EMPTY_LINES, IDENTITY, localBounds, type Pt, type Transform } from "../../lib/geometry";
+import { sourcePageFrame } from "../../lib/sourcePage";
+import { useGeometryPath } from "../../hooks/useGeometryPath";
+import { rasterGeometry, useGeometryRaster } from "../../hooks/useGeometryRaster";
+import { pressurePreviewPaths } from "../../lib/pressure";
 function objTransform(t: Transform) {
-  const sx = t.scaleX ?? t.scale;
-  const sy = t.scaleY ?? t.scale;
-  return `translate(${t.x} ${t.y}) rotate(${(t.rotation * 180) / Math.PI}) scale(${sx},${sy})`;
+  return `translate(${t.x} ${t.y}) rotate(${(t.rotation * 180) / Math.PI}) scale(${t.scaleX ?? t.scale},${t.scaleY ?? t.scale})`;
 }
-
-/** Renders every scene object (z-sorted) as one merged path each; masks get
- * their dashed cover style, plotted objects fade out. Pure display layer —
- * pointer events are handled by the selection layer above. */
-export default function ObjectsLayer({
-  objects,
-  selectedIds,
-  stroke,
-}: {
-  objects: SceneObject[];
-  selectedIds: string[];
-  stroke: number;
+const ObjectView = memo(function ObjectView({ obj, selected, stroke, interactive, active }: {
+  obj: SceneObject; selected: boolean; stroke: number; interactive: boolean; active: boolean;
 }) {
-  return (
-    <>
-      {objects.map((obj) => {
-        const t = obj.transform ?? IDENTITY;
-        const strokeScale = Math.max(t.scaleX ?? t.scale, t.scaleY ?? t.scale);
-        const isMask = obj.type === "mask-rect" || obj.data?.mask === "erase";
-        return (
-          <g
-            key={obj.id}
-            transform={objTransform(t)}
-            opacity={obj.plotted ? 0.25 : 1}
-            style={{ pointerEvents: "none" }}
-          >
-            {isMask ? (
-              <path d={toMultiPath((obj.cachedPolylines ?? []) as Pt[][])}
-                fill="#101013" fillOpacity={0.92}
-                stroke={selectedIds.includes(obj.id) ? "var(--accent)" : "rgba(255,255,255,0.45)"}
-                strokeWidth={stroke / strokeScale}
-                strokeDasharray={`${(stroke * 2) / strokeScale} ${stroke / strokeScale}`}
-                strokeLinejoin="round" strokeLinecap="round" />
-            ) : (
-              // One merged path per object — all lines share the same stroke.
-              <path d={toMultiPath((obj.cachedPolylines ?? []) as Pt[][])} fill="none"
-                stroke={obj.plotted ? "var(--muted)" : "var(--busy)"}
-                strokeWidth={stroke / strokeScale} strokeLinejoin="round" strokeLinecap="round" />
-            )}
-          </g>
-        );
-      })}
-    </>
-  );
-}
+  const t = obj.transform ?? IDENTITY;
+  const scale = Math.max(Math.abs(t.scaleX ?? t.scale), Math.abs(t.scaleY ?? t.scale), 0.0001);
+  const mask = obj.type === "mask-rect" || obj.data?.mask === "erase";
+  const sourcePage = sourcePageFrame(obj);
+  const pageBounds = sourcePage ? localBounds(sourcePage) : null;
+  const lines = (obj.cachedPolylines ?? EMPTY_LINES) as Pt[][];
+  const large = !mask && rasterGeometry(lines);
+  const pressurePaths = useMemo(() => obj.data?.pressureEnabled && !large && active && !interactive
+    ? pressurePreviewPaths(lines, obj.data?.cachedSegmentPressures ?? obj.data?.baseSegmentPressures) : undefined,
+  [obj.data?.pressureEnabled, obj.data?.cachedSegmentPressures, obj.data?.baseSegmentPressures, lines, large, active, interactive]);
+  const { image: raster, failed } = useGeometryRaster(lines, stroke / scale, large && active && !interactive);
+  const d = useGeometryPath(lines, interactive, active, large && !failed);
+  const maskId = useId();
+  return <g transform={objTransform(t)} opacity={obj.plotted ? 0.25 : 1} pointerEvents="none">
+    {selected && pageBounds &&
+      <rect x={pageBounds[0]} y={pageBounds[1]}
+        width={pageBounds[2] - pageBounds[0]} height={pageBounds[3] - pageBounds[1]}
+        fill="none" stroke="var(--accent)" strokeWidth={stroke / scale}
+        strokeDasharray={`${stroke * 4 / scale} ${stroke * 3 / scale}`} />}
+    {pressurePaths ? pressurePaths.map((path, i) => path && <path key={i} d={path} fill="none"
+      stroke={obj.plotted ? "var(--muted)" : "var(--busy)"} strokeOpacity={0.35 + i / 7 * 0.65}
+      strokeWidth={stroke / scale} strokeLinejoin="round" strokeLinecap="round" />) : raster ? <>
+      <defs><mask id={maskId} maskUnits="userSpaceOnUse" x={raster.x} y={raster.y} width={raster.width} height={raster.height}>
+        <image href={raster.url} x={raster.x} y={raster.y} width={raster.width} height={raster.height} preserveAspectRatio="none" />
+      </mask></defs>
+      <rect x={raster.x} y={raster.y} width={raster.width} height={raster.height} fill={obj.plotted ? "var(--muted)" : "var(--busy)"} mask={`url(#${maskId})`} />
+    </> : <path d={d} fill={mask ? "#101013" : "none"} fillOpacity={mask ? 0.92 : undefined}
+      stroke={mask ? selected ? "var(--accent)" : "rgba(255,255,255,0.45)" : obj.plotted ? "var(--muted)" : "var(--busy)"}
+      strokeWidth={stroke / scale} strokeDasharray={mask ? `${stroke * 2 / scale} ${stroke / scale}` : undefined}
+      strokeLinejoin="round" strokeLinecap="round" />}
+  </g>;
+});
+export default memo(function ObjectsLayer({ objects, selectedIds, stroke, interactive = false, active = true }: {
+  objects: SceneObject[]; selectedIds: string[]; stroke: number; interactive?: boolean; active?: boolean;
+}) {
+  const selected = new Set(selectedIds);
+  return <>{objects.map((obj) => <ObjectView key={obj.id} obj={obj} selected={selected.has(obj.id)} stroke={stroke} interactive={interactive} active={active} />)}</>;
+});

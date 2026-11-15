@@ -34,9 +34,15 @@ export default function CanvasGrid({
       <rect x={0} y={0} width={W} height={H} rx={1.5} fill="#101013"
         stroke="var(--accent)" strokeWidth={0.6} />
       <rect x={0} y={0} width={W} height={H} fill="url(#pc-grid-major)" />
-      <g className="canvas-orientation-marker">
-        <path d={`M ${W / 2 - S * 0.055} ${-pad * 0.45} L ${W / 2} ${-pad * 0.7} L ${W / 2 + S * 0.055} ${-pad * 0.45}`} />
-        <text x={W / 2} y={-pad * 0.14} textAnchor="middle">{t("paint.orientationTop")}</text>
+      <g pointerEvents="none" aria-hidden="true">
+        <g className="canvas-orientation-marker">
+          <path d={`M ${W / 2 - S * 0.055} ${-pad * 0.45} L ${W / 2} ${-pad * 0.7} L ${W / 2 + S * 0.055} ${-pad * 0.45}`} />
+          <text x={W / 2} y={-pad * 0.14} textAnchor="middle">{t("paint.orientationTop")}</text>
+        </g>
+        <text x={W / 2} y={H + pad * 0.7} fontSize={S * 0.022}
+          fill="var(--muted)" textAnchor="middle">
+          {W.toFixed(0)} × {H.toFixed(0)} mm
+        </text>
       </g>
     </>
   );

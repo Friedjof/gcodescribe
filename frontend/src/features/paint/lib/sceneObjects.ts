@@ -2,6 +2,7 @@ import { api, type SceneObject } from "../../../api";
 import { localize, type Pt } from "./geometry";
 import { isServerFont, textWorld, type TextFont } from "./text";
 import { buildStyledPolylines, normalizeStyle, type VectorStyle } from "./styling";
+import { validSegmentPressures } from "./pressure";
 
 /** Pure scene-object helpers shared by the paint editor. */
 
@@ -10,16 +11,15 @@ export const zValue = (obj: SceneObject, index: number) => obj.zOrder ?? index;
 export const cloneObjects = (objects: SceneObject[]) =>
   objects.map((obj) => ({
     ...obj,
-    data: obj.data ? { ...obj.data } : undefined,
-    transform: obj.transform ? { ...obj.transform } : undefined,
-    cachedPolylines: obj.cachedPolylines?.map((line) => line.map((pt) => [...pt])),
-    cachedFeeds: obj.cachedFeeds?.map((line) => [...line]),
+    data: obj.data,
+    transform: obj.transform,
+    // Editing replaces geometry; history can safely share these immutable arrays.
+    cachedPolylines: obj.cachedPolylines,
+    cachedFeeds: obj.cachedFeeds,
   }));
 
 export function basePolylines(obj: SceneObject): Pt[][] {
-  return ((obj.data?.basePolylines ?? obj.cachedPolylines ?? []) as Pt[][]).map((line) =>
-    line.map((p) => [p[0], p[1]] as Pt)
-  );
+  return (obj.data?.basePolylines ?? obj.cachedPolylines ?? []) as Pt[][];
 }
 
 export function objectStyle(obj: SceneObject): VectorStyle {
@@ -35,7 +35,9 @@ export function withStyledCache(obj: SceneObject): SceneObject {
   const style = objectStyle(obj);
   return {
     ...obj,
-    data: { ...(obj.data ?? {}), basePolylines: base, style },
+    data: { ...(obj.data ?? {}), basePolylines: base, style,
+      cachedSegmentPressures: keepsStrokeFeeds(style) ? validSegmentPressures(base, obj.data?.baseSegmentPressures) : undefined,
+      pressureEnabled: keepsStrokeFeeds(style) ? obj.data?.pressureEnabled : false },
     cachedPolylines: buildStyledPolylines(base, style),
     cachedFeeds: keepsStrokeFeeds(style) ? obj.cachedFeeds : undefined,
   };

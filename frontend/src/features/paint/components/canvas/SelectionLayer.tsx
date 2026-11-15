@@ -1,23 +1,24 @@
 import type { SceneObject } from "../../../../api";
-import { bounds, IDENTITY, type Pt } from "../../lib/geometry";
+import { localBounds as geometryBounds, IDENTITY, type Pt } from "../../lib/geometry";
+import { objectPlacementFrame } from "../../lib/sourcePage";
 import {
+  normalizeDeg,
   resizeLocals,
   screenVectorToRotatedLocal,
   worldPoint,
   type ResizeEdge,
+  type ViewRotation,
 } from "../../lib/viewTransform";
 
-// Resize handle descriptors for single-selection.
-const RESIZE_HANDLES: { edge: ResizeEdge; cursor: string }[] = [
-  { edge: "tl", cursor: "nwse-resize" },
-  { edge: "tc", cursor: "ns-resize" },
-  { edge: "tr", cursor: "nesw-resize" },
-  { edge: "ml", cursor: "ew-resize" },
-  { edge: "mr", cursor: "ew-resize" },
-  { edge: "bl", cursor: "nesw-resize" },
-  { edge: "bc", cursor: "ns-resize" },
-  { edge: "br", cursor: "nwse-resize" },
-];
+const RESIZE_EDGES: ResizeEdge[] = ["tl", "tc", "tr", "ml", "mr", "bl", "bc", "br"];
+
+// Bidirectional resize cursors by screen angle, 45° sectors starting east (y down).
+const RESIZE_CURSORS = ["ew-resize", "nwse-resize", "ns-resize", "nesw-resize"];
+
+/** Cursor for a handle whose screen direction from the selection center is `deg`. */
+function resizeCursor(deg: number): string {
+  return RESIZE_CURSORS[Math.round(normalizeDeg(deg) / 45) % 4];
+}
 
 /** Hit areas, selection outlines and the move/resize/rotate handles for
  * single objects plus the outline/scale/rotate handles of a multi-selection.
@@ -37,6 +38,7 @@ export default function SelectionLayer({
   onStartRotate,
   onStartGroupRotate,
   onStartGroupScale,
+  viewRotation,
 }: {
   objects: SceneObject[];
   selectedIds: string[];
@@ -52,6 +54,7 @@ export default function SelectionLayer({
   onStartRotate: (e: React.PointerEvent, obj: SceneObject, center: Pt) => void;
   onStartGroupRotate: (e: React.PointerEvent, ids: string[], center: Pt) => void;
   onStartGroupScale: (e: React.PointerEvent, ids: string[], center: Pt) => void;
+  viewRotation: ViewRotation;
 }) {
   const STROKE = stroke;
   const HANDLE = handleSize;
@@ -59,8 +62,8 @@ export default function SelectionLayer({
     <>
       {objects.map((obj) => {
         const t = obj.transform ?? IDENTITY;
-        const localLines = (obj.cachedPolylines ?? []) as Pt[][];
-        const localBounds = bounds(localLines.flat());
+        const localLines = objectPlacementFrame(obj);
+        const localBounds = geometryBounds(localLines);
         const [lx0, ly0, lx1, ly1] = localBounds;
         const boxCorners = [
           worldPoint([lx0, ly0], t),
@@ -123,10 +126,13 @@ export default function SelectionLayer({
                   style={{ cursor: "grab" }}
                   onPointerDown={(e) => onStartRotate(e, obj, [cx, cy])}
                 />
-                {/* 8 resize handles */}
-                {RESIZE_HANDLES.map(({ edge, cursor }) => {
+                {/* 8 resize handles — cursor follows the handle's on-screen direction,
+                    so it stays correct for rotated/flipped objects and view rotation */}
+                {RESIZE_EDGES.map((edge) => {
                   const { handle } = resizeLocals(edge, localBounds);
                   const [hx, hy] = worldPoint(handle, t);
+                  const [wcx, wcy] = worldPoint([(lx0 + lx1) / 2, (ly0 + ly1) / 2], t);
+                  const deg = (Math.atan2(hy - wcy, hx - wcx) * 180) / Math.PI + viewRotation;
                   const hs = HANDLE * 0.85;
                   return (
                     <rect
@@ -135,7 +141,7 @@ export default function SelectionLayer({
                       width={hs} height={hs}
                       rx={hs * 0.18}
                       fill="var(--accent)" stroke="#fff" strokeWidth={STROKE / 2}
-                      style={{ cursor }}
+                      style={{ cursor: resizeCursor(deg) }}
                       onPointerDown={(e) => onStartResize(e, obj, edge)}
                     />
                   );
@@ -179,7 +185,7 @@ export default function SelectionLayer({
               width={HANDLE * 0.85} height={HANDLE * 0.85}
               rx={HANDLE * 0.15}
               fill="var(--accent)" stroke="#fff" strokeWidth={STROKE / 2}
-              style={{ cursor: "nwse-resize" }}
+              style={{ cursor: resizeCursor(45 + viewRotation) }}
               onPointerDown={(e) => onStartGroupScale(e, selectedObjects.map((obj) => obj.id), [cx, cy])}
             />
           </g>

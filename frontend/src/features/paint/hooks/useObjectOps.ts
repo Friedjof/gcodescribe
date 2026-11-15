@@ -1,10 +1,12 @@
+import { cachedPage, queueObjects, rememberPage, retainPage } from "../../../api/pageEdits";
+import { useI18n } from "../../../i18n";
 import { useEffect, useRef, useState } from "react";
-import type { Calibration, Page, SceneObject } from "../../../api";
+import { api, type Calibration, type Page, type SceneObject } from "../../../api";
 import {
   type Pt,
   type Transform,
   IDENTITY,
-  bounds,
+  localBounds,
   localize,
   objectWorldBounds,
   transformPolylines,
@@ -23,13 +25,20 @@ import {
 } from "../lib/sceneObjects";
 import {
   DEFAULT_VECTOR_STYLE,
-  buildStyledPolylines,
   normalizeStyle,
   type VectorStyle,
 } from "../lib/styling";
-import { eraseWorldPolylines, samePolylines } from "../lib/eraser";
+import { samePolylines } from "../lib/eraser";
+
+import { trimHistory } from "../lib/history";
+import { geometryTask } from "../lib/geometryTasks";
+import { sourcePageFrame } from "../lib/sourcePage";
+import { resetImageBlankEdges, trimImageBlankEdges, type TrimSide } from "../lib/imageTrim";
+import { hasPressureSamples, remapSegmentPressures, validSegmentPressures } from "../lib/pressure";
 
 export interface ObjectOps {
+  processing: boolean;
+  pendingStyle?: VectorStyle;
   history: { undo: number; redo: number };
   clipboardCount: number;
   draftText: string | null;
@@ -45,6 +54,7 @@ export interface ObjectOps {
   onFontOrSizeChange: (id: string, patch: Partial<{ text: string; size: number; font: TextFont }>) => void;
   deleteSelected: () => void;
   updateSelectedStyle: (patch: Partial<VectorStyle>) => void;
+  setSelectedPressureEnabled: (enabled: boolean) => void;
   groupSelected: (ids?: string[]) => void;
   ungroupSelected: (ids?: string[]) => void;
   applyMaskStamp: (maskId: string) => void;
@@ -59,6 +69,8 @@ export interface ObjectOps {
   objectLocalSize: (obj: SceneObject) => { width: number; height: number; localWidth: number; localHeight: number } | null;
   setSelectedObjectSize: (axis: "width" | "height", target: number) => void;
   setSelectedObjectRotation: (degrees: number) => void;
+  trimSelectedImage: (sides: TrimSide[]) => void;
+  resetSelectedImageTrim: () => void;
   mapSelected: (fn: (t: Transform) => Transform) => void;
   fitSelected: () => void;
   centerSelected: () => void;
@@ -78,6 +90,33 @@ export function useObjectOps(
   defaultText: string,
   sizeLinked: boolean,
 ): ObjectOps {
+  const { t } = useI18n();
+  const latestPage = useRef(page); latestPage.current = page;
+  const [processing, setProcessing] = useState(0);
+  const stylePending = useRef(new Map<string, { style: VectorStyle; token: number }>());
+  const textSequence = useRef(new Map<string, number>());
+  const sequence = useRef(0);
+  const commitAsync = (target: Page, replacements: Map<string, { before: SceneObject; after: SceneObject | null; geometryOnly?: boolean }>) => {
+    const current = latestPage.current?.id === target.id ? latestPage.current : cachedPage(target.id);
+    if (!current) return;
+    let changed = false, skipped = false;
+    const objects = current.objects.flatMap((object) => {
+      const replacement = replacements.get(object.id);
+      if (!replacement) return [object];
+      const { before, after, geometryOnly } = replacement;
+      if (object.plotted || object.data !== before.data || object.cachedPolylines !== before.cachedPolylines || (!geometryOnly && object.transform !== before.transform)) { skipped = true; return [object]; }
+      changed = true;
+      return after ? [{ ...after, transform: geometryOnly ? object.transform : after.transform }] : [];
+    });
+    if (skipped) fail(new Error(t("paint.editChanged")));
+    if (!changed) return;
+    if (latestPage.current?.id === target.id) {
+      undoStack.current.push(cloneObjects(current.objects)); redoStack.current = []; syncHistory();
+      latestPage.current = { ...current, objects }; setPage(latestPage.current);
+      setSelectedIds((ids) => ids.filter((id) => objects.some((obj) => obj.id === id)));
+    }
+    queueObjects(target.id, objects);
+  };
   const undoStack = useRef<SceneObject[][]>([]);
   const redoStack = useRef<SceneObject[][]>([]);
   const clipboard = useRef<SceneObject[]>([]);
@@ -87,8 +126,10 @@ export function useObjectOps(
   const [clipboardCount, setClipboardCount] = useState(0);
   const [draftText, setDraftText] = useState<string | null>(null);
 
-  const syncHistory = () =>
+  const syncHistory = () => {
+    trimHistory(undoStack.current, redoStack.current);
     setHistory({ undo: undoStack.current.length, redo: redoStack.current.length });
+  };
 
   const resetHistory = () => {
     undoStack.current = [];
@@ -143,58 +184,74 @@ export function useObjectOps(
     restoreObjects(next);
   };
 
-  const addObject = (obj: SceneObject) => {
-    if (!page) return;
-    remember();
-    const nextZ = page.objects.reduce((max, o, i) => Math.max(max, zValue(o, i)), -1) + 1;
-    const objects = [...page.objects, withStyledCache({ ...obj, zOrder: nextZ })];
-    setPage({ ...page, objects });
-    setSelectedIds([obj.id]);
-    persist(page.id, objects);
+  const appendPrepared = (target: Page, prepared: SceneObject[]) => {
+    const current = latestPage.current?.id === target.id ? latestPage.current : cachedPage(target.id);
+    if (!current) return;
+    let nextZ = current.objects.reduce((max, o, i) => Math.max(max, zValue(o, i)), -1) + 1;
+    const added = prepared.filter((obj) => !current.objects.some((o) => o.id === obj.id)).map((obj) => ({ ...obj, zOrder: nextZ++ }));
+    if (!added.length) return;
+    const objects = [...current.objects, ...added];
+    rememberPage(current);
+    if (latestPage.current?.id === target.id) {
+      undoStack.current.push(cloneObjects(current.objects)); redoStack.current = []; syncHistory();
+      latestPage.current = { ...current, objects }; setPage(latestPage.current);
+      setSelectedIds(added.map((obj) => obj.id));
+    }
+    queueObjects(target.id, objects);
   };
 
   const addObjects = (objs: SceneObject[]) => {
-    if (!page || objs.length === 0) return;
-    remember();
-    let nextZ = page.objects.reduce((max, o, i) => Math.max(max, zValue(o, i)), -1) + 1;
-    const styled = objs.map((obj) => withStyledCache({ ...obj, zOrder: nextZ++ }));
-    const objects = [...page.objects, ...styled];
-    setPage({ ...page, objects });
-    setSelectedIds(styled.map((o) => o.id));
-    persist(page.id, objects);
+    if (!page || !objs.length) return;
+    rememberPage(page);
+    if (objs.every((obj) => keepsStrokeFeeds(objectStyle(obj)))) {
+      appendPrepared(page, objs.map(withStyledCache));
+      return;
+    }
+    const release = retainPage(page);
+    setProcessing((n) => n + 1);
+    Promise.all(objs.map(async (obj) => {
+      const base = basePolylines(obj), style = objectStyle(obj);
+      const geometry = await geometryTask<Pt[][]>({ kind: "style", lines: base, style });
+      return { ...obj, data: { ...obj.data, basePolylines: base, style,
+        cachedSegmentPressures: undefined, pressureEnabled: false }, cachedPolylines: geometry,
+        cachedFeeds: keepsStrokeFeeds(style) ? obj.cachedFeeds : undefined };
+    })).then((prepared) => appendPrepared(page, prepared)).catch(fail)
+      .finally(() => { release(); setProcessing((n) => n - 1); });
   };
+  const addObject = (obj: SceneObject) => addObjects([obj]);
 
-  const eraseAcrossObjects = (path: Pt[], mode: "free" | "line", radius: number) => {
+  const eraseAcrossObjects = async (path: Pt[], mode: "free" | "line", radius: number) => {
     if (!page || path.length < 2) return;
-    let changed = false;
-    const objects = page.objects.flatMap((obj) => {
-      if (obj.plotted) return [obj];
-      const local = ((obj.cachedPolylines as Pt[][] | undefined) ?? basePolylines(obj)).filter((line) => line.length >= 2);
-      if (!local.length) return [obj];
-      const transform = obj.transform ?? IDENTITY;
-      const world = transformPolylines(local, transform);
-      const erased = eraseWorldPolylines(world, path, mode, radius).filter((line) => line.length >= 2);
-      if (samePolylines(erased, world)) return [obj];
-      changed = true;
-      if (!erased.length) return [];
-      const { local: nextLocal, cx, cy } = localize(erased);
-      return [{
-        ...obj,
-        data: { ...(obj.data ?? {}), basePolylines: nextLocal },
-        cachedPolylines: nextLocal,
-        transform: { x: cx, y: cy, rotation: 0, scale: 1 },
-      }];
-    });
-    if (!changed) return;
-    remember();
-    setPage({ ...page, objects });
-    setSelectedIds((ids) => ids.filter((id) => objects.some((obj) => obj.id === id)));
-    persist(page.id, objects);
+    const release = retainPage(page);
+    setProcessing((n) => n + 1);
+    try {
+      const replacements = new Map<string, { before: SceneObject; after: SceneObject | null }>();
+      for (const obj of page.objects) {
+        if (obj.plotted) continue;
+        const local = (obj.cachedPolylines as Pt[][] | undefined) ?? basePolylines(obj);
+        if (!local.length) continue;
+        const transform = obj.transform ?? IDENTITY;
+        const erased = await geometryTask<Pt[][]>({ kind: "erase", lines: local, transform, path, mode, radius });
+        // Comparison is only on commit, never on pointer movement.
+        if (samePolylines(erased, transformPolylines(local, transform))) continue;
+        const { local: nextLocal, cx, cy } = localize(erased);
+        const pressure = remapSegmentPressures(
+          transformPolylines(basePolylines(obj), transform),
+          validSegmentPressures(basePolylines(obj), obj.data?.baseSegmentPressures), erased,
+        );
+        replacements.set(obj.id, { before: obj, after: erased.length ? {
+          ...obj, data: { ...(obj.data ?? {}), basePolylines: nextLocal,
+            baseSegmentPressures: pressure, cachedSegmentPressures: pressure }, cachedPolylines: nextLocal,
+          transform: { x: cx, y: cy, rotation: 0, scale: 1 },
+        } : null });
+      }
+      commitAsync(page, replacements);
+    } catch (e) { if (!(e instanceof DOMException && e.name === "AbortError")) fail(e); }
+    finally { release(); setProcessing((n) => n - 1); }
   };
 
   const updateTextObject = (id: string, patch: Partial<{ text: string; size: number; font: TextFont }>) => {
     if (!page) return;
-    remember();
     const obj = page.objects.find((o) => o.id === id);
     if (!obj) return;
     const data = {
@@ -207,25 +264,21 @@ export function useObjectOps(
       seed: Number(obj.data?.seed ?? randomTextSeed()),
       ...patch,
     };
+    const token = ++sequence.current;
+    textSequence.current.set(id, token);
+    const release = retainPage(page);
+    setProcessing((n) => n + 1);
     textGeometryAsync(data.text, data.size, data.font, defaultText, false, data.seed)
-      .then(({ local, feeds, missing }) => {
+      .then(async ({ local, feeds, missing }) => {
         if (missing?.length) warnMissingGlyphs(missing);
         const style = objectStyle(obj);
-        const objects = page.objects.map((o) =>
-          o.id === id
-            ? {
-                ...o,
-                plotted: false,
-                data: { ...data, basePolylines: local, style },
-                cachedPolylines: buildStyledPolylines(local, style),
-                cachedFeeds: keepsStrokeFeeds(style) ? feeds : undefined,
-              }
-            : o,
-        );
-        setPage({ ...page, objects });
-        persist(page.id, objects);
-      })
-      .catch(fail);
+        const geometry = await geometryTask<Pt[][]>({ kind: "style", lines: local, style });
+        if (textSequence.current.get(id) !== token) return;
+        commitAsync(page, new Map([[id, { before: obj, geometryOnly: true, after: {
+          ...obj, plotted: false, data: { ...data, basePolylines: local, style },
+          cachedPolylines: geometry, cachedFeeds: keepsStrokeFeeds(style) ? feeds : undefined,
+        } }]]));
+      }).catch(fail).finally(() => { release(); setProcessing((n) => n - 1); });
   };
 
   const onTextInput = (id: string, text: string) => {
@@ -263,29 +316,66 @@ export function useObjectOps(
     persist(page.id, objects);
   };
 
-  const updateSelectedStyle = (patch: Partial<VectorStyle>) => {
+  const updateSelectedStyle = async (patch: Partial<VectorStyle>) => {
     if (!page || selectedIds.length === 0) return;
-    remember();
     const selected = new Set(selectedIds);
-    const objects = page.objects.map((obj) => {
-      if (!selected.has(obj.id)) return obj;
-      const style = normalizeStyle({
-        ...objectStyle(obj),
-        ...patch,
-        stroke: { ...objectStyle(obj).stroke, ...(patch.stroke ?? {}) },
-        fill: { ...objectStyle(obj).fill, ...(patch.fill ?? {}) },
-      });
+    const release = retainPage(page);
+    setProcessing((n) => n + 1);
+    try {
+      const replacements = new Map<string, { before: SceneObject; after: SceneObject; geometryOnly: boolean }>();
+      await Promise.all(page.objects.filter((obj) => selected.has(obj.id)).map(async (obj) => {
+        const previous = stylePending.current.get(obj.id)?.style ?? objectStyle(obj);
+        const style = normalizeStyle({ ...previous, ...patch,
+          stroke: { ...previous.stroke, ...patch.stroke }, fill: { ...previous.fill, ...patch.fill } });
+        const token = ++sequence.current;
+        stylePending.current.set(obj.id, { style, token });
+        const base = basePolylines(obj);
+        const geometry = await geometryTask<Pt[][]>({ kind: "style", lines: base, style }, `style:${obj.id}`).catch((error) => {
+          if (stylePending.current.get(obj.id)?.token === token) stylePending.current.delete(obj.id);
+          throw error;
+        });
+        if (stylePending.current.get(obj.id)?.token !== token) return;
+        stylePending.current.delete(obj.id);
+        replacements.set(obj.id, { before: obj, geometryOnly: true, after: {
+          ...obj, plotted: false, data: { ...(obj.data ?? {}), basePolylines: base, style,
+            cachedSegmentPressures: keepsStrokeFeeds(style) ? validSegmentPressures(base, obj.data?.baseSegmentPressures) : undefined,
+            pressureEnabled: keepsStrokeFeeds(style) ? obj.data?.pressureEnabled : false },
+          cachedPolylines: geometry, cachedFeeds: keepsStrokeFeeds(style) ? obj.cachedFeeds : undefined,
+        } });
+      }));
+      commitAsync(page, replacements);
+    } catch (e) { if (!(e instanceof DOMException && e.name === "AbortError")) fail(e); }
+    finally { release(); setProcessing((n) => n - 1); }
+  };
+
+  const setSelectedPressureEnabled = async (enabled: boolean) => {
+    if (!page || selectedIds.length !== 1) return;
+    const obj = page.objects.find((o) => o.id === selectedIds[0]);
+    if (!obj || obj.plotted) return;
+    const release = retainPage(page);
+    setProcessing((n) => n + 1);
+    try {
       const base = basePolylines(obj);
-      return {
-        ...obj,
-        plotted: false,
-        data: { ...(obj.data ?? {}), basePolylines: base, style },
-        cachedPolylines: buildStyledPolylines(base, style),
-        cachedFeeds: keepsStrokeFeeds(style) ? obj.cachedFeeds : undefined,
-      };
-    });
-    setPage({ ...page, objects });
-    persist(page.id, objects);
+      let pressures = validSegmentPressures(base, obj.data?.baseSegmentPressures);
+      if (enabled) {
+        if (!(cal && (cal.pen_pressure_max_depth ?? 0) > 0)) throw new Error(t("paint.pressure.configure"));
+        if (!keepsStrokeFeeds(objectStyle(obj))) throw new Error(t("paint.pressure.solidOnly"));
+        if (!samePolylines(base, (obj.cachedPolylines ?? []) as Pt[][])) throw new Error(t("paint.pressure.changedGeometry"));
+        if (!hasPressureSamples(pressures) && obj.data?.galleryId) {
+          const original = await api.galleryStrokes(obj.data.galleryId, obj.data.galleryPage ?? 1);
+          const originalLocal = original.polylines.map((line) => line.map(([x, y]) =>
+            [x - original.width / 2, y - original.height / 2] as Pt));
+          if (!samePolylines(base, originalLocal)) throw new Error(t("paint.pressure.changedGeometry"));
+          pressures = validSegmentPressures(base, original.segmentPressures);
+        }
+        if (!hasPressureSamples(pressures)) throw new Error(t("paint.pressure.noData"));
+      }
+      commitAsync(page, new Map([[obj.id, { before: obj, geometryOnly: true, after: {
+        ...obj, data: { ...obj.data, baseSegmentPressures: pressures,
+          cachedSegmentPressures: keepsStrokeFeeds(objectStyle(obj)) ? pressures : undefined, pressureEnabled: enabled },
+      } }]]));
+    } catch (e) { fail(e); }
+    finally { release(); setProcessing((n) => n - 1); }
   };
 
   const groupSelected = (ids = selectedIds) => {
@@ -335,11 +425,16 @@ export function useObjectOps(
       const clipped = world.flatMap((line) => subtractPolygon(line, poly)).filter((l) => l.length >= 2);
       if (clipped.length === 0) continue;
       const { local: nextLocal, cx, cy } = localize(clipped);
+      const pressure = remapSegmentPressures(
+        transformPolylines(basePolylines(obj), obj.transform ?? IDENTITY),
+        validSegmentPressures(basePolylines(obj), obj.data?.baseSegmentPressures), clipped,
+      );
       nextObjects.push({
         ...obj,
-        data: { ...(obj.data ?? {}), basePolylines: nextLocal },
+        data: { ...(obj.data ?? {}), basePolylines: nextLocal,
+          baseSegmentPressures: pressure, cachedSegmentPressures: pressure },
         cachedPolylines: nextLocal,
-        transform: { ...(obj.transform ?? IDENTITY), x: cx, y: cy },
+        transform: { x: cx, y: cy, scale: 1, rotation: 0 },
       });
     }
     setSelectedIds([]);
@@ -365,12 +460,17 @@ export function useObjectOps(
       const local = ((obj.cachedPolylines as Pt[][] | undefined) ?? basePolylines(obj)).filter((l) => l.length >= 2);
       if (!local.length) continue;
       const world = transformPolylines(local, obj.transform ?? IDENTITY);
-      for (const line of world) {
+      const pressure = remapSegmentPressures(transformPolylines(basePolylines(obj), obj.transform ?? IDENTITY),
+        validSegmentPressures(basePolylines(obj), obj.data?.baseSegmentPressures), world);
+      for (let lineIndex = 0; lineIndex < world.length; lineIndex++) {
+        const line = world[lineIndex];
         const { local: nextLocal, cx, cy } = localize([line]);
         const newObj: SceneObject = {
           id: crypto.randomUUID(),
           type: "pen",
-          data: { basePolylines: nextLocal, style: DEFAULT_VECTOR_STYLE },
+          data: { basePolylines: nextLocal, style: DEFAULT_VECTOR_STYLE,
+            ...(pressure?.[lineIndex] ? { baseSegmentPressures: [pressure[lineIndex]],
+              cachedSegmentPressures: [pressure[lineIndex]], pressureEnabled: obj.data?.pressureEnabled === true, strokeOrder: "source" } : {}) },
           cachedPolylines: nextLocal,
           transform: { x: cx, y: cy, rotation: 0, scale: 1 },
           plotted: false,
@@ -483,7 +583,7 @@ export function useObjectOps(
     let b: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity];
     for (const obj of page.objects) {
       if (!sel.has(obj.id)) continue;
-      const local = (obj.cachedPolylines as Pt[][] | undefined) ?? basePolylines(obj);
+      const local = sourcePageFrame(obj) ?? ((obj.cachedPolylines as Pt[][] | undefined) ?? basePolylines(obj));
       if (!local.length) continue;
       const [x0, y0, x1, y1] = objectWorldBounds(local, obj.transform ?? IDENTITY);
       b = [Math.min(b[0], x0), Math.min(b[1], y0), Math.max(b[2], x1), Math.max(b[3], y1)];
@@ -494,11 +594,9 @@ export function useObjectOps(
   const objectLocalSize = (
     obj: SceneObject,
   ): { width: number; height: number; localWidth: number; localHeight: number } | null => {
-    const local = (obj.cachedPolylines as Pt[][] | undefined) ?? basePolylines(obj);
+    const local = sourcePageFrame(obj) ?? ((obj.cachedPolylines as Pt[][] | undefined) ?? basePolylines(obj));
     if (!local.length) return null;
-    const flat = local.flat();
-    if (!flat.length) return null;
-    const [x0, y0, x1, y1] = bounds(flat);
+    const [x0, y0, x1, y1] = localBounds(local);
     const t = obj.transform ?? IDENTITY;
     const sx = Math.abs(t.scaleX ?? t.scale);
     const sy = Math.abs(t.scaleY ?? t.scale);
@@ -515,20 +613,21 @@ export function useObjectOps(
     if (!size) return;
     const current = axis === "width" ? size.width : size.height;
     const base = axis === "width" ? size.localWidth : size.localHeight;
-    if ((sizeLinked && current <= 0) || (!sizeLinked && base <= 0)) return;
+    const linked = sizeLinked || !!sourcePageFrame(obj);
+    if ((linked && current <= 0) || (!linked && base <= 0)) return;
     remember();
     const objects = page.objects.map((o) => {
       if (o.id !== obj.id) return o;
       const t = o.transform ?? IDENTITY;
       const sx = t.scaleX ?? t.scale;
       const sy = t.scaleY ?? t.scale;
-      const factor = sizeLinked ? target / current : 1;
-      const nextSx = sizeLinked
+      const factor = linked ? target / current : 1;
+      const nextSx = linked
         ? sx * factor
         : axis === "width"
           ? Math.sign(sx || 1) * (target / base)
           : sx;
-      const nextSy = sizeLinked
+      const nextSy = linked
         ? sy * factor
         : axis === "height"
           ? Math.sign(sy || 1) * (target / base)
@@ -560,6 +659,24 @@ export function useObjectOps(
     persist(page.id, objects);
   };
 
+  const changeSelectedImage = (change: (obj: SceneObject) => SceneObject | null) => {
+    if (!page || selectedIds.length !== 1) return;
+    const obj = page.objects.find((o) => o.id === selectedIds[0]);
+    if (!obj || obj.plotted) return;
+    const next = change(obj);
+    if (!next) return;
+    remember();
+    const objects = page.objects.map((item) => item.id === obj.id ? next : item);
+    setPage({ ...page, objects });
+    persist(page.id, objects);
+  };
+
+  const trimSelectedImage = (sides: TrimSide[]) =>
+    changeSelectedImage((obj) => trimImageBlankEdges(obj, sides));
+
+  const resetSelectedImageTrim = () =>
+    changeSelectedImage(resetImageBlankEdges);
+
   const mapSelected = (fn: (t: Transform) => Transform) => {
     if (!page || selectedIds.length === 0) return;
     remember();
@@ -576,14 +693,20 @@ export function useObjectOps(
     if (!b || !cal) return;
     const w = Math.max(b[2] - b[0], 0.001);
     const h = Math.max(b[3] - b[1], 0.001);
-    const factor = Math.min((cal.plot_width * 0.95) / w, (cal.plot_height * 0.95) / h);
+    const W = cal.plot_width, H = cal.plot_height;
+    const factor = Math.min((W * 0.95) / w, (H * 0.95) / h);
     const gcx = (b[0] + b[2]) / 2, gcy = (b[1] + b[3]) / 2;
-    const tcx = cal.plot_width / 2, tcy = cal.plot_height / 2;
+    // Scale in place around the selection's own center; shift only as far as
+    // needed to keep the grown bounds on the sheet (no recentering).
+    const nx0 = gcx + (b[0] - gcx) * factor, nx1 = gcx + (b[2] - gcx) * factor;
+    const ny0 = gcy + (b[1] - gcy) * factor, ny1 = gcy + (b[3] - gcy) * factor;
+    const dx = nx0 < 0 ? -nx0 : nx1 > W ? W - nx1 : 0;
+    const dy = ny0 < 0 ? -ny0 : ny1 > H ? H - ny1 : 0;
     mapSelected((t) => {
       const next: Transform = {
         ...t,
-        x: tcx + (t.x - gcx) * factor,
-        y: tcy + (t.y - gcy) * factor,
+        x: gcx + (t.x - gcx) * factor + dx,
+        y: gcy + (t.y - gcy) * factor + dy,
         scale: (t.scale ?? 1) * factor,
       };
       if (t.scaleX != null) next.scaleX = t.scaleX * factor;
@@ -613,6 +736,8 @@ export function useObjectOps(
   };
 
   return {
+    processing: processing > 0,
+    pendingStyle: selectedIds.length ? stylePending.current.get(selectedIds[0])?.style : undefined,
     history,
     clipboardCount,
     draftText,
@@ -629,6 +754,7 @@ export function useObjectOps(
     editSelectedText,
     deleteSelected,
     updateSelectedStyle,
+    setSelectedPressureEnabled,
     groupSelected,
     ungroupSelected,
     applyMaskStamp,
@@ -643,6 +769,8 @@ export function useObjectOps(
     objectLocalSize,
     setSelectedObjectSize,
     setSelectedObjectRotation,
+    trimSelectedImage,
+    resetSelectedImageTrim,
     mapSelected,
     fitSelected,
     centerSelected,

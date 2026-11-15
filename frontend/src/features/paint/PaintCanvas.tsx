@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { Calibration, Page, SceneObject } from "../../api";
 import {
   type Pt,
@@ -11,11 +11,10 @@ import {
   simplify,
   localize,
   objectWorldBounds,
-  bounds,
+  localBounds,
   snapPt,
   alignmentCandidates,
   snapToGuides,
-  transformPolylines,
   type Bounds,
   type GuideCandidate,
   type Guide,
@@ -32,11 +31,12 @@ import {
   screenVectorToRotatedLocal,
   resizeLocals,
 } from "./lib/viewTransform";
-import { lineNearPath } from "./lib/eraser";
+import { geometryTask } from "./lib/geometryTasks";
 import CanvasGrid from "./components/canvas/CanvasGrid";
 import ObjectsLayer from "./components/canvas/ObjectsLayer";
 import OverlayLayer from "./components/canvas/OverlayLayer";
 import SelectionLayer from "./components/canvas/SelectionLayer";
+import { objectPlacementFrame, sourcePageFrame } from "./lib/sourcePage";
 import { useI18n } from "../../i18n";
 
 export type Tool = "select" | "pen" | "line" | "rect" | "maskRect" | "maskCircle" | "circle" | "semicircle" | "text" | "erase" | "eraseLine" | "bucketFill" | "areaFill";
@@ -61,7 +61,7 @@ function clampedTransform(t: Transform, local: Pt[][], W: number, H: number): Tr
   const nsx = sx * shrink;
   const nsy = sy * shrink;
   const shrunken: Transform = shrink < 1
-    ? { ...t, x: W / 2, y: H / 2, scaleX: nsx, scaleY: nsy, scale: Math.max(nsx, nsy) }
+    ? { ...t, scaleX: nsx, scaleY: nsy, scale: Math.max(nsx, nsy) }
     : t;
 
   // After potential shrink, get the new bounds and shift into the canvas.
@@ -101,14 +101,14 @@ const PEN_SIMPLIFY_EPS = 0.4;
 const PEN_MIN_LENGTH = 0.08;
 const ERASER_RADIUS = 2.5;
 
-export default function PaintCanvas({
+function PaintCanvas({
+  visible = true,
   cal,
   page,
   tool,
   selectedIds,
   onSelect,
   onAdd,
-  onUpdate,
   onUpdateMany,
   onEditStart,
   onContextMenuSelection,
@@ -124,6 +124,7 @@ export default function PaintCanvas({
   eraserRadius: eraserRadiusProp,
   eraserIsPoint = false,
 }: {
+  visible?: boolean;
   cal: Calibration;
   page: Page;
   tool: Tool;
@@ -176,6 +177,21 @@ export default function PaintCanvas({
   // Tracks whether the current right-drag actually moved — used to tell a pan
   // apart from a plain right-click (which should still open the context menu).
   const panMoved = useRef(false);
+  const [previewTransforms, setPreviewTransforms] = useState<Map<string, Transform>>(new Map());
+  const pendingTransforms = useRef(new Map<string, Transform>());
+  const frame = useRef<number | null>(null);
+  const queuedPointer = useRef<React.PointerEvent | null>(null);
+  const [zooming, setZooming] = useState(false);
+  const zoomTimer = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => () => {
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
+    clearTimeout(zoomTimer.current);
+  }, []);
+  useEffect(() => { pendingTransforms.current.clear(); setPreviewTransforms(new Map()); }, [page.id]);
+  const displayObjects = useMemo(() => page.objects.map((obj) => {
+    const transform = previewTransforms.get(obj.id);
+    return transform ? { ...obj, transform } : obj;
+  }), [page.objects, previewTransforms]);
   const zoom = baseView.w / view.w;
   // Stylus eraser tip or barrel eraser button overrides the active tool.
   const effectiveTool: Tool = stylusErasing ? "erase" : tool;
@@ -236,17 +252,19 @@ export default function PaintCanvas({
   // Wrappers that enforce the hard plot-area boundary before every transform write.
   const updateSafe = (id: string, t: Transform) => {
     const obj = page.objects.find((o) => o.id === id);
-    const local = (obj?.cachedPolylines ?? []) as Pt[][];
-    onUpdate(id, clampedTransform(t, local, W, H));
+    const local = obj ? objectPlacementFrame(obj) : [];
+    const updates = new Map(pendingTransforms.current);
+    updates.set(id, clampedTransform(t, local, W, H));
+    pendingTransforms.current = updates; setPreviewTransforms(updates);
   };
   const updateManySafe = (updates: Map<string, Transform>) => {
     const out = new Map<string, Transform>();
     for (const [id, t] of updates) {
       const obj = page.objects.find((o) => o.id === id);
-      const local = (obj?.cachedPolylines ?? []) as Pt[][];
+      const local = obj ? objectPlacementFrame(obj) : [];
       out.set(id, clampedTransform(t, local, W, H));
     }
-    onUpdateMany(out);
+    pendingTransforms.current = out; setPreviewTransforms(out);
   };
 
   const objectSelectionIds = (obj: SceneObject) =>
@@ -450,7 +468,16 @@ export default function PaintCanvas({
       newScaleX = Math.max(minScaleX, Math.abs(newScaleX)) * Math.sign(startSx || 1);
       newScaleY = Math.max(minScaleY, Math.abs(newScaleY)) * Math.sign(startSy || 1);
 
-      if ((e.ctrlKey || e.metaKey) && movesX && movesY) {
+      if (sourcePageFrame(obj)) {
+        const factorX = Math.abs(newScaleX / (startSx || 1));
+        const factorY = Math.abs(newScaleY / (startSy || 1));
+        const factor = movesX && movesY
+          ? (Math.abs(factorX - 1) >= Math.abs(factorY - 1) ? factorX : factorY)
+          : (movesX ? factorX : factorY);
+        const bounded = Math.max(factor, minScaleX / Math.abs(startSx || 1), minScaleY / Math.abs(startSy || 1));
+        newScaleX = startSx * bounded;
+        newScaleY = startSy * bounded;
+      } else if ((e.ctrlKey || e.metaKey) && movesX && movesY) {
         const factor = Math.max(Math.abs(newScaleX / startSx), Math.abs(newScaleY / startSy));
         newScaleX = Math.sign(startSx || 1) * Math.max(minScaleX, Math.abs(startSx) * factor);
         newScaleY = Math.sign(startSy || 1) * Math.max(minScaleY, Math.abs(startSy) * factor);
@@ -477,12 +504,17 @@ export default function PaintCanvas({
         if (!t) continue;
         const nx = d.center[0] + (t.x - d.center[0]) * factor;
         const ny = d.center[1] + (t.y - d.center[1]) * factor;
-        updates.set(id, {
+        const next: Transform = {
           ...t,
           x: cl(nx, 0, W),
           y: cl(ny, 0, H),
           scale: Math.max(0.05, t.scale * factor),
-        });
+        };
+        // Objects resized individually carry per-axis scales that the renderer
+        // prefers over `scale` — keep them in sync or they won't grow/shrink.
+        if (t.scaleX != null) next.scaleX = t.scaleX * factor;
+        if (t.scaleY != null) next.scaleY = t.scaleY * factor;
+        updates.set(id, next);
       }
       updateManySafe(updates);
 
@@ -530,7 +562,23 @@ export default function PaintCanvas({
     }
   };
 
+  const flushPointer = () => {
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
+    frame.current = null;
+    const event = queuedPointer.current; queuedPointer.current = null;
+    if (event) onSvgMove(event);
+  };
+  const schedulePointer = (e: React.PointerEvent) => {
+    if (draft) { onSvgMove(e); return; }
+    queuedPointer.current = e;
+    if (frame.current === null) frame.current = requestAnimationFrame(flushPointer);
+  };
   const onSvgUp = (e: React.PointerEvent) => {
+    flushPointer();
+    if (pendingTransforms.current.size) {
+      onUpdateMany(pendingTransforms.current);
+      pendingTransforms.current = new Map(); setPreviewTransforms(new Map());
+    }
     if (e.pointerType === "pen" && stylusErasing && (e.buttons & 32) === 0) setStylusErasing(false);
     svgRef.current!.releasePointerCapture?.(e.pointerId);
     if (pan.current?.pointerId === e.pointerId) {
@@ -545,7 +593,7 @@ export default function PaintCanvas({
         if (!marquee.additive) onSelect([]);
       } else {
         const picked = objectsByZ.flatMap((obj) => {
-          const ob = objectWorldBounds((obj.cachedPolylines ?? []) as Pt[][], obj.transform ?? IDENTITY);
+          const ob = objectWorldBounds(objectPlacementFrame(obj), obj.transform ?? IDENTITY);
           return intersects(mb, ob) ? objectSelectionIds(obj) : [];
         });
         const next = marquee.additive ? Array.from(new Set([...selectedIds, ...picked])) : Array.from(new Set(picked));
@@ -619,7 +667,7 @@ export default function PaintCanvas({
     const movingObjs = page.objects.filter((o) => ids.includes(o.id));
     const startBoundsAll = movingObjs.reduce<[number, number, number, number]>(
       (acc, o) => {
-        const b = objectWorldBounds((o.cachedPolylines ?? []) as Pt[][], o.transform ?? IDENTITY);
+        const b = objectWorldBounds(objectPlacementFrame(o), o.transform ?? IDENTITY);
         return [Math.min(acc[0], b[0]), Math.min(acc[1], b[1]), Math.max(acc[2], b[2]), Math.max(acc[3], b[3])];
       },
       [Infinity, Infinity, -Infinity, -Infinity]
@@ -627,7 +675,7 @@ export default function PaintCanvas({
     // Alignment references: bounds of every visible object NOT being moved.
     const staticBounds: Bounds[] = page.objects
       .filter((o) => !o.plotted && !ids.includes(o.id))
-      .map((o) => objectWorldBounds((o.cachedPolylines ?? []) as Pt[][], o.transform ?? IDENTITY));
+      .map((o) => objectWorldBounds(objectPlacementFrame(o), o.transform ?? IDENTITY));
     const { vertical, horizontal } = alignmentCandidates(staticBounds, W, H);
     drag.current = {
       mode: "move",
@@ -651,8 +699,8 @@ export default function PaintCanvas({
     onEditStart();
     svgRef.current!.setPointerCapture(e.pointerId);
     const t = obj.transform ?? IDENTITY;
-    const localLines = (obj.cachedPolylines ?? []) as Pt[][];
-    const startLocalBounds = bounds(localLines.flat());
+    const localLines = objectPlacementFrame(obj);
+    const startLocalBounds = localBounds(localLines);
     const { anchor, handle } = resizeLocals(edge, startLocalBounds);
     drag.current = {
       mode: "resize",
@@ -730,27 +778,29 @@ export default function PaintCanvas({
       : shapeWorld(draft.tool, draft.points)
     : [];
 
-  const lineErasePreview = draft?.tool === "eraseLine" && draft.points.length >= 2
-    ? page.objects.flatMap((obj) => {
-        if (obj.plotted) return [];
-        const localLines = ((obj.cachedPolylines ?? []) as Pt[][]).filter((line) => line.length >= 2);
-        if (!localLines.length) return [];
-        const worldLines = transformPolylines(localLines, obj.transform ?? IDENTITY);
-        return worldLines.flatMap((line, index) =>
-          lineNearPath(line, draft.points, effRadius) ? [{ id: `${obj.id}:${index}`, line }] : []
-        );
-      })
-    : [];
+  const [lineErasePreview, setLineErasePreview] = useState<{ id: string; line: Pt[] }[]>([]);
+  useEffect(() => {
+    if (draft?.tool !== "eraseLine" || draft.points.length < 2) { setLineErasePreview([]); return; }
+    let current = true;
+    const timer = setTimeout(() => {
+      Promise.all(page.objects.filter((obj) => !obj.plotted).map(async (obj) => {
+        const lines = await geometryTask<Pt[][]>({ kind: "erase", lines: (obj.cachedPolylines ?? []) as Pt[][],
+          transform: obj.transform ?? IDENTITY, path: draft.points, mode: "line", radius: effRadius, preview: true });
+        return lines.map((line, index) => ({ id: `${obj.id}:${index}`, line }));
+      })).then((lines) => { if (current) setLineErasePreview(lines.flat()); }).catch(() => {});
+    }, 100);
+    return () => { current = false; clearTimeout(timer); };
+  }, [draft, page.objects, effRadius]);
 
-  const objectsByZ = page.objects
+  const objectsByZ = useMemo(() => displayObjects
     .map((obj, index) => ({ obj, index }))
     .sort((a, b) => zValue(a.obj, a.index) - zValue(b.obj, b.index))
-    .map(({ obj }) => obj);
+    .map(({ obj }) => obj), [displayObjects]);
 
   const selectedObjects = objectsByZ.filter((obj) => selectedIds.includes(obj.id));
   const selectedBounds = selectedObjects.length > 1
     ? selectedObjects.reduce<[number, number, number, number] | null>((acc, obj) => {
-        const b = objectWorldBounds((obj.cachedPolylines ?? []) as Pt[][], obj.transform ?? IDENTITY);
+        const b = objectWorldBounds(objectPlacementFrame(obj), obj.transform ?? IDENTITY);
         if (!acc) return b;
         return [Math.min(acc[0], b[0]), Math.min(acc[1], b[1]), Math.max(acc[2], b[2]), Math.max(acc[3], b[3])];
       }, null)
@@ -776,11 +826,12 @@ export default function PaintCanvas({
         viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
         preserveAspectRatio="xMidYMid meet"
         style={{ cursor: panning ? "grabbing" : spaceDown ? "grab" : effectiveTool === "select" ? "default" : "crosshair", touchAction: "none" }}
-        onWheel={onWheel}
+        onWheel={(e) => { setZooming(true); clearTimeout(zoomTimer.current); zoomTimer.current = setTimeout(() => setZooming(false), 120); onWheel(e); }}
         onPointerDownCapture={emitClick}
         onPointerDown={onSvgDown}
-        onPointerMove={onSvgMove}
+        onPointerMove={schedulePointer}
         onPointerUp={onSvgUp}
+        onPointerCancel={() => { queuedPointer.current = null; if (frame.current !== null) cancelAnimationFrame(frame.current); frame.current = null; pendingTransforms.current.clear(); setPreviewTransforms(new Map()); drag.current = null; pan.current = null; setPanning(false); setDraft(null); }}
         onPointerLeave={() => { setStylusErasing(false); onCursorMove?.({ x: 0, y: 0, inside: false, tool }); }}
         onContextMenu={(e) => e.preventDefault()}
         onDragOver={(e) => e.preventDefault()}
@@ -789,7 +840,7 @@ export default function PaintCanvas({
         <g transform={canvasRotationTransform}>
         <CanvasGrid W={W} H={H} S={S} pad={pad} step={step} major={major} />
 
-        <ObjectsLayer objects={objectsByZ} selectedIds={selectedIds} stroke={STROKE} />
+        <ObjectsLayer objects={objectsByZ} selectedIds={selectedIds} stroke={STROKE} active={visible} interactive={previewTransforms.size > 0 || panning || zooming} />
 
         <OverlayLayer
           draftTool={draft?.tool ?? null}
@@ -819,15 +870,14 @@ export default function PaintCanvas({
             onStartRotate={startRotate}
             onStartGroupRotate={startGroupRotate}
             onStartGroupScale={startGroupScale}
+            viewRotation={viewRotation}
           />
         )}
 
-        <text x={W / 2} y={H + pad * 0.7} fontSize={S * 0.022}
-          fill="var(--muted)" textAnchor="middle">
-          {W.toFixed(0)} × {H.toFixed(0)} mm
-        </text>
         </g>
       </svg>
     </div>
   );
 }
+
+export default memo(PaintCanvas);

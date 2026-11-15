@@ -91,8 +91,7 @@ export function bounds(pts: Pt[]): [number, number, number, number] {
 
 /** Recenter world polylines to local (centered) coords + the center point. */
 export function localize(world: Pt[][]): { local: Pt[][]; cx: number; cy: number } {
-  const all = world.flat();
-  const [x0, y0, x1, y1] = bounds(all);
+  const [x0, y0, x1, y1] = localBounds(world);
   const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
   return { local: world.map((line) => line.map(([x, y]) => [x - cx, y - cy] as Pt)), cx, cy };
 }
@@ -110,8 +109,52 @@ export function transformPolylines(local: Pt[][], t: Transform): Pt[][] {
 }
 
 export function objectWorldBounds(local: Pt[][], t: Transform): [number, number, number, number] {
-  return bounds(transformPolylines(local, t).flat());
+  const sx = t.scaleX ?? t.scale, sy = t.scaleY ?? t.scale;
+  const key = `${t.rotation}:${sx}:${sy}`;
+  let cached = worldBoundsCache.get(local);
+  if (cached?.key !== key) {
+    const cos = Math.cos(t.rotation), sin = Math.sin(t.rotation);
+    const b: Bounds = [Infinity, Infinity, -Infinity, -Infinity];
+    let extrema = hullCache.get(local);
+    if (!extrema && t.rotation === 0) {
+      const [x0, y0, x1, y1] = localBounds(local);
+      extrema = [[[x0, y0], [x0, y1], [x1, y0], [x1, y1]]];
+    }
+    for (const line of extrema ?? local) for (const [x, y] of line) {
+      const wx = x * sx * cos - y * sy * sin, wy = x * sx * sin + y * sy * cos;
+      b[0] = Math.min(b[0], wx); b[1] = Math.min(b[1], wy);
+      b[2] = Math.max(b[2], wx); b[3] = Math.max(b[3], wy);
+    }
+    cached = { key, b };
+    worldBoundsCache.set(local, cached);
+  }
+  const b = cached!.b;
+  return [b[0] + t.x, b[1] + t.y, b[2] + t.x, b[3] + t.y];
 }
+
+// Geometry is immutable. Weak keys release cached work with the last document/history reference.
+const localBoundsCache = new WeakMap<Pt[][], Bounds>();
+const worldBoundsCache = new WeakMap<Pt[][], { key: string; b: Bounds }>();
+const pathCache = new WeakMap<Pt[][], string>();
+const hullCache = new WeakMap<Pt[][], Pt[][]>();
+export function cacheGeometryHull(lines: Pt[][], hull: Pt[]) { hullCache.set(lines, [hull]); }
+export const EMPTY_LINES: Pt[][] = [];
+
+export function localBounds(lines: Pt[][]): Bounds {
+  let b = localBoundsCache.get(lines);
+  if (!b) {
+    b = [Infinity, Infinity, -Infinity, -Infinity];
+    for (const line of lines) for (const [x, y] of line) {
+      b[0] = Math.min(b[0], x); b[1] = Math.min(b[1], y);
+      b[2] = Math.max(b[2], x); b[3] = Math.max(b[3], y);
+    }
+    localBoundsCache.set(lines, b);
+  }
+  return b;
+}
+
+export function cacheGeometryPath(lines: Pt[][], path: string) { pathCache.set(lines, path); }
+export function cachedGeometryPath(lines: Pt[][]) { return pathCache.get(lines); }
 
 // --- snapping ---
 
@@ -251,5 +294,7 @@ export function toPath(line: Pt[]): string {
 // <path> per object (instead of one per line) collapses thousands of DOM nodes
 // for image-heavy pages into one, which dominates canvas render/reconcile cost.
 export function toMultiPath(lines: Pt[][]): string {
-  return lines.map(toPath).join(" ");
+  let path = pathCache.get(lines);
+  if (path === undefined) { path = lines.map(toPath).join(" "); pathCache.set(lines, path); }
+  return path;
 }
