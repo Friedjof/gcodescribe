@@ -3,7 +3,7 @@ import { type SceneObject } from "../../../../api";
 import { cloneObjects, zValue } from "../../lib/sceneObjects";
 import type { ObjectCommandContext } from "./useObjectCommandContext";
 export function useSelectionCommands(context: ObjectCommandContext) {
-    const { page, selectedIds, setPage, setSelectedIds, persist, remember } = context;
+    const { page, selectedIds, setPage, setSelectedIds, persist, remember, commitAsync } = context;
     const clipboard = useRef<SceneObject[]>([]);
     const [clipboardCount, setClipboardCount] = useState(0);
     const deleteSelected = () => {
@@ -126,12 +126,10 @@ export function useSelectionCommands(context: ObjectCommandContext) {
         persist(page.id, objects);
     };
     const markPlotted = (ids: string[]) => {
-        if (!page)
-            return;
-        const sel = new Set(ids);
-        const objects = page.objects.map((o) => (sel.has(o.id) ? { ...o, plotted: true } : o));
-        setPage({ ...page, objects });
-        persist(page.id, objects);
+        if (!page) return;
+        const selected = new Set(ids);
+        commitAsync(page, new Map(page.objects.filter((object) => selected.has(object.id)).map((object) =>
+          [object.id, { before: object, after: { ...object, plotted: true } }])));
     };
     return { clipboardCount, deleteSelected, groupSelected, ungroupSelected, copySelected, cutSelected,
         pasteObjects, duplicateSelected, moveSelected, markPlotted };

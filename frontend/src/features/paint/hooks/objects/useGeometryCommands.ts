@@ -89,20 +89,20 @@ export function useGeometryCommands(context: ObjectCommandContext) {
                 geometryOnly: boolean;
             }>();
             await Promise.all(page.objects.filter((obj) => selected.has(obj.id)).map(async (obj) => {
-                const previous = stylePending.current.get(obj.id)?.style ?? objectStyle(obj);
+                const previous = stylePending.current.get(`${page.id}:${obj.id}`)?.style ?? objectStyle(obj);
                 const style = normalizeStyle({ ...previous, ...patch,
                     stroke: { ...previous.stroke, ...patch.stroke }, fill: { ...previous.fill, ...patch.fill } });
                 const token = ++sequence.current;
-                stylePending.current.set(obj.id, { style, token });
+                stylePending.current.set(`${page.id}:${obj.id}`, { style, token });
                 const base = basePolylines(obj);
-                const geometry = await geometryTask<Pt[][]>({ kind: "style", lines: base, style }, `style:${obj.id}`).catch((error) => {
-                    if (stylePending.current.get(obj.id)?.token === token)
-                        stylePending.current.delete(obj.id);
+                const geometry = await geometryTask<Pt[][]>({ kind: "style", lines: base, style }, `style:${page.id}:${obj.id}`).catch((error) => {
+                    if (stylePending.current.get(`${page.id}:${obj.id}`)?.token === token)
+                        stylePending.current.delete(`${page.id}:${obj.id}`);
                     throw error;
                 });
-                if (stylePending.current.get(obj.id)?.token !== token)
+                if (stylePending.current.get(`${page.id}:${obj.id}`)?.token !== token)
                     return;
-                stylePending.current.delete(obj.id);
+                stylePending.current.delete(`${page.id}:${obj.id}`);
                 replacements.set(obj.id, { before: obj, geometryOnly: true, after: {
                         ...obj, plotted: false, data: { ...(obj.data ?? {}), basePolylines: base, style,
                             cachedSegmentPressures: keepsStrokeFeeds(style) ? validSegmentPressures(base, obj.data?.baseSegmentPressures) : undefined,
@@ -254,5 +254,5 @@ export function useGeometryCommands(context: ObjectCommandContext) {
     };
     return { addObjects, addObject, eraseAcrossObjects, updateSelectedStyle, setSelectedPressureEnabled,
         applyMaskStamp, convertSelectedToLines,
-        pendingStyle: selectedIds.length ? stylePending.current.get(selectedIds[0])?.style : undefined };
+        pendingStyle: selectedIds.length ? stylePending.current.get(`${page?.id}:${selectedIds[0]}`)?.style : undefined };
 }

@@ -12,9 +12,16 @@ export function useTextCommands(context: ObjectCommandContext) {
     const draftTextRef = useRef<string | null>(null);
     const textDraftTimer = useRef<number | undefined>(undefined);
     const [draftText, setDraftText] = useState<string | null>(null);
+    const pendingDraft = useRef<{ commit: () => void; release: () => void } | null>(null);
+    const finishDraft = () => {
+        clearTimeout(textDraftTimer.current);
+        const pending = pendingDraft.current;
+        pendingDraft.current = null;
+        if (pending) { pending.commit(); pending.release(); }
+    };
+    const selectedId = selectedIds.length === 1 ? selectedIds[0] : null;
     // Reset draft text whenever the selected object changes.
     useEffect(() => {
-        const selectedId = selectedIds.length === 1 ? selectedIds[0] : null;
         const obj = selectedId
             ? page?.objects.find((o) => o.id === selectedId && o.type === "text")
             : null;
@@ -28,7 +35,8 @@ export function useTextCommands(context: ObjectCommandContext) {
             draftTextRef.current = null;
             setDraftText(null);
         }
-    }, [selectedIds]); // eslint-disable-line react-hooks/exhaustive-deps
+        return finishDraft;
+    }, [page?.id, selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
     const updateTextObject = (id: string, patch: Partial<{
         text: string;
         size: number;
@@ -50,7 +58,7 @@ export function useTextCommands(context: ObjectCommandContext) {
             ...patch,
         };
         const token = ++sequence.current;
-        textSequence.current.set(id, token);
+        textSequence.current.set(`${page.id}:${id}`, token);
         const release = retainPage(page);
         setProcessing((n) => n + 1);
         textGeometryAsync(data.text, data.size, data.font, defaultText, false, data.seed)
@@ -59,19 +67,24 @@ export function useTextCommands(context: ObjectCommandContext) {
                 warnMissingGlyphs(missing);
             const style = objectStyle(obj);
             const geometry = await geometryTask<Pt[][]>({ kind: "style", lines: local, style });
-            if (textSequence.current.get(id) !== token)
+            if (textSequence.current.get(`${page.id}:${id}`) !== token)
                 return;
             commitAsync(page, new Map([[id, { before: obj, geometryOnly: true, after: {
                             ...obj, plotted: false, data: { ...data, basePolylines: local, style },
                             cachedPolylines: geometry, cachedFeeds: keepsStrokeFeeds(style) ? feeds : undefined,
                         } }]]));
-        }).catch(fail).finally(() => { release(); setProcessing((n) => n - 1); });
+        }).catch(fail).finally(() => {
+            if (textSequence.current.get(`${page.id}:${id}`) === token) textSequence.current.delete(`${page.id}:${id}`);
+            release(); setProcessing((n) => n - 1);
+        });
     };
     const onTextInput = (id: string, text: string) => {
         draftTextRef.current = text;
         setDraftText(text);
         clearTimeout(textDraftTimer.current);
-        textDraftTimer.current = window.setTimeout(() => updateTextObject(id, { text }), 350);
+        pendingDraft.current?.release();
+        pendingDraft.current = page ? { commit: () => updateTextObject(id, { text }), release: retainPage(page) } : null;
+        textDraftTimer.current = window.setTimeout(finishDraft, 350);
     };
     const onFontOrSizeChange = (id: string, patch: Partial<{
         text: string;
@@ -79,6 +92,8 @@ export function useTextCommands(context: ObjectCommandContext) {
         font: TextFont;
     }>) => {
         clearTimeout(textDraftTimer.current);
+        pendingDraft.current?.release();
+        pendingDraft.current = null;
         const textPatch = draftTextRef.current !== null ? { text: draftTextRef.current } : {};
         updateTextObject(id, { ...textPatch, ...patch });
     };
