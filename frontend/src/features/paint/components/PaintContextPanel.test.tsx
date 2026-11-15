@@ -19,7 +19,7 @@ function setup(object: SceneObject, depth = 0) {
     selectedStyle={DEFAULT_VECTOR_STYLE} pressureMaxDepth={depth}
     selectedText={null} defaultText="Text"
     eraserBrush="point" onEraserBrushChange={vi.fn()} eraserRadius={1} fillStyle={DEFAULT_VECTOR_STYLE.fill}
-    onFillStyleChange={vi.fn()} onOpenGallery={vi.fn()} onOpenMarkdown={vi.fn()} onPickImage={vi.fn()} />);
+    onFillStyleChange={vi.fn()} />);
   return onChange;
 }
 it("shows why pressure cannot be enabled while the profile depth is zero", () => {

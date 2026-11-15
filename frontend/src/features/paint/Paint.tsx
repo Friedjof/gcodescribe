@@ -6,6 +6,7 @@ import { discardEdits, flushEdits, queueObjects, rememberPage } from "../../api/
 import type { PrinterStatus } from "../../api/types/printer";
 import PanelResizeHandle from "../../components/editor/PanelResizeHandle";
 import { useInterface } from "../../interface/InterfaceProvider";
+import PaintCommandBar from "./components/PaintCommandBar";
 import PaintLayoutControls from "./components/PaintLayoutControls";
 import DelayedLoading from "../../components/DelayedLoading";
 import type { Gcode3DView } from "../../components/Gcode3D";
@@ -312,7 +313,12 @@ export default function Paint({
       {!pagesCollapsed && <PanelResizeHandle label={t("interface.resizePages")} width={pagesWidth} min={180} max={400}
         onChange={setPagesWidth} onCommit={width => updateInterface(p => ({ ...p, pagesPanel: { ...p.pagesPanel, width } }))} />}
       <section className="card paint-editor">
-        <PaintLayoutControls />
+        <div className="paint-document-menu">
+          <PaintCommandBar ops={ops} selected={selectedObjects} visible={visible}
+            onText={() => { void addTextObject([cal.plot_width / 2, cal.plot_height / 2]); setTool("select"); }}
+            onGallery={() => setGalleryOpen(true)} onMarkdown={() => setMdOpen(true)} onImage={pickImage} />
+          <PaintLayoutControls />
+        </div>
         <PaintToolbar
           page={page}
           desktop={desktop}
@@ -364,7 +370,7 @@ export default function Paint({
           onSizeLinkedToggle={() => setSizeLinked(value => !value)} disabled={pageBlocked || ops.processing} />
 
         <div className="paint-workspace">
-          <PaintToolRail tool={tool} onToolChange={selectTool} />
+          <PaintToolRail tool={tool} onToolChange={selectTool} guided={preferences.experience === "guided"} visible={visible} />
           <div className="paint-canvas-wrap">
             {page.objects.length === 0 && (
               <div className="paint-empty-hint">
@@ -409,9 +415,6 @@ export default function Paint({
             eraserRadius={eraserRadius}
             fillStyle={fillStyle}
             onFillStyleChange={(patch) => setFillStyle((f) => ({ ...f, ...patch }))}
-            onOpenGallery={() => setGalleryOpen(true)}
-            onOpenMarkdown={() => setMdOpen(true)}
-            onPickImage={pickImage}
           />
           </>}
         </div>

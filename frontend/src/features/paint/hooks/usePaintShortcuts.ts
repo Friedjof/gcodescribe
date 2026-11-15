@@ -31,7 +31,10 @@ export function usePaintShortcuts({
   useEffect(() => {
     if (!active) return;
     const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
       const target = e.target as HTMLElement | null;
+      if (target?.closest("select, [role='menu'], [role='separator'], [role='tablist'], [role='dialog']")) return;
+      if (target?.closest("button, a") && !(e.ctrlKey || e.metaKey)) return;
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
       if (e.key === "Escape") {
         e.preventDefault();

@@ -1,4 +1,12 @@
 const de: Record<string, string> = {
+  "interface.documentCommands": "Dokumentbefehle",
+  "interface.edit": "Bearbeiten",
+  "interface.selectObject": "Objekt auswählen",
+  "interface.selectObjectHint": "Klicke auf eine Zeichnung oder ziehe einen Auswahlrahmen. Hier erscheinen ihre Text-, Linien- und Fülleinstellungen.",
+  "interface.insertHint": "Über Einfügen oben kannst du Text, Bilder oder Vorlagen hinzufügen.",
+  "interface.shapeHint": "Nach dem Zeichnen kannst du das Objekt mit Auswählen verschieben oder an den Griffen vergrößern. Escape wechselt zu Auswählen.",
+  "interface.moreTools": "Weitere Werkzeuge",
+
   "interface.canvasView": "Arbeitsfläche",
   "interface.pages": "Seiten",
   "interface.properties": "Eigenschaften",

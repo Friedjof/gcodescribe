@@ -1,4 +1,16 @@
 const PATHS = {
+  copy: "M8 3h13v13H8V3ZM3 8v13h13",
+  cut: "m8 8 12 12M8 16 20 4M9 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0ZM9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0",
+  paste: "M9 5H5v16h14V5h-4M9 3h6v4H9V3Z",
+  trash: "M3 6h18M9 3h6M6 6l1 15h10l1-15M10 10v7M14 10v7",
+  center: "M12 2v20M2 12h20M6 6h12v12H6V6Z",
+  fit: "M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5M7 7h10v10H7V7Z",
+  group: "M3 3h7v7H3V3ZM14 14h7v7h-7v-7ZM14 3h7v7h-7V3ZM3 14h7v7H3v-7Z",
+  circle: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0",
+  semicircle: "M3 12a9 9 0 1 1 18 0H3Z",
+  eraser: "m3 14 11-11 7 7-11 11H8l-5-7ZM9 8l7 7M10 21h11",
+  bucket: "m4 11 8-8 9 9-8 8-9-9ZM4 11h17M10 3l-3-3M3 17l-2 4h4l-2-4Z",
+
   bell: "M18 8a6 6 0 0 0-12 0v5l-2 4h16l-2-4V8ZM10 21h4",
   home: "m3 10 9-7 9 7M5 9v12h5v-7h4v7h5V9", settings: "M4 7h16M4 17h16M8 4v6M16 14v6",
   tabs: "M3 7V4h7l2 3h9v13H3V7ZM3 7h18", more: "M5 12h.01M12 12h.01M19 12h.01",

@@ -36,3 +36,26 @@
   .paint .paint-context-panel { max-height: 420px; border-top: 1px solid var(--border); }
   .paint .paint-layout-controls label { margin-left: 0; }
 }
+.paint-document-menu { display: flex; align-items: stretch; flex-wrap: wrap; background: var(--panel-2); border-bottom: 1px solid var(--border); }
+.paint-command-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 1px; padding: 3px 6px; }
+.paint-command-bar > button { background: transparent; border-color: transparent; min-height: 27px; font-size: 12px; }
+.paint-document-menu .paint-layout-controls { flex: 1; border: 0; justify-content: flex-end; padding-left: 0; }
+.paint-document-menu .paint-layout-controls label { margin-left: 8px; }
+.editor-menu-trigger { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; }
+.menu-chevron { font-size: 9px; color: var(--muted); }
+.editor-command-menu { position: fixed; z-index: 350; min-width: 210px; max-width: min(380px, calc(100vw - 8px)); max-height: calc(100dvh - 12px); overflow: auto;
+  padding: 4px; background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 4px; box-shadow: 0 6px 18px #17202d33; }
+.editor-command-menu button { display: flex; width: 100%; gap: 9px; align-items: center; justify-content: flex-start; min-height: 31px; padding: 5px 8px; border: 0; background: transparent; text-align: left; font-size: 12px; }
+.editor-command-menu button:hover:not(:disabled), .editor-command-menu button:focus-visible { background: var(--active-bg); }
+.editor-command-menu button > span:nth-child(2) { flex: 1; }
+.editor-command-menu kbd { color: var(--muted); font-size: 10px; font-family: inherit; }
+.command-menu-group { border-top: 1px solid var(--border); margin-top: 3px; padding-top: 3px; }
+.menu-icon-space { width: 16px; }
+.paint .editor-tool-rail { gap: 4px; padding: 5px 3px; }
+.paint .editor-tool-rail > button { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; background: transparent; border: 1px solid transparent; border-radius: 3px; min-height: 32px; width: 32px; padding: 4px; color: var(--text); }
+.paint .editor-tool-rail > button[aria-pressed="true"] { background: var(--active-bg); border-color: var(--border); color: var(--accent); }
+.paint .editor-tool-rail .more-tools-trigger { margin-top: auto; }
+.paint .more-tools-trigger .menu-chevron { display: none; }
+.inspector-empty h4 { color: var(--text); font-size: 12px; margin: 4px 0 8px; }
+.inspector-empty p { color: var(--muted); font-size: 12px; line-height: 1.6; margin: 0 0 14px; }
+@media (max-width: 820px) { .paint .editor-tool-rail .more-tools-trigger { margin-top: 0; margin-left: auto; } }

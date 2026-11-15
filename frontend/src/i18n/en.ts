@@ -1,4 +1,12 @@
 const en: Record<string, string> = {
+  "interface.documentCommands": "Document commands",
+  "interface.edit": "Edit",
+  "interface.selectObject": "Select an object",
+  "interface.selectObjectHint": "Click a drawing or drag a selection box. Its text, line and fill settings appear here.",
+  "interface.insertHint": "Use Insert above to add text, images or library items.",
+  "interface.shapeHint": "After drawing, use Select to move or resize the object using its handles. Escape returns to Select.",
+  "interface.moreTools": "More tools",
+
   "interface.canvasView": "Canvas view",
   "interface.pages": "Pages",
   "interface.properties": "Properties",
