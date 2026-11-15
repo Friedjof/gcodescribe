@@ -1,3 +1,4 @@
+import NumberField from "../../../components/NumberField";
 import { type FillMode, type FillStyle } from "../lib/styling";
 import { useI18n } from "../../../i18n";
 
@@ -32,34 +33,26 @@ export function FillOptions({ value, onChange, disabled = false }: FillOptionsPr
         </select>
       </label>
       {!isDots && (
-        <label className="field">
-          {t("paint.style.angle")}
-          <input
-            type="number"
-            step={5}
-            disabled={disabled}
-            value={value.angle}
-            onChange={(e) => onChange({ angle: Number(e.target.value) || 0 })}
-          />
-        </label>
-      )}
-      <label className="field">
-        {t("paint.style.spacing")}
-        <input
-          type="number"
-          min={0.5}
-          step={0.5}
+        <NumberField
+          label={t("paint.style.angle")}
+          unit="°"
+          step={5}
           disabled={disabled}
-          value={isDots ? value.dotSpacing : value.spacing}
-          onChange={(e) =>
-            onChange(
-              isDots
-                ? { dotSpacing: Number(e.target.value) || 1 }
-                : { spacing: Number(e.target.value) || 1 }
-            )
-          }
+          value={value.angle}
+          onChange={(v) => onChange({ angle: v || 0 })}
         />
-      </label>
+      )}
+      <NumberField
+        label={t("paint.style.spacing")}
+        unit="mm"
+        min={0.5}
+        step={0.5}
+        disabled={disabled}
+        value={isDots ? value.dotSpacing : value.spacing}
+        onChange={(v) =>
+          onChange(isDots ? { dotSpacing: v || 1 } : { spacing: v || 1 })
+        }
+      />
     </div>
   );
 }

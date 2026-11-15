@@ -23,7 +23,7 @@ export default function PagePanel({
   onDuplicate,
   onRemove,
   onReorder,
-  onNewGroup,
+  onCreateGroup,
   onRenameGroup,
   onDeleteGroup,
   onSetPageGroup,
@@ -40,7 +40,7 @@ export default function PagePanel({
   onDuplicate: (id: string) => void;
   onRemove: (id: string) => void;
   onReorder: (ids: string[]) => void;
-  onNewGroup: () => void;
+  onCreateGroup: (name: string) => void;
   onRenameGroup: (id: string, current: string) => void;
   onDeleteGroup: (id: string) => void;
   onSetPageGroup: (id: string, groupId: string | null) => void;
@@ -53,7 +53,25 @@ export default function PagePanel({
   const [groupCollapsed, setGroupCollapsed] = useState<Record<string, boolean>>({});
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropId, setDropId] = useState<string | null>(null);
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  // Guards the Enter/Escape → blur sequence from committing twice.
+  const folderDone = useRef(false);
   const activeRef = useRef<HTMLLIElement>(null);
+
+  const startCreateFolder = () => {
+    folderDone.current = false;
+    setNewFolderName("");
+    setCreatingFolder(true);
+  };
+
+  const finishCreateFolder = (commit: boolean) => {
+    if (folderDone.current) return;
+    folderDone.current = true;
+    setCreatingFolder(false);
+    const name = newFolderName.trim();
+    if (commit && name) onCreateGroup(name);
+  };
 
   // Drag & drop only makes sense against the persisted order; the other sort
   // modes are read-only views.
@@ -205,7 +223,7 @@ export default function PagePanel({
     <aside className={`paint-pages${sidebarCollapsed ? " collapsed" : ""}`}>
       <div className="paint-pages-head">
         {!sidebarCollapsed && <h3>{t("paint.pages")}</h3>}
-        {!sidebarCollapsed && <button className="ghost tiny" title={t("paint.newGroup")} onClick={onNewGroup} aria-label={t("paint.newGroup")}>🗂</button>}
+        {!sidebarCollapsed && <button className="ghost tiny" title={t("paint.newGroup")} onClick={startCreateFolder} aria-label={t("paint.newGroup")}>🗂</button>}
         {!sidebarCollapsed && <button className="ghost tiny" title={t("paint.newPage")} onClick={onNew}>＋</button>}
         <button
           className="ghost tiny pages-collapse-btn"
@@ -245,6 +263,28 @@ export default function PagePanel({
       )}
 
       <div className="paint-pages-scroll">
+        {creatingFolder && !sidebarCollapsed && (
+          <div className="page-group-head folder folder-create-row">
+            <span className="page-group-name">🗂</span>
+            <input
+              autoFocus
+              type="text"
+              className="folder-create-input"
+              placeholder={t("paint.groupNamePrompt")}
+              autoComplete="off"
+              data-bwignore="true"
+              data-1p-ignore="true"
+              data-lpignore="true"
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") finishCreateFolder(true);
+                if (e.key === "Escape") finishCreateFolder(false);
+              }}
+              onBlur={() => finishCreateFolder(true)}
+            />
+          </div>
+        )}
         {groups.length === 0 ? (
           !sidebarCollapsed && <p className="muted paint-pages-empty">{t("paint.noPagesFound")}</p>
         ) : (

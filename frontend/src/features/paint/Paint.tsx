@@ -1,15 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, onAppEvent, type AppEvent, type Calibration, type GcodePreview3D, type Page, type PageIndex, type SceneObject } from "../../api";
+import { api, onAppEvent, type AppEvent, type Calibration, type GcodePreview3D, type Page, type PageIndex, type SceneObject, type ProfileRef } from "../../api";
 import PaintCanvas, { type Tool, type ViewRotation } from "./PaintCanvas";
 import MarkdownEditor from "../markdown/MarkdownEditor";
-import PagePanel from "./PagePanel";
+import ProjectPagePanel from "./ProjectPagePanel";
+import ProjectOverviewPopup from "./ProjectOverviewPopup";
 import GalleryPopup from "../gallery/GalleryPopup";
-import PlotScore from "../../components/PlotScore";
 import Gcode3DOverlay from "../../components/Gcode3DOverlay";
 import ColoringEditor from "../coloring/ColoringEditor";
 import type { Gcode3DView } from "../../components/Gcode3D";
-import Segmented from "../../components/Segmented";
-import LiveButton from "../stream/components/LiveButton";
 import { defaultSceneViewBox } from "./components/SceneView";
 import { useLiveRegistryState } from "../stream/lib/liveRegistry";
 import { useLiveStream } from "../stream/hooks/useLiveStream";
@@ -20,17 +18,24 @@ import { objectStyle, randomTextSeed, textGeometryAsync } from "./lib/sceneObjec
 import { DEFAULT_VECTOR_STYLE, type FillStyle } from "./lib/styling";
 import { bucketFillRegion } from "./lib/bucketFill";
 import { useObjectOps } from "./hooks/useObjectOps";
+import { usePaintPages } from "./hooks/usePaintPages";
 import { usePaintShortcuts } from "./hooks/usePaintShortcuts";
 import { type EraserBrush, ERASER_BRUSH_FACTOR } from "./lib/eraser";
 import { useI18n } from "../../i18n";
 import { useToasts } from "../../components/Toasts";
 import { useConfirm, usePrompt } from "../../components/dialogs";
 import { PaintImageModal, type ImageMode } from "./components/PaintImageModal";
-import { PaintTextPanel } from "./components/PaintTextPanel";
 import PaintContextPanel from "./components/PaintContextPanel";
 import PaintToolRail, { paintTools } from "./components/PaintToolRail";
-
-const GRID_STEPS = [1, 5, 10, 25, 50];
+import PaintToolbar from "./components/PaintToolbar";
+import PaintObjectMenu from "./components/PaintObjectMenu";
+import PaintInfoModal from "./components/PaintInfoModal";
+import { queueObjects, rememberPage, flushEdits, subscribeEdits, editState, discardEdits, cachedPage, refreshPage } from "../../api/pageEdits";
+import { startImport, type AssetTask } from "../../api/assetTasks";
+import { useLatestCallbacks } from "../../hooks/useLatestCallbacks";
+import DelayedLoading from "../../components/DelayedLoading";
+import CalibrationPressureDialog from "../control/CalibrationPressureDialog";
+import { fitPageObjects } from "./lib/fitPage";
 
 export default function Paint({
   visible = true,
@@ -47,6 +52,9 @@ export default function Paint({
   const toast = useToasts();
   const defaultText = t("paint.text");
   const [cal, setCal] = useState<Calibration | null>(null);
+  const [renderProfile, setRenderProfile] = useState<ProfileRef | null>(null);
+  const [calibrationError, setCalibrationError] = useState<string | null>(null);
+  const [calibrationReload, setCalibrationReload] = useState(0);
   const [index, setIndex] = useState<PageIndex | null>(null);
   const [page, setPage] = useState<Page | null>(null);
   const [tool, setTool] = useState<Tool>("select");
@@ -55,28 +63,42 @@ export default function Paint({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [sending, setSending] = useState(false);
+  const [, setSaveTick] = useState(0);
+  useEffect(() => subscribeEdits(() => setSaveTick((n) => n + 1)), []);
+  const saveState = page ? editState(page.id) : { pending: false, error: undefined, conflict: false };
+  const [calibrating, setCalibrating] = useState(false);
+  const [pressureOpen, setPressureOpen] = useState(false);
+  const printerBusy = calibrating || !!status?.motion_locked ||
+    ["printing", "starting", "pausing", "paused", "resuming", "finishing", "cancelling"]
+      .some((state) => status?.job?.state?.toLowerCase?.().includes(state));
   const [fullscreen, setFullscreen] = useState<GcodePreview3D | null>(null);
   const [gcode3dView, setGcode3dView] = useState<Gcode3DView>({ yaw: -0.7, pitch: 1.0, zoom: 1, panX: 0, panY: 0 });
   const [loadingPreview, setLoadingPreview] = useState(false);
+  const [plotError, setPlotError] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; ids: string[] } | null>(null);
-  const [imageImport, setImageImport] = useState<{ file: File; at: Pt; mode: ImageMode; detail: number } | null>(null);
-  const [importingImage, setImportingImage] = useState(false);
+  const [imageImport, setImageImport] = useState<{ file: File; at: Pt; mode: ImageMode; detail: number;
+    pageId: string; projectId: string; profileId: string; fingerprint: string } | null>(null);
   const [mdOpen, setMdOpen] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
+  const [projectsOpen, setProjectsOpen] = useState(false);
+  const [movePageId, setMovePageId] = useState<string | null>(null);
   const [viewRotation, setViewRotation] = useState<ViewRotation>(0);
   const [sizeLinked, setSizeLinked] = useState(true);
-  const [plotMenuOpen, setPlotMenuOpen] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
   const [pagesCollapsed, setPagesCollapsed] = useState(() => {
     try { return localStorage.getItem("paint-pages-collapsed") === "1"; } catch { return false; }
   });
-  const plotMenuRef = useRef<HTMLDivElement>(null);
   const [coloringOpen, setColoringOpen] = useState(false);
   const globalLive = useLiveRegistryState();
   const { confirm, ConfirmNode } = useConfirm();
   const { prompt, PromptNode } = usePrompt();
-  const saveTimer = useRef<number | undefined>(undefined);
 
   const fail = (e: any) => toast.error(String(e.message ?? e));
+  const failPlot = (e: any) => {
+    setPlotError(String(e.message ?? e));
+    if (e.status === 409) { reloadIndex(); setCalibrationReload((n) => n + 1); }
+  };
+  useEffect(() => setPlotError(null), [page?.id]);
   const warnMissingGlyphs = (missing: string[]) => {
     const chars = Array.from(new Set(missing)).slice(0, 12).join(" ");
     toast.warn(t("paint.missingGlyphs", { chars, count: missing.length }));
@@ -90,10 +112,8 @@ export default function Paint({
 
   // persist objects (debounced) for a specific page id
   const persist = (pageId: string, objects: SceneObject[]) => {
-    window.clearTimeout(saveTimer.current);
-    saveTimer.current = window.setTimeout(() => {
-      api.savePage(pageId, { objects }).then(reloadIndex).catch(fail);
-    }, 500);
+    if (page) rememberPage(page);
+    queueObjects(pageId, objects);
   };
 
   const ops = useObjectOps(page, cal, selectedIds, setPage, setSelectedIds, persist, fail, warnMissingGlyphs, defaultText, sizeLinked);
@@ -157,19 +177,9 @@ export default function Paint({
     if (v !== "select") setSelectedIds([]);
   };
 
-  useEffect(() => {
-    api.getCalibration().then(setCal).catch(fail);
-    api
-      .listPages()
-      .then((idx) => {
-        setIndex(idx);
-        const id = idx.activeId ?? idx.order[0]?.id;
-        if (id) return api.getPage(id).then(autoAdoptStale).then(setPage);
-      })
-      .catch(fail);
-  }, []);
-
+  const indexTimer = useRef<ReturnType<typeof setTimeout>>();
   const reloadIndex = () => api.listPages().then(setIndex).catch(fail);
+  const refreshIndexSoon = () => { clearTimeout(indexTimer.current); indexTimer.current = setTimeout(reloadIndex, 200); };
 
   const pageIdRef = useRef<string | null>(null);
   useEffect(() => {
@@ -185,7 +195,7 @@ export default function Paint({
         if (id && id !== pageIdRef.current) {
           ops.resetHistory();
           setSelectedIds([]);
-          return api.getPage(id).then(autoAdoptStale).then(setPage);
+          return api.getPage(id).then(setPage);
         }
       })
       .catch(fail);
@@ -199,10 +209,11 @@ export default function Paint({
   const liveHandlerRef = useRef<(event: AppEvent) => void>(() => {});
   liveHandlerRef.current = (event: AppEvent) => {
     if (event.type === "document") {
-      reloadIndex();
+      if (visible) refreshIndexSoon();
+      if (event.action === "import" && event.pageId) refreshPage(event.pageId).catch(fail);
       return;
     }
-    if (event.type === "mcp" && event.changed) {
+    if (visible && event.type === "mcp" && event.changed) {
       api
         .listPages()
         .then((idx) => {
@@ -211,7 +222,6 @@ export default function Paint({
           if (!id) return;
           return api
             .getPage(id)
-            .then(autoAdoptStale)
             .then((p) => {
               if (p.id !== pageIdRef.current) {
                 ops.resetHistory();
@@ -224,21 +234,42 @@ export default function Paint({
     }
   };
   useEffect(() => onAppEvent((event) => liveHandlerRef.current(event)), []);
+  useEffect(() => {
+    const changed = () => { if (visible) refreshIndexSoon(); };
+    window.addEventListener("gcs:calibration-changed", changed);
+    return () => window.removeEventListener("gcs:calibration-changed", changed);
+  }, [visible]);
+
+  useEffect(() => {
+    const saved = (event: Event) => {
+      const id = (event as CustomEvent<string>).detail;
+      const next = cachedPage(id);
+      if (next) setPage((previous) => previous?.id === id ? { ...previous, objects: next.objects, revision: next.revision } : previous);
+    };
+    window.addEventListener("gcs:page-saved", saved);
+    const imported = (event: Event) => {
+      const task = (event as CustomEvent<AssetTask>).detail;
+      if (task.attached && task.target) void refreshPage(task.target.page_id).catch(fail);
+    };
+    window.addEventListener("gcs:asset-ready", imported);
+    return () => { window.removeEventListener("gcs:page-saved", saved); window.removeEventListener("gcs:asset-ready", imported); clearTimeout(indexTimer.current); };
+  }, []);
 
   const calReqRef = useRef(0);
   useEffect(() => {
-    if (!page) return;
+    if (!visible || !page || !index?.project || page.projectId !== index.project.id) return;
     const token = ++calReqRef.current;
-    const apply = (next: Calibration) => {
-      if (calReqRef.current === token) setCal(next);
-    };
-    (page.profileId
-      ? api.getProfile(page.profileId).then((p) => p.calibration)
-      : api.getCalibration()
-    )
-      .then(apply)
-      .catch(() => api.getCalibration().then(apply).catch(fail));
-  }, [page?.profileId, page?.profileFingerprint]);
+    setRenderProfile(null);
+    setCalibrationError(null);
+    api.getProfile(index.project.profileId).then((profile) => {
+      if (calReqRef.current !== token) return;
+      setCal(profile.calibration);
+      setRenderProfile({ id: profile.id, name: profile.name, fingerprint: profile.fingerprint });
+    }).catch((error) => {
+      if (calReqRef.current === token) setCalibrationError(String(error.message ?? error));
+    });
+    return () => { if (calReqRef.current === token) calReqRef.current++; };
+  }, [visible, page?.id, page?.projectId, index?.project?.id, index?.project?.profileId, index?.activeProfile?.fingerprint, calibrationReload]);
 
   useLiveSource(live, {
     visible,
@@ -253,136 +284,26 @@ export default function Paint({
     live.start();
   }, [visible, cal, page?.id, globalLive.active, globalLive.sourceId]);
 
-  useEffect(() => {
-    if (!plotMenuOpen) return;
-    const onDown = (e: PointerEvent) => {
-      if (!plotMenuRef.current?.contains(e.target as Node)) setPlotMenuOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setPlotMenuOpen(false);
-    };
-    window.addEventListener("pointerdown", onDown);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("pointerdown", onDown);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [plotMenuOpen]);
+  const pageBlocked = !renderProfile;
 
-  const autoAdoptStale = (p: Page): Promise<Page> => {
-    if (p.profileStatus !== "stale") return Promise.resolve(p);
-    return api
-      .adoptPageProfile(p.id, false)
-      .then((updated) => { reloadIndex(); return updated; })
-      .catch(() => p);
+  const showProject = async (next: PageIndex) => {
+    const id = next.activeId ?? next.order[0]?.id;
+    const nextPage = id ? await api.getPage(id) : null;
+    setIndex(next); ops.resetHistory(); setSelectedIds([]);
+    setPage(nextPage);
   };
 
-  const reloadAll = (pageId?: string) =>
-    Promise.all([
-      api.getCalibration().then(setCal),
-      api.listPages().then(setIndex),
-      pageId ? api.getPage(pageId).then(setPage) : Promise.resolve(null),
-    ]);
-
-  const pageBlocked = !!page?.profileStatus && page.profileStatus !== "active";
-
-  const activatePageProfile = () => {
-    if (!page?.profileId) return;
-    api.activateProfile(page.profileId).then(() => reloadAll(page.id)).catch(fail);
-  };
-
-  const adoptPageProfile = () => {
-    if (!page) return;
-    api
-      .adoptPageProfile(page.id, false, index?.activeProfile)
-      .then(() => reloadAll(page.id))
-      .catch((e: any) => {
-        const message = String(e.message ?? e);
-        confirm(`${message}\n\n${t("paint.adoptForceConfirm")}`).then((ok) => {
-          if (!ok) return;
-          api
-            .adoptPageProfile(page.id, true, index?.activeProfile)
-            .then(() => reloadAll(page.id))
-            .catch(fail);
-        });
-      });
-  };
-
-  const openPage = (id: string) => {
-    if (id === page?.id) return;
-    window.clearTimeout(saveTimer.current);
-    ops.resetHistory();
-    setSelectedIds([]);
-    api
-      .activatePage(id)
-      .then(setIndex)
-      .then(() => api.getPage(id))
-      .then(autoAdoptStale)
-      .then(setPage)
-      .catch(fail);
-  };
-
-  const newPage = () =>
-    api.createPage().then((p) => {
-      ops.resetHistory();
-      setPage(p);
-      setSelectedIds([]);
-      return reloadIndex();
-    }).catch(fail);
-
-  const duplicate = (id: string) =>
-    api.duplicatePage(id).then((p) => {
-      ops.resetHistory();
-      setPage(p);
-      setSelectedIds([]);
-      return reloadIndex();
-    }).catch(fail);
-
-  const rename = async (id: string, current: string) => {
-    const next = await prompt(t("paint.pageNamePrompt"), current);
-    if (next == null) return;
-    const name = next.trim();
-    if (!name || name === current) return;
-    api.savePage(id, { name }).then((p) => {
-      if (p.id === page?.id) setPage(p);
-      return reloadIndex();
-    }).catch(fail);
-  };
-
-  const remove = async (id: string) => {
-    if (!await confirm(t("paint.deletePageConfirm"))) return;
-    api.deletePage(id).then((idx) => {
-      setIndex(idx);
-      const nextId = idx.activeId ?? idx.order[0]?.id;
-      ops.resetHistory();
-      setSelectedIds([]);
-      if (nextId) return api.getPage(nextId).then(setPage);
-      setPage(null);
-    }).catch(fail);
-  };
-
-  const newGroup = async () => {
-    const name = await prompt(t("paint.groupNamePrompt"), "");
-    if (name == null || !name.trim()) return;
-    api.createGroup(name.trim()).then(setIndex).catch(fail);
-  };
-
-  const renameGroup = async (id: string, current: string) => {
-    const next = await prompt(t("paint.groupNamePrompt"), current);
-    if (next == null) return;
-    const name = next.trim();
-    if (!name || name === current) return;
-    api.renameGroup(id, name).then(setIndex).catch(fail);
-  };
-
-  const deleteGroup = async (id: string) => {
-    if (!await confirm(t("paint.deleteGroup") + "?")) return;
-    api.deleteGroup(id).then(setIndex).catch(fail);
-  };
-
-  const setPageGroup = (id: string, groupId: string | null) => {
-    api.setPageGroup(id, groupId).then(setIndex).catch(fail);
-  };
+  const pages = usePaintPages({
+    page,
+    setPage,
+    setIndex,
+    setSelectedIds,
+    ops,
+    reloadIndex,
+    confirm,
+    prompt,
+    fail,
+  });
 
   const setGrid = (patch: Partial<{ step: number; snap: boolean }>) => {
     if (!page) return;
@@ -398,9 +319,12 @@ export default function Paint({
   };
 
   const generateJob = (objects?: SceneObject[]) => {
+    setPlotError(null);
     if (!page) return Promise.reject(new Error(t("paint.noPage")));
+    if (!renderProfile) return Promise.reject(new Error("Die aktuelle Projektkalibrierung wird noch geladen."));
+    if (ops.processing) return Promise.reject(new Error(t("paint.processingGeometry")));
     setBusy(true);
-    return api.pageGcode(page.id, index?.activeProfile, objects)
+    return flushEdits(page.id).then(() => api.pageGcode(page.id, renderProfile, objects))
       .then((job) => {
         toast.success(t("paint.jobCreated", { name: job.filename }));
         return job.filename;
@@ -410,22 +334,31 @@ export default function Paint({
 
   const createGcode = () => {
     if (busy) return;
-    generateJob().catch(fail);
+    generateJob().catch(failPlot);
+  };
+
+  const moveToCalibration = () => {
+    if (!status?.online || busy || sending || printerBusy) return;
+    setCalibrating(true);
+    api.homeAndMoveToPosition("calibration", index?.project?.id)
+      .then(() => onAction?.())
+      .catch(fail)
+      .finally(() => setCalibrating(false));
   };
 
   const directPlot = () => {
-    if (busy || sending) return;
+    if (busy || sending || printerBusy || pageBlocked) return;
     generateJob()
       .then((filename) => {
         setSending(true);
         return api.send(filename, true).then(() => toast.success(t("paint.jobStarted", { name: filename })));
       })
-      .catch(fail)
+      .catch(failPlot)
       .finally(() => setSending(false));
   };
 
   const plotSelection = () => {
-    if (!page || busy || sending || pageBlocked || selectedIds.length === 0) return;
+    if (!page || busy || sending || printerBusy || pageBlocked || selectedIds.length === 0) return;
     const ids = [...selectedIds];
     const subset = page.objects.filter((o) => ids.includes(o.id));
     if (subset.length === 0) return;
@@ -439,17 +372,28 @@ export default function Paint({
           setSelectedIds([]);
         });
       })
-      .catch(fail)
+      .catch(failPlot)
       .finally(() => setSending(false));
   };
 
   const openFullscreen = () => {
-    if (!page || loadingPreview) return;
+    if (!page || loadingPreview || !renderProfile) return;
+    setPlotError(null);
     setLoadingPreview(true);
-    api.pagePreview3D(page.id, page.objects)
+    api.pagePreview3D(page.id, page.objects, renderProfile)
       .then(setFullscreen)
-      .catch(fail)
+      .catch(failPlot)
       .finally(() => setLoadingPreview(false));
+  };
+
+  const fitDrawing = () => {
+    if (!page || !cal || pageBlocked) return;
+    const objects = fitPageObjects(page.objects, cal.plot_width, cal.plot_height);
+    if (!objects) return;
+    ops.remember();
+    setPage({ ...page, objects });
+    persist(page.id, objects);
+    setPlotError(null);
   };
 
   const selectIds = (ids: string[]) => {
@@ -495,51 +439,33 @@ export default function Paint({
       .catch(fail);
   };
 
+  const openImageImport = (file: File, at: Pt) => {
+    if (!page || !index?.project || !renderProfile?.fingerprint || page.projectId !== index.project.id
+        || renderProfile.id !== index.project.profileId) return;
+    setImageImport({ file, at, mode: "edges", detail: 2, pageId: page.id,
+      projectId: index.project.id, profileId: renderProfile.id, fingerprint: renderProfile.fingerprint });
+  };
+
   const pickImage = (file: File | undefined) => {
     if (!file || !cal) return;
-    setImageImport({ file, at: [cal.plot_width / 2, cal.plot_height / 2], mode: "edges", detail: 2 });
+    openImageImport(file, [cal.plot_width / 2, cal.plot_height / 2]);
   };
 
   const importImage = () => {
-    if (!page || !imageImport || importingImage) return;
-    setImportingImage(true);
-    api.galleryUpload(imageImport.file, "", { mode: imageImport.mode, detail: imageImport.detail })
-      .then((item) => api.galleryPreview(item.id, 1).then((preview) => ({ item, preview })))
-      .then(({ item, preview }) => {
-        if (!preview.polylines.length) throw new Error(t("paint.noLinesImage"));
-        const bounds = preview.bounds ?? [0, 0, preview.width, preview.height];
-        const width = Math.max(bounds[2] - bounds[0], 1);
-        const height = Math.max(bounds[3] - bounds[1], 1);
-        const scale = Math.min(1, (cal!.plot_width * 0.6) / width, (cal!.plot_height * 0.6) / height);
-        const { local } = localize(preview.polylines as Pt[][]);
-        ops.addObject({
-          id: crypto.randomUUID(),
-          type: "image",
-          data: {
-            galleryId: item.id,
-            galleryPage: 1,
-            name: item.filename,
-            mode: imageImport.mode,
-            detail: imageImport.detail,
-            width: preview.width,
-            height: preview.height,
-            basePolylines: local,
-            style: DEFAULT_VECTOR_STYLE,
-          },
-          cachedPolylines: local,
-          transform: {
-            x: imageImport.at[0] + ((bounds[0] + bounds[2]) / 2 - bounds[0]) * scale,
-            y: imageImport.at[1] + ((bounds[1] + bounds[3]) / 2 - bounds[1]) * scale,
-            rotation: 0,
-            scale,
-          },
-          plotted: false,
-        });
-        setImageImport(null);
-        setTool("select");
-      })
-      .catch(fail)
-      .finally(() => setImportingImage(false));
+    if (!page || !cal || !imageImport || !index?.project || !renderProfile) return;
+    if (imageImport.pageId !== page.id || imageImport.projectId !== page.projectId
+        || imageImport.projectId !== index.project.id || renderProfile.id !== index.project.profileId
+        || imageImport.profileId !== renderProfile.id || imageImport.fingerprint !== renderProfile.fingerprint) {
+      setImageImport(null);
+      fail(new Error("Die Zielseite oder Projektkalibrierung wurde geändert. Bitte das Bild erneut einfügen."));
+      return;
+    }
+    setImageImport(null); setTool("select");
+    startImport(imageImport.file, { mode: imageImport.mode, detail: imageImport.detail,
+      target: { page_id: page.id, project_id: index.project.id, x: imageImport.at[0], y: imageImport.at[1],
+        profile_id: renderProfile.id, fingerprint: renderProfile.fingerprint,
+        width: cal.plot_width, height: cal.plot_height } })
+      .catch(fail);
   };
 
   const insertMarkdown = (objs: SceneObject[], markdown: string) => {
@@ -551,9 +477,10 @@ export default function Paint({
     setTool("select");
   };
 
-  // Keyboard shortcuts — only active when this tab is visible.
+  // Keyboard shortcuts — only active when this tab is visible and no modal
+  // is open (otherwise Escape would also reset tool/selection).
   usePaintShortcuts({
-    active: visible && !coloringOpen,
+    active: visible && !coloringOpen && !infoOpen && !imageImport && !projectsOpen,
     tool,
     setTool,
     selectedIds,
@@ -564,7 +491,18 @@ export default function Paint({
     defaultText,
   });
 
-  if (!cal || !index || !page) return <div className="card">{t("paint.loading")}</div>;
+  const canvasHandlers = useLatestCallbacks({
+    onSelect: selectIds, onAdd: ops.addObject, onUpdate: updateObject, onUpdateMany: updateObjects,
+    onEditStart: ops.remember,
+    onContextMenuSelection: (ids: string[], x: number, y: number) => { setSelectedIds(ids); setMenu({ ids, x, y }); },
+    onImageDrop: openImageImport,
+    onTextAdd: addTextObject, onBucketFill: handleBucketFill, onAreaFill: handleAreaFill, onErase: ops.eraseAcrossObjects,
+  });
+  if (calibrationError) return <div className="card banner err" role="alert">
+    <strong>Projektkalibrierung konnte nicht geladen werden</strong><p>{calibrationError}</p>
+    <button onClick={() => { setCalibrationError(null); setCalibrationReload((n) => n + 1); reloadIndex(); }}>Erneut laden</button>
+  </div>;
+  if (!cal || !index || !page) return <DelayedLoading />;
 
   const selectedObjects = page.objects.filter((o) => selectedIds.includes(o.id));
   const hasSelection = selectedObjects.length > 0;
@@ -572,6 +510,7 @@ export default function Paint({
     ? selectedObjects[0]
     : null;
   const selectedObjectSize = selectedObjects.length === 1 ? ops.objectLocalSize(selectedObjects[0]) : null;
+  const aspectLocked = selectedObjects.length === 1 && !!selectedObjects[0].data?.sourcePage;
   const selectedObjectRotation = selectedObjects.length === 1
     ? (() => {
         const raw = ((selectedObjects[0].transform?.rotation ?? 0) * 180) / Math.PI;
@@ -579,11 +518,7 @@ export default function Paint({
         return normalized === 0 && raw > 0.0001 ? 360 : normalized;
       })()
     : null;
-  const selectedStyle = selectedObjects.length > 0 ? objectStyle(selectedObjects[0]) : DEFAULT_VECTOR_STYLE;
-  const canUngroupMenu = !!menu && page.objects.some((obj) => menu.ids.includes(obj.id) && obj.groupId);
-  const menuMaskId = menu?.ids.length === 1
-    ? page?.objects.find((o) => o.id === menu.ids[0] && (o.type === "mask" || o.data?.mask === "erase"))?.id ?? null
-    : null;
+  const selectedStyle = ops.pendingStyle ?? (selectedObjects.length > 0 ? objectStyle(selectedObjects[0]) : DEFAULT_VECTOR_STYLE);
 
   const togglePagesCollapsed = () => {
     setPagesCollapsed((v) => {
@@ -595,21 +530,13 @@ export default function Paint({
 
   return (
     <div className={`paint${pagesCollapsed ? " pages-collapsed" : ""}`}>
-      {menu && (
-        <div className="paint-context-menu" style={{ left: menu.x, top: menu.y }} onContextMenu={(e) => e.preventDefault()}>
-          {menuMaskId && (
-            <button onClick={() => { ops.applyMaskStamp(menuMaskId); setMenu(null); }}>{t("paint.applyMask")}</button>
-          )}
-          <button disabled={menu.ids.length < 2} onClick={() => { ops.groupSelected(menu.ids); setMenu(null); }}>{t("paint.group")}</button>
-          <button disabled={!canUngroupMenu} onClick={() => { ops.ungroupSelected(menu.ids); setMenu(null); }}>{t("paint.ungroup")}</button>
-        </div>
-      )}
+      <PaintObjectMenu menu={menu} objects={page.objects} ops={ops} onClose={() => setMenu(null)} />
       {imageImport && (
         <PaintImageModal
           file={imageImport.file}
           mode={imageImport.mode}
           detail={imageImport.detail}
-          importing={importingImage}
+          importing={false}
           continuous={page.continuous !== false}
           onModeChange={(m) => setImageImport({ ...imageImport, mode: m })}
           onDetailChange={(d) => setImageImport({ ...imageImport, detail: d })}
@@ -617,144 +544,79 @@ export default function Paint({
           onCancel={() => setImageImport(null)}
           onImport={importImage}
         />
+
       )}
-      <PagePanel
+      <ProjectPagePanel
         index={index}
         activePageId={page.id}
-        activeProfileId={index.activeProfile?.id}
-        activeProfileName={index.activeProfile?.name}
-        onOpen={openPage}
-        onNew={newPage}
-        onRename={rename}
-        onDuplicate={duplicate}
-        onRemove={remove}
-        onReorder={(ids) => api.reorderPages(ids).then(setIndex).catch(fail)}
-        onNewGroup={newGroup}
-        onRenameGroup={renameGroup}
-        onDeleteGroup={deleteGroup}
-        onSetPageGroup={setPageGroup}
+        onOpenProjects={() => setProjectsOpen(true)}
+        onOpen={pages.openPage}
+        onNew={pages.newPage}
+        onRename={pages.rename}
+        onDuplicate={pages.duplicate}
+        onRemove={pages.remove}
+        onReorder={pages.reorder}
+        onCreateGroup={pages.createGroup}
+        onRenameGroup={pages.renameGroup}
+        onDeleteGroup={pages.deleteGroup}
+        onSetPageGroup={pages.setPageGroup}
+        onSetGroupParent={pages.setGroupParent}
+        onMove={(id) => { setMovePageId(id); setProjectsOpen(true); }}
         sidebarCollapsed={pagesCollapsed}
         onToggleSidebar={togglePagesCollapsed}
       />
 
       <section className="card paint-editor">
-        <div className="paint-toolbar">
-          <h2>{page.name}</h2>
-          <div className="paint-grid-ctl">
-            <span className="muted">{t("paint.grid")}</span>
-            <Segmented
-              value={page.grid.step}
-              onChange={(step) => setGrid({ step })}
-              options={GRID_STEPS.map((s) => ({ value: s, label: String(s) }))}
-              suffix={<em className="muted">mm</em>}
-            />
-            <label className="switch-label">
-              <span className="muted">{t("paint.snap")}</span>
-              <button className={`switch ${page.grid.snap ? "on" : ""}`}
-                onClick={() => setGrid({ snap: !page.grid.snap })} aria-pressed={page.grid.snap}>
-                <i />
-              </button>
-            </label>
-            <label className="switch-label" title={t("paint.continuousHint")}>
-              <span className="muted">{t("paint.slice")}</span>
-              <Segmented<string>
-                value={page.continuous !== false ? "continuous" : "faithful"}
-                onChange={(v) => setContinuous(v === "continuous")}
-                options={[
-                  { value: "continuous", label: t("slice.continuous") },
-                  { value: "faithful", label: t("slice.faithful") },
-                ]}
-              />
-            </label>
-          </div>
-          <div className="paint-job-actions">
-              {!desktop && (
-                <LiveButton
-                  state={live.state}
-                  viewers={live.viewers}
-                  onClick={() => live.state === "live" || live.state === "connecting" ? live.stop("user-stopped") : live.start()}
-                />
-              )}
-              <button
-                className="primary"
-                disabled={busy || sending || pageBlocked}
-                title={pageBlocked ? t("paint.gcodeBlocked") : ""}
-                onClick={createGcode}
-              >
-                {busy ? t("paint.generating") : t("paint.generateGcode")}
-              </button>
-              <div className="split-button" ref={plotMenuRef}>
-                <button
-                  className="primary split-main"
-                  disabled={busy || sending || pageBlocked}
-                  title={pageBlocked ? t("paint.gcodeBlocked") : ""}
-                  onClick={directPlot}
-                >
-                  {busy ? t("paint.generating") : sending ? t("paint.starting") : t("paint.directPlot")}
-                </button>
-                <button
-                  className="primary split-toggle"
-                  disabled={busy || sending || pageBlocked}
-                  aria-haspopup="menu"
-                  aria-expanded={plotMenuOpen}
-                  aria-label={t("paint.plotSelection")}
-                  onClick={() => setPlotMenuOpen((v) => !v)}
-                >
-                  ▾
-                </button>
-                {plotMenuOpen && (
-                  <div className="split-menu" role="menu">
-                    <button
-                      role="menuitem"
-                      disabled={busy || sending || pageBlocked || !hasSelection}
-                      title={!hasSelection ? t("paint.noSelection") : pageBlocked ? t("paint.gcodeBlocked") : t("paint.plotSelectionHint")}
-                      onClick={() => { setPlotMenuOpen(false); plotSelection(); }}
-                    >
-                      {t("paint.plotSelection")}
-                    </button>
-                    <button
-                      role="menuitem"
-                      disabled={busy || sending || pageBlocked || page.objects.length === 0}
-                      title={page.objects.length === 0 ? t("paint.emptyHint") : pageBlocked ? t("paint.gcodeBlocked") : t("paint.coloringHint")}
-                      onClick={() => { setPlotMenuOpen(false); setColoringOpen(true); }}
-                    >
-                      {t("paint.coloring")}
-                    </button>
-                  </div>
-                )}
-              </div>
-              <button disabled={loadingPreview} onClick={openFullscreen}>
-                {loadingPreview ? t("common.loading") : t("convert.fullscreen")}
-              </button>
-          </div>
-        </div>
+        <PaintToolbar
+          page={page}
+          desktop={desktop}
+          liveState={live.state}
+          liveViewers={live.viewers}
+          onToggleLive={() => live.state === "live" || live.state === "connecting" ? live.stop("user-stopped") : live.start()}
+          busy={busy || ops.processing}
+          sending={sending}
+          printerBusy={printerBusy}
+          printerOnline={!!status?.online}
+          calibrating={calibrating}
+          pageBlocked={pageBlocked}
+          loadingPreview={loadingPreview}
+          hasSelection={hasSelection}
+          onSetGrid={setGrid}
+          onSetContinuous={setContinuous}
+          onCreateGcode={createGcode}
+          onDirectPlot={directPlot}
+          onMoveToCalibration={moveToCalibration}
+          onOpenPressure={() => setPressureOpen(true)}
+          onPlotSelection={plotSelection}
+          onOpenColoring={() => setColoringOpen(true)}
+          onOpenFullscreen={openFullscreen}
+          onOpenInfo={() => setInfoOpen(true)}
+        />
 
-        {pageBlocked && (
-          <div className="banner warn profile-banner">
-            <span>
-              {page.profileStatus === "other"
-                ? t("paint.pageOtherProfile", { name: page.profileName ?? "?" })
-                : page.profileStatus === "stale"
-                  ? t("paint.pageStale")
-                  : page.profileStatus === "archived"
-                    ? t("paint.pageArchivedProfile", { name: page.profileName ?? "?" })
-                    : page.profileId
-                      ? t("paint.pageMissingProfile", { name: page.profileName ?? "?" })
-                      : t("paint.pageNoProfileHint")}
-            </span>
-            {page.profileStatus === "other" && page.profileId && (
-              <button onClick={activatePageProfile}>
-                {t("paint.activateProfile", { name: page.profileName ?? "?" })}
-              </button>
-            )}
-            <button onClick={adoptPageProfile}>{t("paint.adoptProfile")}</button>
-          </div>
-        )}
+        <p className="paint-profile-context muted">
+          Projektprofil: <strong>{renderProfile?.name ?? "wird geladen …"}</strong>
+          {renderProfile && <> · Ursprung X {cal.origin_x.toFixed(1)}, Y {cal.origin_y.toFixed(1)} mm
+            · Fläche {cal.plot_width.toFixed(1)} × {cal.plot_height.toFixed(1)} mm</>}
+        </p>
+
+        {saveState.error && <div className="banner err save-status" role="alert">
+          <span>{saveState.conflict ? t("save.conflict") : t("save.failed")}</span>
+          <button onClick={() => flushEdits(page.id, !!saveState.conflict).catch(fail)}>{t(saveState.conflict ? "save.keepLocal" : "save.retry")}</button>
+          <button onClick={() => discardEdits(page.id).then(setPage).catch(fail)}>{t("save.reload")}</button>
+        </div>}
+        {plotError && <div className="banner err paint-plot-error" role="alert">
+          <div><strong>Plotprüfung fehlgeschlagen</strong><p>{plotError}</p></div>
+          {plotError.includes("außerhalb der aktuellen Projektfläche") &&
+            <button disabled={pageBlocked} onClick={fitDrawing}>Zeichnung proportional einpassen</button>}
+          {/kalibrierung|profil|papier/i.test(plotError) &&
+            <button onClick={() => { reloadIndex(); setProjectsOpen(true); }}>Projektprofil prüfen</button>}
+          <button className="ghost" aria-label="Plot-Hinweis schließen" onClick={() => setPlotError(null)}>×</button>
+        </div>}
+        {ops.processing && <span className="geometry-status" role="status">{t("paint.processingGeometry")}</span>}
 
         <div className="paint-workspace">
           <PaintToolRail tool={tool} onToolChange={selectTool} />
           <div className="paint-canvas-wrap">
-            <PlotScore pageId={page.id} objects={page.objects} />
             {page.objects.length === 0 && (
               <div className="paint-empty-hint">
                 <strong>{t("paint.emptyHint")}</strong>
@@ -762,21 +624,12 @@ export default function Paint({
               </div>
             )}
             <PaintCanvas
+              visible={visible}
               cal={cal}
               page={page}
               tool={tool}
               selectedIds={selectedIds}
-              onSelect={selectIds}
-              onAdd={ops.addObject}
-              onUpdate={updateObject}
-              onUpdateMany={updateObjects}
-              onEditStart={ops.remember}
-              onContextMenuSelection={(ids, x, y) => { setSelectedIds(ids); setMenu({ ids, x, y }); }}
-              onImageDrop={(file, at) => setImageImport({ file, at, mode: "edges", detail: 2 })}
-              onTextAdd={addTextObject}
-              onBucketFill={handleBucketFill}
-              onAreaFill={handleAreaFill}
-              onErase={ops.eraseAcrossObjects}
+              {...canvasHandlers}
               eraserRadius={eraserRadius}
               eraserIsPoint={eraserBrush === "point"}
               onCursorMove={live.state === "live" ? live.sendCursor : undefined}
@@ -795,7 +648,11 @@ export default function Paint({
             selectedObjectSize={selectedObjectSize}
             selectedObjectRotation={selectedObjectRotation}
             selectedStyle={selectedStyle}
-            sizeLinked={sizeLinked}
+            pressureMaxDepth={cal.pen_pressure_max_depth ?? 0}
+            selectedText={selectedText}
+            defaultText={defaultText}
+            sizeLinked={sizeLinked || aspectLocked}
+            aspectLocked={aspectLocked}
             onSizeLinkedToggle={() => setSizeLinked((v) => !v)}
             eraserBrush={eraserBrush}
             onEraserBrushChange={setEraserBrush}
@@ -807,16 +664,6 @@ export default function Paint({
             onPickImage={pickImage}
           />
         </div>
-
-        {selectedText && (
-          <PaintTextPanel
-            selectedText={selectedText}
-            draftText={ops.draftText}
-            defaultText={defaultText}
-            onTextInput={ops.onTextInput}
-            onFontOrSizeChange={ops.onFontOrSizeChange}
-          />
-        )}
 
         <p className="muted hint">
           {tool === "select"
@@ -830,12 +677,19 @@ export default function Paint({
             : t("paint.hint.draw")}
         </p>
       </section>
+      {infoOpen && <PaintInfoModal onClose={() => setInfoOpen(false)} />}
+      {visible && pressureOpen && <CalibrationPressureDialog
+        projectId={index.project?.id} profileId={index.project?.profileId}
+        canMove={!!status?.online && !busy && !sending && !status?.motion_locked &&
+          !["printing", "starting", "pausing", "paused", "resuming", "finishing", "cancelling"]
+            .some((state) => status?.job?.state?.toLowerCase?.().includes(state))}
+        onClose={() => setPressureOpen(false)} onBusyChange={setCalibrating} onAction={onAction} />}
       {fullscreen && <Gcode3DOverlay data={fullscreen} viewState={gcode3dView} onViewChange={setGcode3dView} onClose={() => setFullscreen(null)} />}
-      {coloringOpen && cal && (
+      {coloringOpen && cal && renderProfile && (
         <ColoringEditor
           cal={cal}
           page={page}
-          activeProfile={index?.activeProfile}
+          activeProfile={renderProfile}
           initialRotation={viewRotation}
           onClose={() => setColoringOpen(false)}
           onCreated={(jobs) => toast.success(t("paint.coloringJobsCreated", { count: jobs.length }))}
@@ -851,16 +705,25 @@ export default function Paint({
           onInsert={insertMarkdown}
         />
       )}
-      {galleryOpen && (
+      {galleryOpen && renderProfile && (
         <GalleryPopup
           cal={cal}
           status={status}
-          activeProfile={index?.activeProfile}
+          activeProfile={renderProfile}
           onClose={() => setGalleryOpen(false)}
           onInsert={ops.addObject}
           onPlotted={() => { reloadIndex(); onAction?.(); }}
         />
       )}
+      {projectsOpen && <ProjectOverviewPopup
+        activeId={index.project?.id}
+        movePageId={movePageId}
+        beforeChange={async () => { await flushEdits(page.id); if (movePageId && movePageId !== page.id) await flushEdits(movePageId); }}
+        onRefresh={reloadIndex}
+        onActivate={showProject}
+        confirm={confirm}
+        onClose={() => { setProjectsOpen(false); setMovePageId(null); }}
+      />}
       {ConfirmNode}
       {PromptNode}
     </div>

@@ -105,6 +105,11 @@ export function usePrompt(): {
           <input
             ref={inputRef}
             className="dialog-input"
+            type="text"
+            autoComplete="off"
+            data-bwignore="true"
+            data-1p-ignore="true"
+            data-lpignore="true"
             value={value}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={(e) => {

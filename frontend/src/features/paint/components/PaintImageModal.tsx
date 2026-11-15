@@ -1,3 +1,4 @@
+import Modal from "../../../components/Modal";
 import { useI18n } from "../../../i18n";
 
 export type ImageMode = "edges" | "hatch" | "lines" | "dots" | "handwriting";
@@ -38,47 +39,50 @@ export function PaintImageModal({
   ];
 
   return (
-    <div className="paint-modal-backdrop" onMouseDown={() => !importing && onCancel()}>
-      <div className="paint-import-modal" onMouseDown={(e) => e.stopPropagation()}>
-        <h3>{t("paint.image.title")}</h3>
-        <p className="muted">{file.name}</p>
-        <div className="paint-import-modes">
-          {imageModes.map((m) => (
-            <button
-              key={m.value}
-              className={mode === m.value ? "active" : ""}
-              onClick={() => onModeChange(m.value)}
-            >
-              <strong>{m.label}</strong>
-              <span>{m.description}</span>
-            </button>
-          ))}
-        </div>
-        <label className="field">
-          {t("paint.image.detail")}
-          <select value={detail} onChange={(e) => onDetailChange(Number(e.target.value))}>
-            <option value={1}>{t("paint.image.low")}</option>
-            <option value={2}>{t("paint.image.medium")}</option>
-            <option value={3}>{t("paint.image.high")}</option>
-          </select>
-        </label>
-        <label className="switch-label" title={t("paint.continuousHint")}>
-          <input
-            type="checkbox"
-            checked={continuous}
-            onChange={(e) => onContinuousChange(e.target.checked)}
-          />
-          {t("paint.continuous")}
-        </label>
-        <div className="job-actions">
+    <Modal
+      title={t("paint.image.title")}
+      className="paint-import-modal"
+      onClose={() => !importing && onCancel()}
+      footer={
+        <>
           <button className="ghost" disabled={importing} onClick={onCancel}>
             {t("paint.cancel")}
           </button>
           <button className="primary" disabled={importing} onClick={onImport}>
             {importing ? t("paint.converting") : t("paint.insert")}
           </button>
-        </div>
+        </>
+      }
+    >
+      <p className="muted">{file.name}</p>
+      <div className="paint-import-modes">
+        {imageModes.map((m) => (
+          <button
+            key={m.value}
+            className={mode === m.value ? "active" : ""}
+            onClick={() => onModeChange(m.value)}
+          >
+            <strong>{m.label}</strong>
+            <span>{m.description}</span>
+          </button>
+        ))}
       </div>
-    </div>
+      <label className="field">
+        {t("paint.image.detail")}
+        <select value={detail} onChange={(e) => onDetailChange(Number(e.target.value))}>
+          <option value={1}>{t("paint.image.low")}</option>
+          <option value={2}>{t("paint.image.medium")}</option>
+          <option value={3}>{t("paint.image.high")}</option>
+        </select>
+      </label>
+      <label className="switch-label" title={t("paint.continuousHint")}>
+        <input
+          type="checkbox"
+          checked={continuous}
+          onChange={(e) => onContinuousChange(e.target.checked)}
+        />
+        {t("paint.continuous")}
+      </label>
+    </Modal>
   );
 }

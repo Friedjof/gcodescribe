@@ -1,0 +1,57 @@
+// @vitest-environment jsdom
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, expect, it, vi } from "vitest";
+import type { PageIndex } from "../../api";
+import ProjectPagePanel from "./ProjectPagePanel";
+
+afterEach(cleanup);
+
+it("shows the active project's folder tree and opens the project popup", () => {
+  const openProjects = vi.fn();
+  const openPage = vi.fn();
+  const index: PageIndex = {
+    activeId: "a", project: { id: "p", name: "Briefe", profileId: "profile", activeId: "a", modified: 0, archived: false },
+    groups: [{ id: "folder", name: "Entwürfe", projectId: "p", parentId: null }],
+    order: [{ id: "a", name: "Slide A", created: 0, modified: 0, objectCount: 0, plottedCount: 0, groupId: "folder", projectId: "p" }],
+  };
+  render(<ProjectPagePanel index={index} activePageId="a" onOpenProjects={openProjects} onOpen={openPage}
+    onNew={vi.fn()} onRename={vi.fn()} onDuplicate={vi.fn()} onRemove={vi.fn()} onReorder={vi.fn()}
+    onCreateGroup={vi.fn()} onRenameGroup={vi.fn()} onDeleteGroup={vi.fn()}
+    onSetPageGroup={vi.fn()} onSetGroupParent={vi.fn()} onMove={vi.fn()} onToggleSidebar={vi.fn()} />);
+  expect(screen.getByRole("button", { name: "Entwürfe" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: /Briefe/ }));
+  expect(openProjects).toHaveBeenCalledOnce();
+  fireEvent.click(screen.getByRole("button", { name: "Slide A" }));
+  expect(openPage).toHaveBeenCalledWith("a");
+});
+
+it("opens slide and folder actions outside the clipped sidebar", () => {
+  const onDuplicate = vi.fn();
+  const onCreateGroup = vi.fn();
+  const index: PageIndex = {
+    activeId: "a", project: { id: "p", name: "Briefe", profileId: "profile", activeId: "a", modified: 0, archived: false },
+    groups: [{ id: "folder", name: "Entwürfe", projectId: "p", parentId: null }],
+    order: [{ id: "a", name: "Slide A", created: 0, modified: 0, objectCount: 1, plottedCount: 0, groupId: "folder", projectId: "p" }],
+  };
+  render(<ProjectPagePanel index={index} activePageId="a" onOpenProjects={vi.fn()} onOpen={vi.fn()}
+    onNew={vi.fn()} onRename={vi.fn()} onDuplicate={onDuplicate} onRemove={vi.fn()} onReorder={vi.fn()}
+    onCreateGroup={onCreateGroup} onRenameGroup={vi.fn()} onDeleteGroup={vi.fn()}
+    onSetPageGroup={vi.fn()} onSetGroupParent={vi.fn()} onMove={vi.fn()} onToggleSidebar={vi.fn()} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Aktionen für Slide A" }));
+  const slideMenu = screen.getByRole("menu");
+  expect(slideMenu.parentElement).toBe(document.body);
+  const duplicate = within(slideMenu).getByRole("menuitem", { name: "Duplizieren" });
+  fireEvent.pointerDown(duplicate);
+  fireEvent.click(duplicate);
+  expect(onDuplicate).toHaveBeenCalledWith("a");
+  expect(screen.queryByRole("menu")).toBeNull();
+
+  fireEvent.click(screen.getByRole("button", { name: "Aktionen für Ordner Entwürfe" }));
+  const folderMenu = screen.getByRole("menu");
+  expect(folderMenu.parentElement).toBe(document.body);
+  fireEvent.click(within(folderMenu).getByRole("menuitem", { name: "Unterordner erstellen" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "Ordnername" }), { target: { value: "Neu" } });
+  fireEvent.click(screen.getByRole("button", { name: "Anlegen" }));
+  expect(onCreateGroup).toHaveBeenCalledWith("Neu", "folder");
+});

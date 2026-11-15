@@ -1,4 +1,5 @@
 import NumberField from "../../../components/NumberField";
+import Segmented from "../../../components/Segmented";
 import { type StrokeMode, type VectorStyle } from "../lib/styling";
 import { useI18n } from "../../../i18n";
 import { FillOptions } from "./FillOptions";
@@ -16,6 +17,7 @@ export interface PaintStylePanelProps {
   selectedObjectRotation: number | null;
   selectedStyle: VectorStyle;
   sizeLinked: boolean;
+  aspectLocked?: boolean;
   onSizeLinkedToggle: () => void;
   onWidthChange: (v: number) => void;
   onHeightChange: (v: number) => void;
@@ -29,6 +31,7 @@ export function PaintStylePanel({
   selectedObjectRotation,
   selectedStyle,
   sizeLinked,
+  aspectLocked = false,
   onSizeLinkedToggle,
   onWidthChange,
   onHeightChange,
@@ -42,8 +45,7 @@ export function PaintStylePanel({
       <h4>{t("paint.object")}</h4>
       <div className="paint-size-fields">
         <NumberField
-          label={t("common.width")}
-          unit="mm"
+          label={`${t("common.width")} (mm)`}
           min={0.1}
           step={0.5}
           disabled={!selectedObjectSize || selectedObjectSize.localWidth <= 0}
@@ -56,6 +58,7 @@ export function PaintStylePanel({
           aria-pressed={sizeLinked}
           aria-label={t("paint.keepAspect")}
           title={t("paint.keepAspect")}
+          disabled={aspectLocked}
           onClick={onSizeLinkedToggle}
         >
           <svg
@@ -74,8 +77,7 @@ export function PaintStylePanel({
           </svg>
         </button>
         <NumberField
-          label={t("common.height")}
-          unit="mm"
+          label={`${t("common.height")} (mm)`}
           min={0.1}
           step={0.5}
           disabled={!selectedObjectSize || selectedObjectSize.localHeight <= 0}
@@ -95,76 +97,59 @@ export function PaintStylePanel({
       </div>
 
       <h4>{t("paint.style.line")}</h4>
-      <label className="field">
-        {t("paint.style.type")}
-        <select
-          disabled={!hasSelection}
+      <div className={hasSelection ? "" : "seg-disabled"}>
+        <Segmented<StrokeMode>
           value={selectedStyle.stroke.mode}
-          onChange={(e) => onStyleChange({ stroke: { mode: e.target.value as StrokeMode } as any })}
-        >
-          <option value="solid">{t("paint.style.solid")}</option>
-          <option value="dashed">{t("paint.style.dashed")}</option>
-          <option value="dotted">{t("paint.style.dotted")}</option>
-        </select>
-      </label>
+          onChange={(mode) => onStyleChange({ stroke: { mode } as any })}
+          options={[
+            { value: "solid", label: t("paint.style.solid") },
+            { value: "dashed", label: t("paint.style.dashed") },
+            { value: "dotted", label: t("paint.style.dotted") },
+          ]}
+        />
+      </div>
       {selectedStyle.stroke.mode === "dashed" && (
         <div className="fields compact">
-          <label className="field">
-            {t("paint.style.dash")}
-            <input
-              type="number"
-              min={0.5}
-              step={0.5}
-              disabled={!hasSelection}
-              value={selectedStyle.stroke.dashLength}
-              onChange={(e) =>
-                onStyleChange({ stroke: { dashLength: Number(e.target.value) || 1 } as any })
-              }
-            />
-          </label>
-          <label className="field">
-            {t("paint.style.gap")}
-            <input
-              type="number"
-              min={0.5}
-              step={0.5}
-              disabled={!hasSelection}
-              value={selectedStyle.stroke.gapLength}
-              onChange={(e) =>
-                onStyleChange({ stroke: { gapLength: Number(e.target.value) || 1 } as any })
-              }
-            />
-          </label>
+          <NumberField
+            label={t("paint.style.dash")}
+            unit="mm"
+            min={0.5}
+            step={0.5}
+            disabled={!hasSelection}
+            value={selectedStyle.stroke.dashLength}
+            onChange={(v) => onStyleChange({ stroke: { dashLength: v || 1 } as any })}
+          />
+          <NumberField
+            label={t("paint.style.gap")}
+            unit="mm"
+            min={0.5}
+            step={0.5}
+            disabled={!hasSelection}
+            value={selectedStyle.stroke.gapLength}
+            onChange={(v) => onStyleChange({ stroke: { gapLength: v || 1 } as any })}
+          />
         </div>
       )}
       {selectedStyle.stroke.mode === "dotted" && (
         <div className="fields compact">
-          <label className="field">
-            {t("paint.style.spacing")}
-            <input
-              type="number"
-              min={0.5}
-              step={0.5}
-              disabled={!hasSelection}
-              value={selectedStyle.stroke.dotSpacing}
-              onChange={(e) =>
-                onStyleChange({ stroke: { dotSpacing: Number(e.target.value) || 1 } as any })
-              }
-            />
-          </label>
-          <label className="field">
-            {t("paint.size")}
-            <input
-              type="number"
-              min={0.2}
-              step={0.2}
-              disabled={!hasSelection}
-              value={selectedStyle.stroke.dotSize}
-              onChange={(e) =>
-                onStyleChange({ stroke: { dotSize: Number(e.target.value) || 0.5 } as any })
-              }
-            />
-          </label>
+          <NumberField
+            label={t("paint.style.spacing")}
+            unit="mm"
+            min={0.5}
+            step={0.5}
+            disabled={!hasSelection}
+            value={selectedStyle.stroke.dotSpacing}
+            onChange={(v) => onStyleChange({ stroke: { dotSpacing: v || 1 } as any })}
+          />
+          <NumberField
+            label={t("paint.size")}
+            unit="mm"
+            min={0.2}
+            step={0.2}
+            disabled={!hasSelection}
+            value={selectedStyle.stroke.dotSize}
+            onChange={(v) => onStyleChange({ stroke: { dotSize: v || 0.5 } as any })}
+          />
         </div>
       )}
 
