@@ -130,16 +130,16 @@ export default function Calibrate() {
       })
       .catch(fail);
 
-  const createProfile = () => {
-    if (!confirmDiscard()) return;
+  const createProfile = async () => {
+    if (!await confirmDiscard()) return;
     api
       .createProfile()
       .then((p) => loadProfiles().then(() => openProfile(p.id)))
       .catch(fail);
   };
 
-  const duplicate = () => {
-    if (!selectedId || !confirmDiscard()) return;
+  const duplicate = async () => {
+    if (!selectedId || !await confirmDiscard()) return;
     api
       .duplicateProfile(selectedId)
       .then((p) => loadProfiles().then(() => openProfile(p.id)))
