@@ -17,10 +17,11 @@ export interface ObjectCommandOptions {
     sizeLinked: boolean;
 }
 export function useObjectCommandContext(options: ObjectCommandOptions) {
-    const { page, setPage, setSelectedIds, persist, fail } = options;
+    const { page, selectedIds, setPage, setSelectedIds, persist, fail } = options;
     const { t } = useI18n();
     const latestPage = useRef(page);
     latestPage.current = page;
+    const latestSelection = useRef(selectedIds); latestSelection.current = selectedIds;
     const [processing, setProcessing] = useState(0);
     const commitAsync = (target: Page, replacements: Map<string, {
         before: SceneObject;
@@ -69,10 +70,9 @@ export function useObjectCommandContext(options: ObjectCommandOptions) {
         redoStack.current = [];
         syncHistory();
     };
-    const remember = () => {
-        if (!page)
-            return;
-        undoStack.current.push(cloneObjects(page.objects));
+    const remember = (objects = page?.objects) => {
+        if (!objects) return;
+        undoStack.current.push(cloneObjects(objects));
         redoStack.current = [];
         syncHistory();
     };
@@ -119,7 +119,7 @@ export function useObjectCommandContext(options: ObjectCommandOptions) {
         }
         queueObjects(target.id, objects);
     };
-    return { ...options, t, latestPage, processing, setProcessing, commitAsync, appendPrepared,
+    return { ...options, t, latestPage, latestSelection, processing, setProcessing, commitAsync, appendPrepared,
         history, remember, resetHistory, undo, redo };
 }
 export type ObjectCommandContext = ReturnType<typeof useObjectCommandContext>;

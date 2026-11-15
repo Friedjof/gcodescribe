@@ -23,6 +23,7 @@ import { useLiveRegistryState } from "../stream/lib/liveRegistry";
 import PaintCanvas, { type Tool, type ViewRotation } from "./PaintCanvas";
 import ProjectOverviewPopup from "./ProjectOverviewPopup";
 import ProjectPagePanel from "./ProjectPagePanel";
+import PaintPrecisionBar from "./components/PaintPrecisionBar";
 import PaintContextPanel from "./components/PaintContextPanel";
 import { PaintImageModal, type ImageMode } from "./components/PaintImageModal";
 import PaintInfoModal from "./components/PaintInfoModal";
@@ -259,15 +260,6 @@ export default function Paint({
   const selectedText = selectedObjects.length === 1 && selectedObjects[0].type === "text"
     ? selectedObjects[0]
     : null;
-  const selectedObjectSize = selectedObjects.length === 1 ? ops.objectLocalSize(selectedObjects[0]) : null;
-  const aspectLocked = selectedObjects.length === 1 && !!selectedObjects[0].data?.sourcePage;
-  const selectedObjectRotation = selectedObjects.length === 1
-    ? (() => {
-        const raw = ((selectedObjects[0].transform?.rotation ?? 0) * 180) / Math.PI;
-        const normalized = ((raw % 360) + 360) % 360;
-        return normalized === 0 && raw > 0.0001 ? 360 : normalized;
-      })()
-    : null;
   const selectedStyle = ops.pendingStyle ?? (selectedObjects.length > 0 ? objectStyle(selectedObjects[0]) : DEFAULT_VECTOR_STYLE);
 
   const togglePagesCollapsed = () => {
@@ -364,6 +356,9 @@ export default function Paint({
         </div>}
         {ops.processing && <span className="geometry-status" role="status">{t("paint.processingGeometry")}</span>}
 
+        <PaintPrecisionBar key={page.id} objects={selectedObjects} ops={ops} sizeLinked={sizeLinked}
+          onSizeLinkedToggle={() => setSizeLinked(value => !value)} disabled={pageBlocked || ops.processing} />
+
         <div className="paint-workspace">
           <PaintToolRail tool={tool} onToolChange={selectTool} />
           <div className="paint-canvas-wrap">
@@ -389,21 +384,16 @@ export default function Paint({
             />
           </div>
 
-          <PaintContextPanel
+          <PaintContextPanel key={page.id}
             tool={tool}
             activeToolLabel={activeToolMeta ? activeToolMeta.label : ""}
             ops={ops}
             hasSelection={hasSelection}
             selectedObjects={selectedObjects}
-            selectedObjectSize={selectedObjectSize}
-            selectedObjectRotation={selectedObjectRotation}
             selectedStyle={selectedStyle}
             pressureMaxDepth={cal.pen_pressure_max_depth ?? 0}
             selectedText={selectedText}
             defaultText={defaultText}
-            sizeLinked={sizeLinked || aspectLocked}
-            aspectLocked={aspectLocked}
-            onSizeLinkedToggle={() => setSizeLinked((v) => !v)}
             eraserBrush={eraserBrush}
             onEraserBrushChange={setEraserBrush}
             eraserRadius={eraserRadius}

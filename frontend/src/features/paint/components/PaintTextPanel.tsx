@@ -1,5 +1,5 @@
 import type { SceneObject } from "../../../api";
-import NumberField from "../../../components/NumberField";
+import CommittedNumberField from "../../../components/CommittedNumberField";
 import { type TextFont } from "../lib/text";
 import { fontLabel, useTextFonts } from "../hooks/useTextFonts";
 import { useI18n } from "../../../i18n";
@@ -49,7 +49,7 @@ export function PaintTextPanel({
           ))}
         </select>
       </label>
-      <NumberField
+      <CommittedNumberField decimalInput
         label={t("paint.size")}
         unit="mm"
         min={3}

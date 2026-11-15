@@ -1,4 +1,4 @@
-import NumberField from "../../../components/NumberField";
+import CommittedNumberField from "../../../components/CommittedNumberField";
 import { type FillMode, type FillStyle } from "../lib/styling";
 import { useI18n } from "../../../i18n";
 
@@ -33,7 +33,7 @@ export function FillOptions({ value, onChange, disabled = false }: FillOptionsPr
         </select>
       </label>
       {!isDots && (
-        <NumberField
+        <CommittedNumberField decimalInput
           label={t("paint.style.angle")}
           unit="°"
           step={5}
@@ -42,7 +42,7 @@ export function FillOptions({ value, onChange, disabled = false }: FillOptionsPr
           onChange={(v) => onChange({ angle: v || 0 })}
         />
       )}
-      <NumberField
+      <CommittedNumberField decimalInput
         label={t("paint.style.spacing")}
         unit="mm"
         min={0.5}

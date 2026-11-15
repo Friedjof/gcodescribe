@@ -46,3 +46,11 @@ Größen- und Rotationsgriffe haben eine feste Bildschirmgröße und eine größ
 Shift hält beim Skalieren das Seitenverhältnis und rastet beim Drehen in 15°-Schritten ein. Alt umgeht Raster, Ausrichtung und Winkeleinrastung. Escape verwirft eine laufende Geste. Seitenwechsel, Werkzeugwechsel, ausgeblendete Ansicht und Fokusverlust verwerfen ebenfalls ausstehende Vorschauen. Erst beim Loslassen wird die fertige Transformation mit einem Undo-Schritt gespeichert. Größen- und Grenzberechnungen liegen in `canvasTransforms.ts`; Griffdarstellung, Live-Anzeige und Bildschirmmaße sind eigene Komponenten bzw. Hooks.
 
 An der Plotgrenze wird eine Mehrfachauswahl gemeinsam verschoben und bei Bedarf einheitlich verkleinert. Abstände, relative Größen und Spiegelungen bleiben erhalten. Die größere Trefferfläche der Griffe berücksichtigt den tatsächlichen Greifpunkt, damit die erste Mausbewegung keinen Größensprung erzeugt. Bewegungen zurück zum Ausgangszustand erzeugen keinen leeren Undo-Schritt.
+
+## Exakte Maße und Werteingabe
+
+Die aufklappbare Maßleiste über der Zeichenfläche zeigt für ein einzelnes Objekt X/Y, Breite, Höhe, Seitenverhältnis und Drehung. X/Y beziehen sich auf die linke obere Ecke der gedrehten Umrandung, Breite/Höhe auf das ungedrehte Objekt. Der Öffnungszustand wird lokal gespeichert. Die bisherigen Maßfelder im rechten Stilbereich entfallen.
+
+Zahlen bleiben bis Enter oder Fokuswechsel als Entwurf im Feld; Escape verwirft sie. Dezimalkomma, Dezimalpunkt und passende Einheiten werden akzeptiert. Pfeiltasten passen den Entwurf an, mit Shift in größeren Schritten. Diese Eingabe gilt auch für Textgröße, Linien- und Füllungsparameter. Unterschiedliche Objekte und Seiten bekommen getrennte Eingabefelder; bei einer externen Änderung des bearbeiteten Werts wird eine veraltete Eingabe verworfen.
+
+Exakte Transformationsbefehle liegen in `objectMeasurements.ts`. Sie erzeugen einen Undo-Schritt je übernommener Änderung und keinen für ungültige oder unveränderte Werte. Positionen außerhalb der Plotfläche sowie Maße oder Drehungen, die nur durch Verkleinern passen würden, werden erklärt und abgewiesen. Passende Maße werden bei Bedarf durch Verschieben innerhalb der Plotfläche gehalten; ihre eingegebene Größe bleibt erhalten.

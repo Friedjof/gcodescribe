@@ -183,3 +183,35 @@ it("renders text with identical object IDs independently on different pages", as
   expect(cachedPage(first.id)?.objects[0].data.text).toBe("first");
   expect(cachedPage(second.id)?.objects[0].data.text).toBe("second");
 });
+it("rejects exact dimensions outside the plot without undo or persistence", () => {
+  const page = makePage();
+  const hook = setup(page, true, { plot_width: 100, plot_height: 80 } as Calibration);
+  act(() => { expect(hook.result.current.setSelectedObjectSize("width", 120)).toBe(false); });
+  expect(hook.result.current.history.undo).toBe(0);
+  expect(hook.setPage).not.toHaveBeenCalled();
+});
+it("does not apply a stale measurement callback to a different page with identical object IDs", () => {
+  const first = makePage(); const hook = setup(first);
+  const edit = hook.result.current.setSelectedObjectPosition;
+  hook.rerender({ page: makePage() });
+  act(() => { expect(edit("x", 42)).toBe(false); });
+  expect(hook.setPage).not.toHaveBeenCalled();
+  expect(hook.result.current.history.undo).toBe(0);
+});
+it("does not create an undo step for an unchanged exact measurement", () => {
+  const page = makePage(); const hook = setup(page);
+  act(() => { expect(hook.result.current.setSelectedObjectSize("width", 20)).toBe(true); });
+  expect(hook.result.current.history.undo).toBe(0);
+  expect(hook.setPage).not.toHaveBeenCalled();
+});
+it("rejects a measurement callback captured for a different selection", () => {
+  const base = makePage();
+  const page = { ...base, objects: [...base.objects, { ...original, id: "other" }] };
+  const setPage = vi.fn();
+  const hook = renderHook(({ selected }) => useObjectOps(page, null, selected, setPage, vi.fn(), queueObjects,
+    vi.fn(), vi.fn(), "Text", true), { initialProps: { selected: ["image"] } });
+  const edit = hook.result.current.setSelectedObjectSize;
+  hook.rerender({ selected: ["other"] });
+  act(() => { expect(edit("width", 50)).toBe(false); });
+  expect(setPage).not.toHaveBeenCalled();
+});

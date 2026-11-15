@@ -8,7 +8,7 @@ import type { EraserBrush } from "../lib/eraser";
 import type { TextFont } from "../lib/text";
 import type { FillStyle, VectorStyle } from "../lib/styling";
 import { FillOptions } from "./FillOptions";
-import { PaintStylePanel, type SelectedObjectSize } from "./PaintStylePanel";
+import { PaintStylePanel } from "./PaintStylePanel";
 import { PaintTextPanel } from "./PaintTextPanel";
 import { imageBlankMargins, type TrimSide } from "../lib/imageTrim";
 import { isPressureObject } from "../lib/pressure";
@@ -23,15 +23,10 @@ export default function PaintContextPanel({
   ops,
   hasSelection,
   selectedObjects,
-  selectedObjectSize,
-  selectedObjectRotation,
   selectedStyle,
   pressureMaxDepth = 0,
   selectedText,
   defaultText,
-  sizeLinked,
-  aspectLocked,
-  onSizeLinkedToggle,
   eraserBrush,
   onEraserBrushChange,
   eraserRadius,
@@ -46,15 +41,10 @@ export default function PaintContextPanel({
   ops: ObjectOps;
   hasSelection: boolean;
   selectedObjects: SceneObject[];
-  selectedObjectSize: SelectedObjectSize | null;
-  selectedObjectRotation: number | null;
   selectedStyle: VectorStyle;
   pressureMaxDepth?: number;
   selectedText: SceneObject | null;
   defaultText: string;
-  sizeLinked: boolean;
-  aspectLocked: boolean;
-  onSizeLinkedToggle: () => void;
   eraserBrush: EraserBrush;
   onEraserBrushChange: (brush: EraserBrush) => void;
   eraserRadius: number;
@@ -208,7 +198,7 @@ export default function PaintContextPanel({
         {(tool === "select" || tool === "text") && selectedText && (
           <div className="paint-tool-section">
             <h4>{t("paint.section.text")}</h4>
-            <PaintTextPanel
+            <PaintTextPanel key={selectedText.id}
               selectedText={selectedText}
               draftText={ops.draftText}
               defaultText={defaultText}
@@ -220,17 +210,9 @@ export default function PaintContextPanel({
         )}
 
         {tool === "select" && (
-          <PaintStylePanel
+          <PaintStylePanel key={selectedObjects.map(object => object.id).join(":")}
             hasSelection={hasSelection}
-            selectedObjectSize={selectedObjectSize}
-            selectedObjectRotation={selectedObjectRotation}
             selectedStyle={selectedStyle}
-            sizeLinked={sizeLinked}
-            aspectLocked={aspectLocked}
-            onSizeLinkedToggle={onSizeLinkedToggle}
-            onWidthChange={(v) => ops.setSelectedObjectSize("width", v)}
-            onHeightChange={(v) => ops.setSelectedObjectSize("height", v)}
-            onRotationChange={ops.setSelectedObjectRotation}
             onStyleChange={ops.updateSelectedStyle}
           />
         )}

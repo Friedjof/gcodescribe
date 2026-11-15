@@ -16,8 +16,8 @@ function setup(object: SceneObject, depth = 0) {
   const onChange = vi.fn();
   const ops = { history: { undo: 0, redo: 0 }, clipboardCount: 0, setSelectedPressureEnabled: onChange } as unknown as ObjectOps;
   render(<PaintContextPanel tool="select" activeToolLabel="select" ops={ops} hasSelection selectedObjects={[object]}
-    selectedObjectSize={null} selectedObjectRotation={0} selectedStyle={DEFAULT_VECTOR_STYLE} pressureMaxDepth={depth}
-    selectedText={null} defaultText="Text" sizeLinked aspectLocked={false} onSizeLinkedToggle={vi.fn()}
+    selectedStyle={DEFAULT_VECTOR_STYLE} pressureMaxDepth={depth}
+    selectedText={null} defaultText="Text"
     eraserBrush="point" onEraserBrushChange={vi.fn()} eraserRadius={1} fillStyle={DEFAULT_VECTOR_STYLE.fill}
     onFillStyleChange={vi.fn()} onOpenGallery={vi.fn()} onOpenMarkdown={vi.fn()} onPickImage={vi.fn()} />);
   return onChange;

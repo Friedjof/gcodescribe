@@ -55,8 +55,9 @@ export interface ObjectOps {
         localWidth: number;
         localHeight: number;
     } | null;
-    setSelectedObjectSize: (axis: "width" | "height", target: number) => void;
-    setSelectedObjectRotation: (degrees: number) => void;
+    setSelectedObjectSize: (axis: "width" | "height", target: number) => boolean;
+    setSelectedObjectRotation: (degrees: number) => boolean;
+    setSelectedObjectPosition: (axis: "x" | "y", target: number) => boolean;
     trimSelectedImage: (sides: TrimSide[]) => void;
     resetSelectedImageTrim: () => void;
     mapSelected: (fn: (t: Transform) => Transform) => void;

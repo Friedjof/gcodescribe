@@ -1,39 +1,30 @@
-# `src/features/paint/components`
+# Drawing editor components
 
-Sub-components of the drawing editor, extracted from `Paint.tsx` to keep that
-file focused on orchestration. Each component is pure (no internal state beyond
-controlled props).
+`Paint.tsx` connects these views to the document, canvas and job controllers.
+Scene changes go through `ObjectOps`; local component state is limited to input
+drafts and display preferences.
 
-```
-components/
-├── FillOptions.tsx       Fill style controls (mode, angle, spacing) shared by
-│                         the style panel and the bucket-fill tool options.
-│
-├── PaintImageModal.tsx   Image-import dialog. Lets the user pick a conversion
-│                         mode (edges / hatch / lines / dots / handwriting) and
-│                         detail level before inserting a rasterised image as
-│                         pen-plotter strokes. Props: file, mode, detail,
-│                         importing, onModeChange, onDetailChange,
-│                         onCancel, onImport.
-│
-├── PaintStylePanel.tsx   Right-side style inspector: object size (w/h with
-│                         aspect-ratio lock), rotation, stroke mode/dash/dot
-│                         settings, fill mode/angle/spacing. All state is
-│                         lifted — the panel only fires callbacks.
-│
-├── PaintTextPanel.tsx    Text-object editor strip shown below the canvas when
-│                         a text object is selected. Exposes a textarea for
-│                         live input (debounced via onTextInput) and controls
-│                         for font family and size.
-│
-└── SceneView.tsx         SVG scene renderer, also used by the live-stream
-                          viewer outside the paint feature.
-```
+- `PaintPrecisionBar.tsx`: optional exact measurements above the canvas. X/Y
+  describe the top-left of the rotated bounding box; width and height describe
+  the unrotated object. Supports one selected object, linked proportions and
+  rotation. Expansion is remembered locally. Inputs are keyed by selection;
+  the parent also keys the component by page.
+- `PaintStylePanel.tsx`: stroke and fill properties in the right inspector.
+- `FillOptions.tsx`: shared pattern, angle and spacing controls for object
+  fills and fill-tool defaults.
+- `PaintTextPanel.tsx`: text content, font and committed font-size input.
+- `PaintImageModal.tsx`: image conversion mode and detail before import.
+- `canvas/`: SVG layers, transform handles and live gesture feedback.
+- `SceneView.tsx`: scene renderer also used by the live-stream viewer.
 
-## Conventions
+Numeric fields use `CommittedNumberField` in decimal-input mode. Typing and
+arrow-key adjustments stay local until Enter or blur. Escape restores the
+applied value. Commas, decimal points and matching unit suffixes are accepted;
+ambiguous thousands separators and expressions are rejected. An external value
+change discards a stale draft with an explanation.
 
-- All components accept only controlled props — no `useState` internally.
-- They import types from `../../../api` and helpers from `../lib/*`.
-- `PaintImageModal` exports the `ImageMode` union type used by `Paint.tsx`.
-- `PaintStylePanel` exports the `SelectedObjectSize` interface used by the
-  parent to pass pre-computed size data.
+`lib/objectMeasurements.ts` owns measurement interpretation and exact-transform
+validation. Numeric edits reuse the canvas plot-boundary helper. A fitting edit
+may shift the object into the plot, preserving its exact dimensions; an edit
+that would require shrinking the requested dimensions is rejected. Successful
+changes create one undo entry, while unchanged and invalid values create none.

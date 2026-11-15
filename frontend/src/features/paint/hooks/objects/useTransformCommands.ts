@@ -1,11 +1,13 @@
 import { type SceneObject } from "../../../../api";
-import { IDENTITY, localBounds, objectWorldBounds, type Pt, type Transform } from "../../lib/geometry";
+import { IDENTITY, objectWorldBounds, type Pt, type Transform } from "../../lib/geometry";
 import { basePolylines } from "../../lib/sceneObjects";
 import { resetImageBlankEdges, trimImageBlankEdges, type TrimSide } from "../../lib/imageTrim";
+import { measurementTransform, objectMeasurements, type MeasurementEdit } from "../../lib/objectMeasurements";
+import { sameTransform } from "../../lib/canvasTransforms";
 import { sourcePageFrame } from "../../lib/sourcePage";
 import type { ObjectCommandContext } from "./useObjectCommandContext";
 export function useTransformCommands(context: ObjectCommandContext) {
-    const { page, cal, selectedIds, setPage, persist, remember, sizeLinked } = context;
+    const { page, cal, selectedIds, setPage, persist, remember, sizeLinked, latestPage, latestSelection } = context;
     const selectionBounds = (): [
         number,
         number,
@@ -32,79 +34,25 @@ export function useTransformCommands(context: ObjectCommandContext) {
         }
         return Number.isFinite(b[0]) ? b : null;
     };
-    const objectLocalSize = (obj: SceneObject): {
-        width: number;
-        height: number;
-        localWidth: number;
-        localHeight: number;
-    } | null => {
-        const local = sourcePageFrame(obj) ?? ((obj.cachedPolylines as Pt[][] | undefined) ?? basePolylines(obj));
-        if (!local.length)
-            return null;
-        const [x0, y0, x1, y1] = localBounds(local);
-        const t = obj.transform ?? IDENTITY;
-        const sx = Math.abs(t.scaleX ?? t.scale);
-        const sy = Math.abs(t.scaleY ?? t.scale);
-        const localWidth = Math.max(x1 - x0, 0);
-        const localHeight = Math.max(y1 - y0, 0);
-        return { width: localWidth * sx, height: localHeight * sy, localWidth, localHeight };
+    const objectLocalSize = (object: SceneObject) => objectMeasurements(object);
+    const editMeasurement = (edit: MeasurementEdit): boolean => {
+        const current = latestPage.current;
+        if (!page || current?.id !== page.id || selectedIds.length !== 1 ||
+            latestSelection.current.length !== 1 || latestSelection.current[0] !== selectedIds[0]) return false;
+        const object = current.objects.find(item => item.id === selectedIds[0]);
+        if (!object) return false;
+        const transform = measurementTransform(object, edit, cal);
+        if (!transform) return false;
+        if (sameTransform(transform, object.transform ?? IDENTITY)) return true;
+        remember(current.objects);
+        const objects = current.objects.map(item => item.id === object.id ? { ...item, transform, plotted: false } : item);
+        const next = { ...current, objects }; latestPage.current = next; setPage(next);
+        persist(current.id, objects);
+        return true;
     };
-    const setSelectedObjectSize = (axis: "width" | "height", target: number) => {
-        if (!page || selectedIds.length !== 1 || !Number.isFinite(target) || target <= 0)
-            return;
-        const obj = page.objects.find((o) => o.id === selectedIds[0]);
-        if (!obj)
-            return;
-        const size = objectLocalSize(obj);
-        if (!size)
-            return;
-        const current = axis === "width" ? size.width : size.height;
-        const base = axis === "width" ? size.localWidth : size.localHeight;
-        const linked = sizeLinked || !!sourcePageFrame(obj);
-        if ((linked && current <= 0) || (!linked && base <= 0))
-            return;
-        remember();
-        const objects = page.objects.map((o) => {
-            if (o.id !== obj.id)
-                return o;
-            const t = o.transform ?? IDENTITY;
-            const sx = t.scaleX ?? t.scale;
-            const sy = t.scaleY ?? t.scale;
-            const factor = linked ? target / current : 1;
-            const nextSx = linked
-                ? sx * factor
-                : axis === "width"
-                    ? Math.sign(sx || 1) * (target / base)
-                    : sx;
-            const nextSy = linked
-                ? sy * factor
-                : axis === "height"
-                    ? Math.sign(sy || 1) * (target / base)
-                    : sy;
-            return {
-                ...o,
-                transform: {
-                    ...t,
-                    scaleX: nextSx,
-                    scaleY: nextSy,
-                    scale: Math.max(Math.abs(nextSx), Math.abs(nextSy)),
-                },
-            };
-        });
-        setPage({ ...page, objects });
-        persist(page.id, objects);
-    };
-    const setSelectedObjectRotation = (degrees: number) => {
-        if (!page || selectedIds.length !== 1 || !Number.isFinite(degrees))
-            return;
-        remember();
-        const radians = (degrees * Math.PI) / 180;
-        const objects = page.objects.map((o) => o.id === selectedIds[0]
-            ? { ...o, transform: { ...(o.transform ?? IDENTITY), rotation: radians } }
-            : o);
-        setPage({ ...page, objects });
-        persist(page.id, objects);
-    };
+    const setSelectedObjectSize = (axis: "width" | "height", value: number) => editMeasurement({ kind: "size", axis, value, linked: sizeLinked });
+    const setSelectedObjectRotation = (value: number) => editMeasurement({ kind: "rotation", value });
+    const setSelectedObjectPosition = (axis: "x" | "y", value: number) => editMeasurement({ kind: "position", axis, value });
     const changeSelectedImage = (change: (obj: SceneObject) => SceneObject | null) => {
         if (!page || selectedIds.length !== 1)
             return;
@@ -177,6 +125,6 @@ export function useTransformCommands(context: ObjectCommandContext) {
         setPage({ ...page, objects });
         persist(page.id, objects);
     };
-    return { selectionBounds, objectLocalSize, setSelectedObjectSize, setSelectedObjectRotation,
+    return { selectionBounds, objectLocalSize, setSelectedObjectPosition, setSelectedObjectSize, setSelectedObjectRotation,
         trimSelectedImage, resetSelectedImageTrim, mapSelected, fitSelected, centerSelected, nudgeSelected };
 }

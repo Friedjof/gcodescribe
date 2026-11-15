@@ -699,19 +699,6 @@
   letter-spacing: 0.07em;
   text-transform: uppercase;
 }
-.paint-size-fields {
-  display: grid;
-  grid-template-columns: 1fr 30px 1fr;
-  column-gap: 6px;
-  row-gap: 5px;
-  margin-top: -2px;
-}
-/* width | 🔗 | height on the first row, rotation spanning the second. */
-.paint-size-fields .field:nth-of-type(1) { grid-column: 1; grid-row: 1; }
-.paint-size-fields .field:nth-of-type(2) { grid-column: 3; grid-row: 1; }
-.paint-size-fields .field:nth-of-type(3) { grid-column: 1 / -1; grid-row: 2; }
-.paint-size-fields .input-unit em { min-width: 22px; }
-
 /* Aspect-ratio lock: a single toggle sitting between the width & height fields. */
 .size-link {
   grid-column: 2;
@@ -909,3 +896,19 @@ section.project-settings-section { display: grid; gap: 13px; padding: 16px; }
 .canvas-transform-handle .handle-face { transition: fill 100ms ease, stroke 100ms ease; }
 .canvas-transform-handle:hover .handle-face { fill: var(--accent); stroke: var(--text); }
 .canvas-transform-handle:hover path { stroke: var(--panel); }
+
+.paint-precision-bar { flex: 0 0 auto; display: flex; align-items: flex-start; flex-wrap: wrap; gap: 8px 14px; border-top: 1px solid var(--border); padding: 7px 0; }
+.precision-toggle { white-space: nowrap; align-self: center; font-weight: 600; }
+.precision-body { flex: 1 1 570px; min-width: 0; }
+.precision-fields { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 8px; }
+.precision-fields .field { flex: 1 1 110px; min-width: 90px; margin: 0; }
+.precision-dimensions { display: flex; flex: 2 1 260px; min-width: 230px; gap: 8px; }
+.precision-dimensions .field { flex: 1 1 0; min-width: 0; }
+.precision-fields .input-unit input { min-width: 0; width: 100%; font-variant-numeric: tabular-nums; }
+.precision-fields .input-unit em { min-width: 22px; }
+.precision-fields .size-link { grid-column: auto; grid-row: auto; flex: 0 0 30px; margin-top: 22px; align-self: flex-start; }
+.precision-fields .field-error { display: block; max-width: 180px; line-height: 1.35; }
+.precision-help { flex: 0 0 auto; margin-top: 27px; color: var(--muted); cursor: help; }
+.paint-precision-bar .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.precision-empty { margin: 6px 0; font-size: 12px; }
+@media (max-width: 600px) { .precision-fields .field { flex-basis: 105px; } }
