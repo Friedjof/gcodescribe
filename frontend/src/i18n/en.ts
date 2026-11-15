@@ -1488,5 +1488,10 @@ const en: Record<string, string> = {
     "paint.canvas.aligned": "Aligned · Alt: move freely",
     "paint.canvas.gridSnapped": "Grid · Alt: move freely",
     "paint.canvas.freeHelp": "Alt: move freely · Esc: cancel",
+    "paint.measure.title": "Measurements",
+    "paint.measure.selectOne": "Select one object to edit its exact measurements.",
+    "paint.measure.outside": "This change does not fit inside the plot area.",
+    "paint.measure.reference": "X/Y: top-left of the bounding box. Width/height: before rotation. Enter applies, Escape cancels. Arrow keys adjust; Shift uses larger steps.",
+    "number.valueChanged": "This value changed while you were editing. Please enter it again.",
 };
 export default en;

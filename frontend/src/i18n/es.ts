@@ -838,5 +838,10 @@ const es: Record<string, string> = {
     "paint.canvas.aligned": "Alineado · Alt: mover libremente",
     "paint.canvas.gridSnapped": "Cuadrícula · Alt: mover libremente",
     "paint.canvas.freeHelp": "Alt: mover libremente · Esc: cancelar",
+    "paint.measure.title": "Medidas",
+    "paint.measure.selectOne": "Selecciona un objeto para editar sus medidas exactas.",
+    "paint.measure.outside": "Este cambio supera el área de trazado.",
+    "paint.measure.reference": "X/Y: esquina superior izquierda del marco. Ancho/alto: antes del giro. Intro aplica, Esc cancela. Las flechas ajustan el valor; Mayús aumenta el paso.",
+    "number.valueChanged": "El valor cambió durante la edición. Vuelve a introducirlo.",
 };
 export default es;

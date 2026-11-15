@@ -1490,5 +1490,10 @@ const de: Record<string, string> = {
     "paint.canvas.aligned": "Ausgerichtet · Alt: frei bewegen",
     "paint.canvas.gridSnapped": "Raster · Alt: frei bewegen",
     "paint.canvas.freeHelp": "Alt: frei bewegen · Esc: abbrechen",
+    "paint.measure.title": "Maße",
+    "paint.measure.selectOne": "Ein Objekt auswählen, um genaue Maße zu bearbeiten.",
+    "paint.measure.outside": "Die Änderung passt nicht in die Plotfläche.",
+    "paint.measure.reference": "X/Y: linke obere Ecke der Umrandung. Breite/Höhe: vor der Drehung. Enter übernimmt, Escape verwirft. Pfeiltasten ändern den Wert; Shift verwendet größere Schritte.",
+    "number.valueChanged": "Der Wert wurde inzwischen geändert. Bitte neu eingeben.",
 };
 export default de;

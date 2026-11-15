@@ -865,5 +865,10 @@ const ba: Record<string, string> = {
     "paint.canvas.aligned": "Ausgerichtet · Alt: frei verschiebn",
     "paint.canvas.gridSnapped": "Raster · Alt: frei verschiebn",
     "paint.canvas.freeHelp": "Alt: frei verschiebn · Esc: abbrecha",
+    "paint.measure.title": "Maße",
+    "paint.measure.selectOne": "A Objekt auswähln, um genaue Maße einzustelln.",
+    "paint.measure.outside": "Die Änderung passt ned in die Plotfläche.",
+    "paint.measure.reference": "X/Y: linke obere Eckn vom Rahmen. Breite/Höhe: vor der Drehung. Enter übernimmt, Escape verwirft. Pfeiltasten ändern den Wert; Shift macht größere Schritte.",
+    "number.valueChanged": "Der Wert is inzwischen geändert worn. Bitte neu eingebn.",
 };
 export default ba;
