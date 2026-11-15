@@ -22,12 +22,12 @@ class PageRepository:
 
     def get_page(self, page_id: str) -> dict | None:
         with self.data.lock:
-            return self.data.store.get(self.data.page_key(page_id))
+            return self.data.read_page(page_id)
 
     def get_thumbnail(self, page_id: str) -> dict | None:
         """Build a small drawing preview on demand, never during index updates."""
         with self.data.lock:
-            page = self.data.store.get(self.data.page_key(page_id))
+            page = self.data.read_page(page_id)
             if not page or not page.get("id"):
                 return None
             key = f"paint_thumb_{page_id}"
@@ -117,7 +117,7 @@ class PageRepository:
     def set_page_profile(self, page_id: str, profile: dict) -> dict:
         """Explicitly bind a page to a profile (adopt / re-adopt)."""
         with self.data.lock:
-            page = self.data.store.get(self.data.page_key(page_id))
+            page = self.data.read_page(page_id)
             if page is None:
                 raise KeyError(page_id)
             page["profileId"] = profile.get("id")
@@ -138,7 +138,7 @@ class PageRepository:
     def save_page(self, page_id: str, updates: dict) -> dict:
         """Update a page's objects / grid / name (whatever is provided)."""
         with self.data.lock:
-            page = self.data.store.get(self.data.page_key(page_id))
+            page = self.data.read_page(page_id)
             if page is None:
                 raise KeyError(page_id)
             expected = updates.get("expected_revision")
@@ -165,7 +165,7 @@ class PageRepository:
     ) -> dict:
         """Small, ordered and idempotent editor updates under the document lock."""
         with self.data.lock:
-            page = self.data.store.get(self.data.page_key(page_id))
+            page = self.data.read_page(page_id)
             if not page or not page.get("id"):
                 raise KeyError(page_id)
             applied = page.get("_mutations", [])
@@ -255,7 +255,7 @@ class PageRepository:
     def delete_page(self, page_id: str) -> dict:
         with self.data.lock:
             index = self.data.index()
-            deleted = self.data.store.get(self.data.page_key(page_id))
+            deleted = self.data.read_page(page_id)
             index["order"] = [m for m in index["order"] if m["id"] != page_id]
             self.data.store.set(self.data.page_key(page_id), {})  # tombstone / clear
             if index["activeId"] == page_id:
@@ -276,7 +276,7 @@ class PageRepository:
 
     def duplicate_page(self, page_id: str) -> dict:
         with self.data.lock:
-            src = self.data.store.get(self.data.page_key(page_id))
+            src = self.data.read_page(page_id)
             if src is None:
                 raise KeyError(page_id)
             # The copy keeps the source page's profile: its coordinates were
@@ -352,7 +352,7 @@ class PageRepository:
                 ),
                 None,
             )
-            page = self.data.store.get(self.data.page_key(page_id))
+            page = self.data.read_page(page_id)
             if not target or not page or not page.get("id"):
                 raise KeyError(page_id)
             old_id = page["projectId"]

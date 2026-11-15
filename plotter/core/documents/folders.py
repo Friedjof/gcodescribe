@@ -68,7 +68,7 @@ class FolderRepository:
     def set_page_group(self, page_id: str, group_id: str | None) -> dict:
         """Move a page into a folder (or out of any folder when ``None``)."""
         with self.data.lock:
-            page = self.data.store.get(self.data.page_key(page_id))
+            page = self.data.read_page(page_id)
             if page is None:
                 raise KeyError(page_id)
             if group_id and not any(

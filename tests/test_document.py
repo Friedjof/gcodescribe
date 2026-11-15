@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 import plotter.core.document as document
 from plotter.core.document import DocumentStore
 from plotter.core.state import FileStateStore
@@ -24,8 +26,13 @@ class TestDocumentStore:
     def test_save_objects_and_grid(self, workspace):
         s = _store(workspace)
         page = s.create_page()
-        s.save_page(page["id"], {"grid": {"step": 5, "snap": True},
-                                 "objects": [{"id": "o1", "type": "line", "plotted": False}]})
+        s.save_page(
+            page["id"],
+            {
+                "grid": {"step": 5, "snap": True},
+                "objects": [{"id": "o1", "type": "line", "plotted": False}],
+            },
+        )
         reloaded = s.get_page(page["id"])
         assert reloaded["grid"] == {"step": 5, "snap": True}
         assert len(reloaded["objects"]) == 1
@@ -36,10 +43,15 @@ class TestDocumentStore:
     def test_plotted_count_in_meta(self, workspace):
         s = _store(workspace)
         page = s.create_page()
-        s.save_page(page["id"], {"objects": [
-            {"id": "a", "plotted": True},
-            {"id": "b", "plotted": False},
-        ]})
+        s.save_page(
+            page["id"],
+            {
+                "objects": [
+                    {"id": "a", "plotted": True},
+                    {"id": "b", "plotted": False},
+                ]
+            },
+        )
         meta = next(m for m in s.list_pages()["order"] if m["id"] == page["id"])
         assert meta["plottedCount"] == 1
 
@@ -135,9 +147,11 @@ class TestPagesApi:
         from fastapi.testclient import TestClient
 
         document._doc = None  # reset singleton for the isolated workspace
-        with patch.object(document, "create_store",
-                          return_value=FileStateStore(workspace / "state")):
+        with patch.object(
+            document, "create_store", return_value=FileStateStore(workspace / "state")
+        ):
             from plotter.web.app import app
+
             c = TestClient(app)
             idx = c.get("/api/pages").json()
             assert len(idx["order"]) == 1
@@ -173,9 +187,11 @@ class TestPagesApi:
             "cachedPolylines": [[[0, 0], [100, 0], [100, 80]]],
         }
         document._doc = None
-        with patch.object(document, "create_store",
-                          return_value=FileStateStore(workspace / "state")):
+        with patch.object(
+            document, "create_store", return_value=FileStateStore(workspace / "state")
+        ):
             from plotter.web.app import app
+
             c = TestClient(app)
             pid = c.get("/api/pages").json()["activeId"]
 
@@ -197,3 +213,30 @@ class TestPagesApi:
             # neither endpoint persisted a job file
             assert c.get("/api/jobs").json() == []
         document._doc = None
+
+
+@pytest.mark.parametrize("operation", ["save", "profile", "duplicate", "group", "patch", "import"])
+def test_late_writes_do_not_resurrect_deleted_pages(workspace, operation):
+    state = FileStateStore(workspace / "state")
+    store = DocumentStore(state)
+    page_id = store.create_page()["id"]
+    store.delete_page(page_id)
+    assert store.get_page(page_id) is None
+    actions = {
+        "save": lambda: store.save_page(page_id, {"name": "Late update"}),
+        "profile": lambda: store.set_page_profile(page_id, {"id": "gone"}),
+        "duplicate": lambda: store.duplicate_page(page_id),
+        "group": lambda: store.set_page_group(page_id, None),
+        "patch": lambda: store.patch_objects(
+            page_id, revision=0, mutation_id="late", changes=[], removed=[]
+        ),
+        "import": lambda: store.append_import(page_id, None, None, "late", {"id": "object"}),
+    }
+    if operation == "import":
+        assert actions[operation]() is False
+    else:
+        with pytest.raises(KeyError):
+            actions[operation]()
+    assert store.get_page(page_id) is None
+    assert state.get(f"paint_page_{page_id}") == {}
+    assert all(meta["id"] != page_id for meta in store.list_pages()["order"])

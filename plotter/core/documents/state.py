@@ -17,6 +17,11 @@ class DocumentState:
         self.store = store
         self.lock = threading.RLock()
 
+    def read_page(self, page_id: str) -> dict | None:
+        """Deleted pages are stored as tombstones and must stay absent."""
+        page = self.store.get(self.page_key(page_id))
+        return page if page and page.get("id") == page_id else None
+
     def index(self) -> dict:
         index = self.store.get(self.INDEX_KEY) or {"order": [], "activeId": None}
         # Old indexes had only flat folders and a global slide order.
