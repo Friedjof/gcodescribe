@@ -713,3 +713,13 @@
 .calib-pos-block {
   margin-bottom: 10px;
 }
+
+.calibration-intro { color: var(--muted); font-size: 13px; line-height: 1.5; margin: 0 0 14px; }
+.calibration-context { border-left: 2px solid var(--accent); padding: 6px 10px; font-size: 12px; line-height: 1.4; margin: 0 0 14px; background: var(--panel-2); border-radius: 0 6px 6px 0; }
+.calibration-group-hint { color: var(--muted); font-size: 12px; line-height: 1.45; margin: 0 0 10px; }
+.calibration-optional { color: var(--muted); font-size: 11px; font-weight: 400; border: 1px solid var(--border); border-radius: 4px; padding: 2px 5px; }
+.calibration-check { color: var(--success, #34c759); font-size: 12px; }
+.calibration-instructions { margin: 8px 0 14px; padding-left: 20px; color: var(--text); font-size: 12px; line-height: 1.5; }
+.calibration-instructions li + li { margin-top: 6px; }
+.field-error { color: var(--danger, #ff6b6b); font-size: 12px; }
+.input-unit input[aria-invalid="true"] { border-color: var(--danger, #ff6b6b); }

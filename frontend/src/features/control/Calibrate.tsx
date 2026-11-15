@@ -1,13 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, type Calibration, type CalibrationProfileSummary } from "../../api";
+import CommittedNumberField from "../../components/CommittedNumberField";
 import { useI18n } from "../../i18n";
 import { useConfirm } from "../../components/dialogs";
 import { useToasts } from "../../components/Toasts";
 
 const FIELDS: { key: keyof Calibration; labelKey: string; unit: string; groupKey: string }[] = [
-  { key: "bed_width", labelKey: "calibrate.bedWidth", unit: "mm", groupKey: "calibrate.groupArea" },
-  { key: "bed_height", labelKey: "calibrate.bedHeight", unit: "mm", groupKey: "calibrate.groupArea" },
-  { key: "z_max", labelKey: "calibrate.zMax", unit: "mm", groupKey: "calibrate.groupArea" },
+  { key: "bed_width", labelKey: "calibrate.bedWidth", unit: "mm", groupKey: "calibrate.groupMachine" },
+  { key: "bed_height", labelKey: "calibrate.bedHeight", unit: "mm", groupKey: "calibrate.groupMachine" },
+  { key: "z_max", labelKey: "calibrate.zMax", unit: "mm", groupKey: "calibrate.groupMachine" },
   { key: "plot_width", labelKey: "calibrate.plotWidth", unit: "mm", groupKey: "calibrate.groupArea" },
   { key: "plot_height", labelKey: "calibrate.plotHeight", unit: "mm", groupKey: "calibrate.groupArea" },
   { key: "origin_x", labelKey: "calibrate.originX", unit: "mm", groupKey: "calibrate.groupArea" },
@@ -29,6 +30,7 @@ const FIELDS: { key: keyof Calibration; labelKey: string; unit: string; groupKey
 export default function Calibrate() {
   const { t } = useI18n();
   const toast = useToasts();
+  const detailRef = useRef<HTMLElement>(null);
   const [profiles, setProfiles] = useState<CalibrationProfileSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [cal, setCal] = useState<Calibration | null>(null);
@@ -82,8 +84,14 @@ export default function Calibrate() {
 
   const selected = profiles.find((p) => p.id === selectedId) ?? null;
 
+  const focusInvalidInput = () => {
+    const input = detailRef.current?.querySelector<HTMLInputElement>('input[aria-invalid="true"]');
+    input?.focus();
+    return !!input;
+  };
+
   const runSpeedTest = async () => {
-    if (!selectedId || !selected?.active || dirty || speedTesting) return;
+    if (!selectedId || !selected?.active || dirty || speedTesting || focusInvalidInput()) return;
     setSpeedTesting(true);
     try {
       await api.speedTest(selectedId);
@@ -108,7 +116,7 @@ export default function Calibrate() {
   };
 
   const save = () => {
-    if (!selectedId) return;
+    if (!selectedId || focusInvalidInput()) return;
     api
       .saveProfile(selectedId, { name, calibration: cal })
       .then((p) => {
@@ -270,8 +278,9 @@ export default function Calibrate() {
           </div>
         </aside>
 
-        <section className="card profile-detail">
+        <section ref={detailRef} className="card profile-detail">
           <h2>{t("calibrate.title")}</h2>
+          <p className="calibration-intro">{t("profiles.purpose")}</p>
             <div className="field-group">
               <label className="field">
                 <span>{t("profiles.name")}</span>
@@ -294,20 +303,12 @@ export default function Calibrate() {
                   {g === "calibrate.groupPark" ? "P · " : g === "calibrate.groupCalibrationPosition" ? "C · " : ""}
                   {t(g)}
                 </h3>
+                <p className="calibration-group-hint">{t(`${g}Hint`)}</p>
                 <div className="fields">
                   {FIELDS.filter((f) => f.groupKey === g).map((f) => (
-                    <label key={f.key} className="field">
-                      <span>{t(f.labelKey)}</span>
-                      <div className="input-unit">
-                        <input
-                          type="number"
-                          step="0.1"
-                          value={cal[f.key] as number}
-                          onChange={(e) => set(f.key, parseFloat(e.target.value) || 0)}
-                        />
-                        <em>{f.unit}</em>
-                      </div>
-                    </label>
+                    <CommittedNumberField key={f.key} label={t(f.labelKey)} unit={f.unit}
+                      value={cal[f.key] as number} min={0}
+                      onChange={(value) => set(f.key, value)} />
                   ))}
                 </div>
                 {g === "calibrate.groupSpeed" && <div className="calibrate-speed-test">

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import Calibrate from "./Calibrate";
 
 const mocks = vi.hoisted(() => ({ listProfiles: vi.fn(), getProfile: vi.fn(), speedTest: vi.fn(),
-  confirm: vi.fn(), createProfile: vi.fn(), duplicateProfile: vi.fn(), success: vi.fn(), error: vi.fn() }));
+  saveProfile: vi.fn(), confirm: vi.fn(), createProfile: vi.fn(), duplicateProfile: vi.fn(), success: vi.fn(), error: vi.fn() }));
 vi.mock("../../api", () => ({ api: mocks }));
 vi.mock("../../i18n", () => ({ useI18n: () => ({ t: (key: string) => key }) }));
 vi.mock("../../components/Toasts", () => ({ useToasts: () => ({ success: mocks.success, error: mocks.error }) }));
@@ -25,6 +25,7 @@ beforeEach(() => {
   mocks.speedTest.mockReset().mockResolvedValue({ ok: true, size: 88 });
   mocks.success.mockReset(); mocks.error.mockReset();
   mocks.confirm.mockReset().mockResolvedValue(true);
+  mocks.saveProfile.mockReset();
   mocks.createProfile.mockReset(); mocks.duplicateProfile.mockReset();
 });
 
@@ -37,6 +38,7 @@ it("starts the pen-up movement test only with saved active settings", async () =
   await waitFor(() => expect(mocks.success).toHaveBeenCalledWith("calibrate.speedTestSent"));
 
   fireEvent.change(screen.getByLabelText(/calibrate\.travelFeed/), { target: { value: "80" } });
+  fireEvent.blur(screen.getByLabelText(/calibrate\.travelFeed/));
   expect((button as HTMLButtonElement).disabled).toBe(true);
 });
 
@@ -52,4 +54,17 @@ it("respects cancelling the unsaved-changes dialog before creating or duplicatin
   fireEvent.click(screen.getByRole("button", { name: "profiles.duplicate" }));
   await waitFor(() => expect(mocks.confirm).toHaveBeenCalledTimes(2));
   expect(mocks.duplicateProfile).not.toHaveBeenCalled();
+});
+
+
+it("keeps invalid numeric edits out of saves and physical movement tests", async () => {
+  render(<Calibrate />);
+  const input = await screen.findByRole("spinbutton", { name: "calibrate.bedWidth" });
+  fireEvent.focus(input);
+  fireEvent.change(input, { target: { value: "" } });
+  fireEvent.blur(input);
+  fireEvent.click(screen.getByRole("button", { name: "common.save" }));
+  fireEvent.click(screen.getByRole("button", { name: "calibrate.speedTestButton" }));
+  expect(mocks.saveProfile).not.toHaveBeenCalled();
+  expect(mocks.speedTest).not.toHaveBeenCalled();
 });

@@ -17,7 +17,8 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("../../api", () => ({ api: mocks }));
 vi.mock("../../i18n", () => ({ useI18n: () => ({
-  t: (key: string, vars?: Record<string, string>) => key + (vars?.marker ? ` ${vars.marker}` : ""),
+  t: (key: string, vars?: Record<string, string>) => key === "paper.context"
+    ? `${key} ${vars?.project} ${vars?.profile}` : key + (vars?.marker ? ` ${vars.marker}` : ""),
 }) }));
 vi.mock("../../components/Toasts", () => ({ useToasts: () => ({ error: mocks.error, success: vi.fn() }) }));
 
@@ -105,7 +106,7 @@ it("uses the project's complete calibration even when the global profile differs
       fingerprint: "project", plot_width: 166, plot_height: 205, origin_x: 1, origin_y: 4 } });
   profileCalibration = { ...cal, origin_x: 25, plot_width: 140, pen_down_z: 2 };
   await setup();
-  expect(screen.getByText('Projekt „Formelsammlungen“ · Profil „Project profile“')).toBeInTheDocument();
+  expect(screen.getByText('paper.context Formelsammlungen Project profile')).toBeInTheDocument();
   expect(mocks.getProfile).toHaveBeenCalledWith("project-profile");
   expect(mocks.paper).toHaveBeenCalledWith("project");
   expect(mocks.activeProfile).not.toHaveBeenCalled();
@@ -127,13 +128,16 @@ it("keeps the plot area passive without resize handles", async () => {
 function openPositions() { fireEvent.click(screen.getByRole("button", { name: /paper.positions.title/ })); }
 function targetClick(svg: SVGSVGElement) { fireEvent.click(svg, { clientX: 40, clientY: 180 }); }
 
-it("inserts step 3, restores click-to-move on closing, and orders wizard before map", async () => {
+it("keeps four main steps before optional settings and requires explicit click-to-move", async () => {
   const { container, svg } = await setup();
   const steps = Array.from(container.querySelectorAll(".wstep-title")).map((el) => el.textContent);
-  expect(steps).toEqual(["paper.step1", "paper.step2", "paper.positions.title", "paper.step3", "paper.step4Obstacles", "paper.step5"]);
+  expect(steps).toEqual(["paper.step1", "paper.step2", "paper.step3", "paper.step5", "paper.positions.title", "paper.step4Obstacles"]);
   expect(container.querySelector("section")?.querySelector(".wizard")).not.toBeNull();
   const toggle = screen.getByRole("button", { name: "paper.clickMove" });
-  expect(toggle).toHaveAttribute("aria-pressed", "true");
+  expect(toggle).toHaveAttribute("aria-pressed", "false");
+  targetClick(svg);
+  expect(mocks.move).not.toHaveBeenCalled();
+  fireEvent.click(toggle);
   openPositions();
   expect(toggle).toBeDisabled();
   expect(toggle).toHaveAttribute("aria-pressed", "false");
@@ -224,7 +228,7 @@ it("discards targets on tab changes and keeps the user's click-to-move preferenc
   rerender(<Paper status={{ online: true }} onAction={onAction} visible={true} />);
   await screen.findByRole("button", { name: /paper.positions.title/ });
   expect(screen.getByRole("button", { name: /paper.positions.title/ })).toHaveAttribute("aria-expanded", "false");
-  expect(screen.getByRole("button", { name: "paper.clickMove" })).toHaveAttribute("aria-pressed", "false");
+  expect(screen.getByRole("button", { name: "paper.clickMove" })).toHaveAttribute("aria-pressed", "true");
   expect(screen.queryByRole("img", { name: "P · paper.positions.target" })).not.toBeInTheDocument();
 });
 
@@ -410,4 +414,54 @@ it("allows margin changes without calibrated paper corners", async () => {
   fireEvent.click(step);
   expect(screen.getByRole("button", { name: "paper.applyMargin" })).toBeEnabled();
   expect(screen.getByRole("button", { name: "paper.fromCorners" })).toBeDisabled();
+});
+
+
+it("follows the main setup path without requiring custom positions or obstacles", async () => {
+  await setup();
+  fireEvent.click(screen.getByRole("button", { name: "paper.continueSetup" }));
+  fireEvent.click(screen.getByRole("button", { name: "paper.toCorners" }));
+  fireEvent.click(screen.getByRole("button", { name: "paper.usePaperArea" }));
+  await waitFor(() => expect(mocks.applyPaper).toHaveBeenCalledWith(0, "project", true));
+  await screen.findByRole("button", { name: "paper.applyMargin" });
+  expect(mocks.positionFromHead).not.toHaveBeenCalled();
+  expect(mocks.setObstacles).not.toHaveBeenCalled();
+});
+
+it("can keep the current plot area without capturing paper corners", async () => {
+  mocks.paper.mockResolvedValue({ calibration: { ...profileCalibration, paper_corners: {} }, rect: null });
+  await setup();
+  fireEvent.click(screen.getByRole("button", { name: /paper.step3/ }));
+  expect(screen.getByRole("button", { name: "paper.usePaperArea" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "paper.useCurrentArea" }));
+  await screen.findByRole("button", { name: "paper.applyMargin" });
+  expect(mocks.applyPaper).not.toHaveBeenCalled();
+  expect(mocks.setCorner).not.toHaveBeenCalled();
+});
+
+it("commits a complete bed dimension once instead of saving each keystroke", async () => {
+  await setup();
+  fireEvent.click(screen.getByText("paper.bedSize"));
+  const input = screen.getByRole("spinbutton", { name: "paper.bedWidth" });
+  fireEvent.focus(input);
+  fireEvent.change(input, { target: { value: "" } });
+  fireEvent.change(input, { target: { value: "2" } });
+  fireEvent.change(input, { target: { value: "220" } });
+  expect(mocks.saveCalibration).not.toHaveBeenCalled();
+  fireEvent.blur(input);
+  await waitFor(() => expect(mocks.saveCalibration).toHaveBeenCalledExactlyOnceWith({ bed_width: 220 }, "project"));
+});
+
+
+it("lets paper layout be edited before homing while keeping machine controls disabled", async () => {
+  head = { ...head, homed: false, homed_axes: [] };
+  render(<Paper status={{ online: false }} onAction={vi.fn()} />);
+  const corners = await screen.findByRole("button", { name: /paper.step3/ });
+  expect(corners).toBeEnabled();
+  fireEvent.click(corners);
+  fireEvent.click(screen.getByText("paper.manualCapture"));
+  expect(screen.getByRole("button", { name: "paper.cornerBL" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "paper.useCurrentArea" })).toBeEnabled();
+  expect(mocks.home).not.toHaveBeenCalled();
+  expect(mocks.move).not.toHaveBeenCalled();
 });

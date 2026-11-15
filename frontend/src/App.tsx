@@ -181,8 +181,8 @@ function AdminApp() {
     { value: "font", label: t("tabs.fontEditor") },
     { value: "gallery", label: t("tabs.gallery") },
     { value: "convert", label: t("tabs.jobs") },
-    { value: "paper", label: t("tabs.paper") },
     { value: "calibrate", label: t("tabs.calibrate") },
+    { value: "paper", label: t("tabs.paper") },
     { value: "control", label: t("tabs.control") },
   ];
 

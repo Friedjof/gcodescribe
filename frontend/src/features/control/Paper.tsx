@@ -10,6 +10,7 @@ import {
   type Position,
 } from "../../api";
 import LiveView from "./LiveView";
+import CommittedNumberField from "../../components/CommittedNumberField";
 import SpecialPositions from "./SpecialPositions";
 import CalibrationPressureDialog from "./CalibrationPressureDialog";
 import { useSpecialPositions } from "./useSpecialPositions";
@@ -49,7 +50,7 @@ export default function Paper({
   const [active, setActive] = useState<PaperStep | null>("home");
   const [xyStep, setXyStep] = useState(10);
   const [zStep, setZStep] = useState(0.1);
-  const [clickMove, setClickMove] = useState(true);
+  const [clickMove, setClickMove] = useState(false);
   const [margin, setMargin] = useState(5);
   const [formatId, setFormatId] = useState<(typeof PAPER_FORMATS)[number]["id"] | null>(null);
   const [formatLandscape, setFormatLandscape] = useState(false);
@@ -244,8 +245,7 @@ export default function Paper({
 
   const adoptPaperArea = () =>
     api.applyPaper(margin, projectId, true)
-      .then((s) => { applyPaperState(s); toast.success(t("paper.applied")); onAction(); })
-      .catch(fail);
+      .then((s) => { applyPaperState(s); toast.success(t("paper.applied")); onAction(); });
 
   const plotFrame = () =>
     api.testPattern("frame", projectId)
@@ -301,13 +301,13 @@ export default function Paper({
     setActive("corners");
   };
 
-  const steps: { id: PaperStep; title: string; done: boolean; locked: boolean }[] = [
+  const steps: { id: PaperStep; title: string; done: boolean; locked: boolean; optional?: boolean }[] = [
     { id: "home", title: t("paper.step1"), done: homed, locked: false },
     { id: "pen", title: t("paper.step2"), done: heightSaved, locked: !homed && !heightSaved },
-    { id: "positions", title: t("paper.positions.title"), done: positionsDone, locked: false },
-    { id: "corners", title: t("paper.step3"), done: !!rect, locked: !homed },
-    { id: "obstacles", title: t("paper.step4Obstacles"), done: false, locked: !rect },
+    { id: "corners", title: t("paper.step3"), done: !!rect, locked: false },
     { id: "apply", title: t("paper.step5"), done: false, locked: false },
+    { id: "positions", title: t("paper.positions.title"), done: positionsDone, locked: false, optional: true },
+    { id: "obstacles", title: t("paper.step4Obstacles"), done: false, locked: !rect, optional: true },
   ];
 
   return (
@@ -319,8 +319,9 @@ export default function Paper({
       {/* ── Left: Wizard ────────────────────────────────────────── */}
       <section className="card paper-wizard-panel">
         <h2>{t("paper.title")}</h2>
+        <p className="calibration-intro">{t("paper.guideIntro")}</p>
         {profileName && (
-          <p className="muted">Projekt „{project?.name}“ · Profil „{profileName}“</p>
+          <p className="calibration-context">{t("paper.context", { project: project?.name ?? "", profile: profileName })}</p>
         )}
         {!online && (
           <div className="banner err" style={{ marginBottom: 14 }}>
@@ -338,9 +339,10 @@ export default function Paper({
                 onClick={() => setActive(active === s.id ? null : s.id)}
               >
                 <span className={`badge ${s.done ? "done" : ""}`}>
-                  {s.done ? "✓" : s.locked ? "🔒" : index + 1}
+                  {s.done ? "✓" : s.locked ? "🔒" : s.optional ? "+" : index + 1}
                 </span>
                 <span className="wstep-title">{s.title}</span>
+                {s.optional && <span className="calibration-optional">{t("paper.optional")}</span>}
               </button>
 
               {active === s.id && !s.locked && (
@@ -350,7 +352,11 @@ export default function Paper({
                   {s.id === "home" && (
                     <>
                       <p className="muted">{t("paper.step1Hint")}</p>
-                      <button className="primary big" disabled={!canMove} onClick={homeAll}>
+                      {homed && <>
+                        <p className="calibration-check">✓ {t("paper.homed")}</p>
+                        <button className="primary big" onClick={() => setActive("pen")}>{t("paper.continueSetup")}</button>
+                      </>}
+                      <button className={homed ? "ghost" : "primary big"} disabled={!canMove} onClick={homeAll}>
                         {t("paper.homeXYZ")}
                       </button>
                       <details className="collapsible" style={{ marginTop: 14 }}>
@@ -359,32 +365,10 @@ export default function Paper({
                           {t("paper.bedSizeHint")}
                         </p>
                         <div className="bed-size-row">
-                          <label className="field">
-                            <span>{t("paper.bedWidth")}</span>
-                            <div className="input-unit">
-                              <input
-                                type="number" step="10" min="10"
-                                value={cal.bed_width}
-                                onChange={(e) =>
-                                  saveBedDimension("bed_width", parseFloat(e.target.value) || cal.bed_width)
-                                }
-                              />
-                              <em>mm</em>
-                            </div>
-                          </label>
-                          <label className="field">
-                            <span>{t("paper.bedHeight")}</span>
-                            <div className="input-unit">
-                              <input
-                                type="number" step="10" min="10"
-                                value={cal.bed_height}
-                                onChange={(e) =>
-                                  saveBedDimension("bed_height", parseFloat(e.target.value) || cal.bed_height)
-                                }
-                              />
-                              <em>mm</em>
-                            </div>
-                          </label>
+                          <CommittedNumberField label={t("paper.bedWidth")} value={cal.bed_width} min={10} step={1}
+                            onChange={(value) => saveBedDimension("bed_width", value)} />
+                          <CommittedNumberField label={t("paper.bedHeight")} value={cal.bed_height} min={10} step={1}
+                            onChange={(value) => saveBedDimension("bed_height", value)} />
                         </div>
                       </details>
                     </>
@@ -411,6 +395,14 @@ export default function Paper({
                         </div>
                       )}
 
+                      <p className="muted">{t("paper.step2Hint")}</p>
+                      <details className="collapsible" open={!heightSaved}>
+                        <summary>{t("paper.penInstructions")}</summary>
+                        <ol className="calibration-instructions">
+                          <li>{t("paper.penContactInstruction")}</li>
+                          <li>{t("paper.penLiftInstruction")}</li>
+                        </ol>
+                      </details>
                       <div className="z-panel">
                         <div className="z-readout">
                           <span className="muted">{t("paper.currentZ")}</span>
@@ -470,30 +462,10 @@ export default function Paper({
                       <details className="collapsible" style={{ marginTop: 12 }}>
                         <summary className="muted">{t("paper.manualValues")}</summary>
                         <div className="height-fields" style={{ marginTop: 8 }}>
-                          <label className="field">
-                            <span>{t("calibrate.penDownZ")}</span>
-                            <div className="input-unit">
-                              <input
-                                type="number" step="0.05" value={cal.pen_down_z}
-                                onChange={(e) =>
-                                  setPenHeightValue("down", parseFloat(e.target.value) || 0)
-                                }
-                              />
-                              <em>mm</em>
-                            </div>
-                          </label>
-                          <label className="field">
-                            <span>{t("calibrate.penUpZ")}</span>
-                            <div className="input-unit">
-                              <input
-                                type="number" step="0.05" value={cal.pen_up_z}
-                                onChange={(e) =>
-                                  setPenHeightValue("up", parseFloat(e.target.value) || 0)
-                                }
-                              />
-                              <em>mm</em>
-                            </div>
-                          </label>
+                          <CommittedNumberField label={t("calibrate.penDownZ")} value={cal.pen_down_z} min={0} max={cal.z_max} step={0.05}
+                            onChange={(value) => setPenHeightValue("down", value)} />
+                          <CommittedNumberField label={t("calibrate.penUpZ")} value={cal.pen_up_z} min={0} max={cal.z_max} step={0.05}
+                            onChange={(value) => setPenHeightValue("up", value)} />
                         </div>
                       </details>
 
@@ -501,10 +473,12 @@ export default function Paper({
                         className="primary"
                         style={{ marginTop: 14 }}
                         disabled={!heightSaved}
-                        onClick={() => setActive("positions")}
+                        onClick={() => setActive("corners")}
                       >
-                        {t("paper.positions.next")}
+                        {t("paper.toCorners")}
                       </button>
+                      <p className="muted">{t("paper.positionDefaultsHint")}</p>
+                      <button className="ghost" onClick={() => setActive("positions")}>{t("paper.positions.next")}</button>
                     </>
                   )}
 
@@ -516,6 +490,8 @@ export default function Paper({
                   {/* ── Step 4: Paper corners ────────────────────── */}
                   {s.id === "corners" && (
                     <>
+                      <p className="muted">{t("paper.step3Hint")}</p>
+                      <p className="calibration-group-hint">{t("paper.cornerMethods")}</p>
                       {/* Corner chips */}
                       <div className="corner-chips">
                         {CORNERS.map((c) => {
@@ -603,9 +579,12 @@ export default function Paper({
                         {capturedCount > 0 && (
                           <button className="ghost" onClick={resetCorners}>{t("paper.resetCorners")}</button>
                         )}
-                        <button className="primary" disabled={!rect} onClick={() => setActive("obstacles")}>
-                          {t("common.next")} →
+                        <button className="primary" disabled={!rect} onClick={() => {
+                          adoptPaperArea().then(() => setActive("apply")).catch(fail);
+                        }}>
+                          {t("paper.usePaperArea")}
                         </button>
+                        <button onClick={() => setActive("apply")}>{t("paper.useCurrentArea")}</button>
                       </div>
                     </>
                   )}
@@ -730,7 +709,9 @@ export default function Paper({
                   {/* ── Step 6: Apply ────────────────────────────── */}
                   {s.id === "apply" && (
                     <>
+                      <p className="muted">{t("paper.reviewHint")}</p>
                       <p className="muted">{t("paper.marginHint")}</p>
+                      {(!homed || !heightSaved) && <p className="calibration-group-hint">{t("paper.frameNeedsSetup")}</p>}
                       <div className="apply-row">
                         <label className="field">
                           <span>{t("paper.margin")}</span>
@@ -746,7 +727,7 @@ export default function Paper({
                           {t("paper.applyMargin")}
                         </button>
                         <button
-                          disabled={!canMove}
+                          disabled={!canMove || !homed || !heightSaved}
                           onClick={plotFrame}
                           title={t("paper.testFrameTip")}
                         >
@@ -756,7 +737,7 @@ export default function Paper({
                           {t("common.exportXml")}
                         </a>
                       </div>
-                      <button type="button" className="ghost" disabled={!rect} onClick={adoptPaperArea}
+                      <button type="button" className="ghost" disabled={!rect} onClick={() => { adoptPaperArea().catch(fail); }}
                         style={{ marginTop: 10 }}>{t("paper.fromCorners")}</button>
                       <div className="field-group" style={{ marginTop: 14 }}>
                         <h3>{t("paper.driveToPlotCorners")}</h3>
@@ -787,6 +768,7 @@ export default function Paper({
       {/* ── Right: Live View ─────────────────────────────────────── */}
       <section className="card paper-live-panel">
         <h2>{t("paper.liveView")}</h2>
+        <p className="calibration-group-hint">{positionsOpen ? t("paper.positionMapHint") : clickMove ? t("paper.clickMoveEnabled") : t("paper.clickMoveDisabled")}</p>
         <div className="paper-format-controls" title={t("paper.formatPassive")}>
           <label className="field">{t("paper.formatCompare")}
             <select aria-label={t("paper.formatCompare")} value={formatId ?? ""}
