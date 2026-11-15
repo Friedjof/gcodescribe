@@ -8,7 +8,7 @@ Status: umgesetzt (19.10.2026).
 - Ein neues Projekt bekommt ein eigenes Profil. Beim Anlegen kann ein vorhandenes Profil als Vorlage kopiert werden. Die Projekt-Einstellungen bearbeiten dieses Profil direkt im Popup, einschließlich Papierfläche, Plotbereich, Stifthöhen, Vorschüben, Positionen und Hindernissen.
 - Links erscheinen nur Ordner und Slides des geöffneten Projekts. Ordner lassen sich verschachteln, umbenennen, verschieben und löschen. Slides lassen sich in Ordner und ausdrücklich in ein anderes Projekt verschieben. Der Ordnerbaum hat keine eigenen Profilgruppen.
 - Neue Slides übernehmen die aktuelle Kalibrierung des Projektprofils als Snapshot. Eine spätere Profiländerung verändert bestehende Slides nicht. Im Popup kann das gespeicherte Projektprofil ausdrücklich auf den geöffneten Slide übernommen werden; dabei wird geprüft, ob seine Inhalte in den Plotbereich passen.
-- Der Designer zeigt keinen veralteten Profilstatus. Slide-Liste und Speichern erzeugen keinen G-Code und keine 3D-Vorschau. Diese Berechnung beginnt erst bei Vorschau, G-Code-Erzeugung oder Plotten.
+- Der Designer zeigt keinen veralteten Profilstatus. Slide-Liste und Speichern erzeugen keinen G-Code und keine 3D-Vorschau. Diese Berechnung beginnt erst bei Vorschau, G-Code-Erzeugung oder Plotten und verwendet dann die aktuelle Projektkalibrierung.
 - Die Kalibrierposition und der Anpressdruck aus dem Designer verwenden das Projektprofil, auch wenn global ein anderes Profil aktiv ist.
 
 ## Speicherung und Migration
@@ -21,4 +21,4 @@ Das aktive Projekt liegt derzeit im gemeinsamen Dokumentindex; die zuletzt geöf
 
 ## Plotten und Sicherheit
 
-Designer-Jobs tragen den Slide-Snapshot in ihren Job-Metadaten. Der Drucker prüft diesen gegen den aktuellen Slide sowie gegen die heutigen Bett- und Z-Grenzen des Projekts. Für andere Jobs gilt weiterhin die Prüfung des global aktiven Profils. Das tatsächliche Senden an einen Drucker wurde automatisiert mit einem simulierten Client geprüft; ein physischer Test steht aus.
+Designer-Jobs tragen einen Snapshot der beim Erzeugen aktuellen Projektkalibrierung in ihren Job-Metadaten. Der Drucker prüft diesen gegen die aktuelle Projektkalibrierung sowie gegen die Bett- und Z-Grenzen des aktiven Maschinenprofils. Wird die Projektkalibrierung nachträglich geändert, muss der G-Code neu erzeugt werden. Für andere Jobs gilt weiterhin die Prüfung des global aktiven Profils. Das tatsächliche Senden an einen Drucker wurde automatisiert mit einem simulierten Client geprüft; ein physischer Test steht aus.
