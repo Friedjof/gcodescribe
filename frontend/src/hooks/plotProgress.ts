@@ -1,3 +1,5 @@
+import type { PrinterStatus } from "../api/types/printer";
+import { isPrinting, printerJobState, printerProgress } from "../lib/printerState";
 export interface PlotNotice { filename: string; pct: number }
 export interface PlotTracker {
   initialized: boolean;
@@ -14,7 +16,7 @@ export const newPlotTracker = (): PlotTracker => ({
 });
 
 /** Advance only from observed progress or an explicit terminal result. */
-export function plotNotices(tracker: PlotTracker, status: any): PlotNotice[] {
+export function plotNotices(tracker: PlotTracker, status: PrinterStatus | null): PlotNotice[] {
   if (status?.online !== true) return [];
   const notices: PlotNotice[] = [];
   const first = !tracker.initialized;
@@ -22,12 +24,10 @@ export function plotNotices(tracker: PlotTracker, status: any): PlotNotice[] {
   if (first) { tracker.initialized = true; tracker.lastResultId = result?.id ?? null; }
   const job = status.job;
   const filename = job?.job?.file?.name;
-  const key = filename ? `${status.backend ?? "printer"}:${job.id ?? filename}` : null;
-  const state = String(job?.state ?? "").toLowerCase();
-  const printing = state.includes("printing");
-  const raw = job?.progress?.completion;
-  const progress = typeof raw === "number" && Number.isFinite(raw)
-    ? Math.max(0, Math.min(100, raw)) : null;
+  const key = filename ? `${status.backend ?? "printer"}:${job?.id ?? filename}` : null;
+  const state = printerJobState(status);
+  const printing = isPrinting(status);
+  const progress = printerProgress(status);
 
   if (key && (key !== tracker.jobKey || (printing && !tracker.wasPrinting
       && (tracker.notified.has(100) || (progress != null && progress < (tracker.lastProgress ?? 0)))))) {
@@ -38,7 +38,7 @@ export function plotNotices(tracker: PlotTracker, status: any): PlotNotice[] {
   // Opening an idle client should not announce an old completed job.
   if (first && !printing && progress === 100) [25, 50, 90, 100].forEach(pct => tracker.notified.add(pct));
   const finished = progress === 100 && !status.error && !/cancel|error|offline|paused/.test(state);
-  if (key && progress != null && (printing || finished)) {
+  if (filename && key && progress != null && (printing || finished)) {
     const crossed = [25, 50, 90, 100].filter(pct => pct <= progress && !tracker.notified.has(pct));
     crossed.forEach(pct => tracker.notified.add(pct));
     const pct = crossed[crossed.length - 1];

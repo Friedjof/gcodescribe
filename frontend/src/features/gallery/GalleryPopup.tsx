@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { PrinterStatus } from "../../api/types/printer";
 import {
   api,
   type Calibration,
@@ -46,7 +47,7 @@ export default function GalleryPopup({
   onPlotted,
 }: {
   cal: Calibration;
-  status?: any;
+  status?: PrinterStatus | null;
   activeProfile?: ProfileRef | null;
   onClose: () => void;
   onInsert: (obj: SceneObject) => void;

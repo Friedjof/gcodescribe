@@ -12,6 +12,7 @@ from plotter.core.calibration import (
 )
 from plotter.core.position import PositionTracker, get_tracker
 from plotter.geometry.routing import OBSTACLE_MARGIN, route_travel, seg_intersects_obs
+from plotter.printer.types import PrinterStatus
 
 from ..printer import PrinterBackend, get_printer_client
 from ..printer.base import PrinterBusyError, require_manual_motion
@@ -38,7 +39,7 @@ class PrinterController:
 
     # -- queries -----------------------------------------------------------
 
-    def status(self) -> dict:
+    def status(self) -> PrinterStatus:
         return self.client.status()
 
     def position(self) -> dict:

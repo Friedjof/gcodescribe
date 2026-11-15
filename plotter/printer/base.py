@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
+from .types import PrinterStatus
+
 
 class PrinterError(RuntimeError):
     """Backend-neutral printer failure.
@@ -63,19 +65,14 @@ class PrinterBackend(Protocol):
 
     The OctoPrint REST client and the serial worker both implement this, so
     ``PrinterController`` and the HTTP routes never depend on a concrete
-    backend. ``status()`` must always return at least the fields the frontend
-    reads (see ``docs/planing/serial/02-interface-design.md``):
-
-        {"configured": bool, "online": bool,
-         "job": {"state": str,
-                 "progress": {"completion": float | None},
-                 "job": {"file": {"name": str}}} | None}
+    backend. ``status()`` follows :class:`PrinterStatus`: only ``configured``
+    is required, since an unconfigured backend cannot report a live job.
     """
 
     @property
     def configured(self) -> bool: ...
 
-    def status(self) -> dict: ...
+    def status(self) -> PrinterStatus: ...
 
     def upload(self, gcode_path: Path, *, start: bool = False) -> dict: ...
 

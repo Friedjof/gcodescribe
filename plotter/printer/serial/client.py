@@ -7,6 +7,7 @@ from pathlib import Path
 from plotter.core.config import load_settings
 from plotter.printer.serial.transport import TransportFactory
 from plotter.printer.serial.worker import SerialWorker, get_worker, peek_worker
+from plotter.printer.types import PrinterStatus
 from plotter.services.settings_store import load_saved
 
 
@@ -36,7 +37,7 @@ class SerialClient:
         if self.configured:
             self._worker()
 
-    def status(self) -> dict:
+    def status(self) -> PrinterStatus:
         if not self.configured:
             return {"configured": False, "backend": "serial"}
         # Lazy: report from the worker only if it is already running. If serial is

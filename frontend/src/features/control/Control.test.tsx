@@ -19,6 +19,7 @@ beforeEach(() => {
   Object.values(mocks).forEach((mock) => mock.mockReset());
   mocks.listBackends.mockResolvedValue([]);
   mocks.jog.mockResolvedValue({});
+  mocks.pen.mockResolvedValue({});
   mocks.jobCommand.mockResolvedValue({});
 });
 afterEach(cleanup);
@@ -26,7 +27,7 @@ afterEach(cleanup);
 describe("manual motion during a print", () => {
   it.each(["Printing", "Starting", "Pausing", "Resuming", "Finishing"])(
     "blocks buttons and keyboard for %s", async (state) => {
-      render(<Control status={{ online: true, job: { state } }} onAction={vi.fn()} />);
+      render(<Control status={{ configured: true, online: true, job: { state } }} onAction={vi.fn()} />);
       expect(screen.getByRole("button", { name: "control.penUp" })).toBeDisabled();
       expect(screen.getByRole("button", { name: "control.homeAll" })).toBeDisabled();
       await userEvent.click(screen.getByRole("button", { name: "control.penUp" }));
@@ -39,15 +40,33 @@ describe("manual motion during a print", () => {
   );
 
   it("blocks manual motion while restoring a paused job", () => {
-    render(<Control status={{ online: true, motion_locked: true, job: { state: "Paused" } }}
+    render(<Control status={{ configured: true, online: true, motion_locked: true, job: { state: "Paused" } }}
       onAction={vi.fn()} />);
     expect(screen.getByRole("button", { name: "control.penUp" })).toBeDisabled();
     fireEvent.keyDown(window, { key: "PageUp" });
     expect(mocks.jog).not.toHaveBeenCalled();
   });
 
+  it("allows manual motion in a settled pause", () => {
+    render(<Control status={{ configured: true, online: true, job: { state: "Paused" } }} onAction={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "control.penUp" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "control.penUp" }));
+    expect(mocks.pen).toHaveBeenCalledWith(false);
+  });
+
+  it.each(["Starting", "Pausing", "Resuming", "Finishing", "Cancelling"])(
+    "blocks switching backends while %s", async state => {
+      mocks.listBackends.mockResolvedValue([
+        { id: "serial", configured: true, online: true, active: true },
+        { id: "octoprint", configured: true, online: true, active: false },
+      ]);
+      render(<Control status={{ configured: true, online: true, job: { state } }} onAction={vi.fn()} />);
+      expect(await screen.findByRole("button", { name: "printer.activate" })).toBeDisabled();
+    },
+  );
+
   it("keeps cancelling available during a print", () => {
-    render(<Control status={{ online: true, job: { state: "Printing" } }} onAction={vi.fn()} />);
+    render(<Control status={{ configured: true, online: true, job: { state: "Printing" } }} onAction={vi.fn()} />);
     const cancel = screen.getByRole("button", { name: /control.cancel/ });
     expect(cancel).not.toBeDisabled();
     fireEvent.click(cancel);

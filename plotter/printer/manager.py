@@ -6,6 +6,7 @@ import threading
 from pathlib import Path
 
 from .base import PrinterBackend, PrinterError
+from .types import PrinterBackendInfo, PrinterStatus
 
 log = logging.getLogger(__name__)
 
@@ -101,9 +102,9 @@ class PrinterManager:
         if callable(ensure):
             ensure()
 
-    def backends(self) -> list[dict]:
+    def backends(self) -> list[PrinterBackendInfo]:
         """Selector payload: id, configured, online, active per backend."""
-        out: list[dict] = []
+        out: list[PrinterBackendInfo] = []
         for bid, backend in self._backends.items():
             st = backend.status()
             out.append(
@@ -150,10 +151,10 @@ class PrinterManager:
     def configured(self) -> bool:
         return bool(self._backends)
 
-    def status(self) -> dict:
+    def status(self) -> PrinterStatus:
         if not self._backends:
             return {"configured": False}
-        st = dict(self.active().status())
+        st: PrinterStatus = {**self.active().status()}
         st["backend"] = self._active
         return st
 

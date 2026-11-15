@@ -1,19 +1,20 @@
 import { req } from "./req";
 import type { Position, SerialPortCandidate } from "../types/jobs";
 import type { PositionKind } from "../types/calibration";
+import type { PrinterStatus, PrinterBackendId, PrinterBackendInfo, OctoPrintCheckResult } from "../types/printer";
 
 export const printerClient = {
-  octoStatus: () => req<any>("/api/printer/status"),
+  octoStatus: () => req<PrinterStatus>("/api/printer/status"),
   octoprintCheck: () =>
-    req<{ ok: boolean; version?: string; api?: string; error?: string }>(
+    req<OctoPrintCheckResult>(
       "/api/printer/octoprint/check"
     ),
   listBackends: () =>
-    req<Array<{ id: string; configured: boolean; online: boolean; active: boolean }>>(
+    req<PrinterBackendInfo[]>(
       "/api/printer/backends"
     ),
-  setBackend: (id: string) =>
-    req<{ ok: boolean; active: string }>("/api/printer/backend", {
+  setBackend: (id: PrinterBackendId) =>
+    req<{ ok: boolean; active: PrinterBackendId }>("/api/printer/backend", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
@@ -29,7 +30,7 @@ export const printerClient = {
       }
     ),
   send: (filename: string, start: boolean) =>
-    req<any>("/api/printer/send", {
+    req<unknown>("/api/printer/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ filename, start }),

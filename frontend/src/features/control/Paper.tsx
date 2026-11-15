@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
+import { errorMessage } from "../../api/errors";
+import type { PrinterStatus } from "../../api/types/printer";
+import { isPrinterBusy } from "../../lib/printerState";
 import {
   api,
   type Calibration,
@@ -38,7 +41,7 @@ export default function Paper({
   onAction,
   visible = true,
 }: {
-  status: any;
+  status: PrinterStatus | null;
   onAction: () => void;
   visible?: boolean;
 }) {
@@ -71,9 +74,7 @@ export default function Paper({
   const [obsCaptureCorner1, setObsCaptureCorner1] = useState<[number, number] | null>(null);
 
   const online = status?.online;
-  const motionLocked = status?.motion_locked ||
-    ["printing", "starting", "pausing", "paused", "resuming", "finishing", "cancelling"]
-      .some((state) => status?.job?.state?.toLowerCase?.().includes(state));
+  const motionLocked = isPrinterBusy(status);
   const homed = !!pos?.homed;
   const heightSaved = !!cal?.pen_calibrated;
 
@@ -117,7 +118,7 @@ export default function Paper({
       setRect(state.rect);
       setObstacles(state.calibration.obstacles ?? []);
       setMargin(state.calibration.paper_margin ?? 5);
-    }).catch((error) => { if (!cancelled) toast.error(String(error.message)); });
+    }).catch((error) => { if (!cancelled) toast.error(errorMessage(error)); });
     api.listJobs().then(setJobs).catch(() => {});
     return () => { cancelled = true; };
   }, [visible]);
@@ -131,11 +132,11 @@ export default function Paper({
 
   useEffect(() => {
     if (!previewJob) { setPreview(null); return; }
-    api.jobPreview(previewJob).then(setPreview).catch((e) => toast.error(String(e.message)));
+    api.jobPreview(previewJob).then(setPreview).catch((e) => toast.error(errorMessage(e)));
   }, [previewJob]);
 
-  const fail = (e: any) => toast.error(String(e.message ?? e));
-  const run = (fn: () => Promise<any>) => fn().then(refreshPosition).catch(fail);
+  const fail = (e: unknown) => toast.error(errorMessage(e));
+  const run = (fn: () => Promise<unknown>) => fn().then(refreshPosition).catch(fail);
 
   const positionsOpen = active === "positions";
   const positions = useSpecialPositions({

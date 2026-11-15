@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { isPrinterBusy } from "../../lib/printerState";
 import type {
   Calibration, ColoringApiItem, ColoringColor, GalleryMetrics, GalleryScore, Job, Page, PageColoring, ProfileRef, SceneObject,
 } from "../../api";
@@ -541,8 +542,7 @@ export default function ColoringEditor({ cal, page, activeProfile, initialRotati
     setPrinting(color);
     try {
       const st = await api.octoStatus().catch(() => null);
-      const state = String(st?.job?.state ?? "").toLowerCase();
-      if (state.includes("printing") || state.includes("paused")) {
+      if (isPrinterBusy(st)) {
         toast.error(t("paint.coloringPrintBusy"));
         return;
       }

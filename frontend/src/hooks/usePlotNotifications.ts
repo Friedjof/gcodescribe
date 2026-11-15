@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { PrinterStatus } from "../api/types/printer";
 import { useI18n } from "../i18n";
 import { useToasts } from "../components/Toasts";
 import { newPlotTracker, plotNotices } from "./plotProgress";
@@ -9,7 +10,7 @@ function permissionNow(): Permission {
   return Notification.permission;
 }
 
-export function usePlotNotifications(status: any) {
+export function usePlotNotifications(status: PrinterStatus | null) {
   const { t } = useI18n();
   const toast = useToasts();
   const [permission, setPermission] = useState<Permission>(permissionNow);

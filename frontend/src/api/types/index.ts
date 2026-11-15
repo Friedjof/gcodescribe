@@ -9,3 +9,4 @@ export * from "./jobs";
 export * from "./games";
 export * from "./ai";
 export * from "./settings";
+export * from "./printer";

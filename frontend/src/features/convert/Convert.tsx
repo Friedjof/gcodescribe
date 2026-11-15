@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import type { PrinterStatus } from "../../api/types/printer";
 import { api, type GcodePreview, type GcodePreview3D, type Job } from "../../api";
 import { useI18n } from "../../i18n";
 import Modal from "../../components/Modal";
@@ -79,7 +80,7 @@ export default function Convert({
   onAction,
   visible = true,
 }: {
-  status: any;
+  status: PrinterStatus | null;
   onAction: () => void;
   visible?: boolean;
 }) {

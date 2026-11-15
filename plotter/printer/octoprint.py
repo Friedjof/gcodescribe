@@ -10,6 +10,7 @@ from plotter.core.config import load_settings
 from plotter.services.settings_store import load_saved
 
 from .base import PrinterError, require_manual_motion
+from .types import PrinterStatus
 
 # A short connect timeout keeps an unreachable/slow printer from tying up a
 # request worker for 30s (the old default) — the status loop polls every few
@@ -25,7 +26,7 @@ _pool: dict[tuple, httpx.Client] = {}
 
 # Cached status snapshot shared across PrinterController instances.
 _status_lock = threading.Lock()
-_status_cache: dict[tuple, tuple[float, dict]] = {}
+_status_cache: dict[tuple, tuple[float, PrinterStatus]] = {}
 
 
 class OctoPrintError(PrinterError):
@@ -91,7 +92,7 @@ class OctoPrintClient:
 
     # --- status ----------------------------------------------------------
 
-    def status(self) -> dict:
+    def status(self) -> PrinterStatus:
         """Combined connection / printer / job snapshot for the UI.
 
         Cached for a couple of seconds: the UI polls this every few seconds and
@@ -111,8 +112,8 @@ class OctoPrintClient:
             _status_cache[key] = (time.monotonic(), snapshot)
         return snapshot
 
-    def _fetch_status(self) -> dict:
-        out: dict = {"configured": True, "backend": "octoprint", "url": self.base_url}
+    def _fetch_status(self) -> PrinterStatus:
+        out: PrinterStatus = {"configured": True, "backend": "octoprint", "url": self.base_url}
         try:
             conn = self._request("GET", "/api/connection").json()
             out["connection"] = conn.get("current", {})

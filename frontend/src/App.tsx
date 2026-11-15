@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import type { PrinterStatus } from "./api/types/printer";
 import { api, onAppEvent, type AiImageStatus, type EffectiveSettings } from "./api";
 import StatusPill from "./components/StatusPill";
 import { usePlotNotifications } from "./hooks/usePlotNotifications";
@@ -43,7 +44,7 @@ function AdminApp() {
   const [tab, setTab] = useState<Tab>("paint");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [visited, setVisited] = useState<Set<Tab>>(() => new Set<Tab>(["paint"]));
-  const [status, setStatus] = useState<any>(null);
+  const [status, setStatus] = useState<PrinterStatus | null>(null);
   const [aiStatus, setAiStatus] = useState<AiImageStatus | null>(null);
   const [aiInitialFile, setAiInitialFile] = useState<File | null>(null);
   const [desktop, setDesktop] = useState(false);

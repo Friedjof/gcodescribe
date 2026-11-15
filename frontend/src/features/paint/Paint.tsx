@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ApiError, errorMessage } from "../../api/errors";
+import type { PrinterStatus } from "../../api/types/printer";
+import { isPrinterBusy } from "../../lib/printerState";
 import { api, onAppEvent, type AppEvent, type Calibration, type GcodePreview3D, type Page, type PageIndex, type SceneObject, type ProfileRef } from "../../api";
 import PaintCanvas, { type Tool, type ViewRotation } from "./PaintCanvas";
 import MarkdownEditor from "../markdown/MarkdownEditor";
@@ -44,7 +47,7 @@ export default function Paint({
   desktop = false,
 }: {
   visible?: boolean;
-  status?: any;
+  status?: PrinterStatus | null;
   onAction?: () => void;
   desktop?: boolean;
 }) {
@@ -68,9 +71,7 @@ export default function Paint({
   const saveState = page ? editState(page.id) : { pending: false, error: undefined, conflict: false };
   const [calibrating, setCalibrating] = useState(false);
   const [pressureOpen, setPressureOpen] = useState(false);
-  const printerBusy = calibrating || !!status?.motion_locked ||
-    ["printing", "starting", "pausing", "paused", "resuming", "finishing", "cancelling"]
-      .some((state) => status?.job?.state?.toLowerCase?.().includes(state));
+  const printerBusy = calibrating || isPrinterBusy(status);
   const [fullscreen, setFullscreen] = useState<GcodePreview3D | null>(null);
   const [gcode3dView, setGcode3dView] = useState<Gcode3DView>({ yaw: -0.7, pitch: 1.0, zoom: 1, panX: 0, panY: 0 });
   const [loadingPreview, setLoadingPreview] = useState(false);
@@ -93,10 +94,10 @@ export default function Paint({
   const { confirm, ConfirmNode } = useConfirm();
   const { prompt, PromptNode } = usePrompt();
 
-  const fail = (e: any) => toast.error(String(e.message ?? e));
-  const failPlot = (e: any) => {
-    setPlotError(String(e.message ?? e));
-    if (e.status === 409) { reloadIndex(); setCalibrationReload((n) => n + 1); }
+  const fail = (e: unknown) => toast.error(errorMessage(e));
+  const failPlot = (e: unknown) => {
+    setPlotError(errorMessage(e));
+    if (e instanceof ApiError && e.status === 409) { reloadIndex(); setCalibrationReload((n) => n + 1); }
   };
   useEffect(() => setPlotError(null), [page?.id]);
   const warnMissingGlyphs = (missing: string[]) => {
@@ -680,9 +681,7 @@ export default function Paint({
       {infoOpen && <PaintInfoModal onClose={() => setInfoOpen(false)} />}
       {visible && pressureOpen && <CalibrationPressureDialog
         projectId={index.project?.id} profileId={index.project?.profileId}
-        canMove={!!status?.online && !busy && !sending && !status?.motion_locked &&
-          !["printing", "starting", "pausing", "paused", "resuming", "finishing", "cancelling"]
-            .some((state) => status?.job?.state?.toLowerCase?.().includes(state))}
+        canMove={!!status?.online && !busy && !sending && !isPrinterBusy(status)}
         onClose={() => setPressureOpen(false)} onBusyChange={setCalibrating} onAction={onAction} />}
       {fullscreen && <Gcode3DOverlay data={fullscreen} viewState={gcode3dView} onViewChange={setGcode3dView} onClose={() => setFullscreen(null)} />}
       {coloringOpen && cal && renderProfile && (

@@ -34,6 +34,7 @@ from plotter.printer.serial.transport import (
     default_transport,
     prepare_lines,
 )
+from plotter.printer.types import JobOutcome, PrinterJob, PrinterJobResult, PrinterStatus
 
 log = logging.getLogger(__name__)
 
@@ -77,7 +78,7 @@ class SerialWorker:
         self._job_lines: list[str] = []
         self._job_name: str | None = None
         self._job_id: str | None = None
-        self._last_job: dict | None = None
+        self._last_job: PrinterJobResult | None = None
         self._job_calibration = None
         self._job_index = 0
         self._job_generation = 0
@@ -99,7 +100,7 @@ class SerialWorker:
 
     # -- public API (called from request threads) --------------------------
 
-    def status(self) -> dict:
+    def status(self) -> PrinterStatus:
         with self._lock:
             if not self._online:
                 return {
@@ -108,7 +109,7 @@ class SerialWorker:
                     "online": False,
                     "error": self._last_error,
                 }
-            job = None
+            job: PrinterJob | None = None
             if self._state in (LOADED, PRINTING, PAUSED):
                 total = len(self._job_lines)
                 completion = round(self._job_index / total * 100, 1) if total else None
@@ -379,7 +380,7 @@ class SerialWorker:
         return Command(self._return_from_pause_lines(position, cal),
                        purpose="resume", generation=generation)
 
-    def _record_job_result(self, outcome: str) -> None:
+    def _record_job_result(self, outcome: JobOutcome) -> None:
         # Called under _lock. Keep the terminal result after the job disappears,
         # so a polling client cannot mistake cancellation for successful completion.
         if self._job_id and self._job_name:

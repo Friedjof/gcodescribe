@@ -1,24 +1,22 @@
 import { useEffect, useState } from "react";
+import { errorMessage } from "../api/errors";
+import type { PrinterStatus } from "../api/types/printer";
 import { api } from "../api";
 import { useI18n } from "../i18n";
 import { useToasts } from "./Toasts";
+import { hasActiveJob, printerJobState } from "../lib/printerState";
 
-const STOPPABLE_STATES = ["printing", "starting", "pausing", "paused", "resuming", "finishing", "cancelling"];
-
-export function canStopPlot(status: any): boolean {
-  const state = String(status?.job?.state ?? "").toLowerCase();
-  return STOPPABLE_STATES.some((active) => state.includes(active));
-}
+export const canStopPlot = hasActiveJob;
 
 export default function QuickStopPlot({ status, onAction }: {
-  status: any;
+  status: PrinterStatus | null;
   onAction: () => void | Promise<void>;
 }) {
   const { t } = useI18n();
   const toast = useToasts();
   const [pending, setPending] = useState(false);
   const [requested, setRequested] = useState(false);
-  const cancelling = String(status?.job?.state ?? "").toLowerCase().includes("cancelling");
+  const cancelling = printerJobState(status).includes("cancelling");
 
   // Allow a retry if the printer still reports an active job after the request.
   useEffect(() => {
@@ -35,7 +33,7 @@ export default function QuickStopPlot({ status, onAction }: {
       setRequested(true);
       toast.success(t("plot.quickStopped"));
     } catch (error) {
-      toast.error(String((error as Error)?.message ?? error));
+      toast.error(errorMessage(error));
     } finally {
       setPending(false);
       void Promise.resolve().then(onAction).catch(() => {});

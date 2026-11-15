@@ -16,17 +16,17 @@ afterEach(cleanup);
 describe("quick plot stop", () => {
   it.each(["Printing", "Starting", "Pausing", "Paused", "Resuming", "Finishing", "Cancelling"])(
     "is available while the job is %s", (state) => {
-      expect(canStopPlot({ job: { state } })).toBe(true);
+      expect(canStopPlot({ configured: true, job: { state } })).toBe(true);
     }
   );
 
   it("is hidden for an idle or missing job", () => {
-    expect(canStopPlot({ job: { state: "Operational" } })).toBe(false);
-    expect(canStopPlot({ job: null })).toBe(false);
+    expect(canStopPlot({ configured: true, job: { state: "Operational" } })).toBe(false);
+    expect(canStopPlot({ configured: true, job: null })).toBe(false);
   });
 
   it("does not send a second request while cancellation is already underway", () => {
-    render(<QuickStopPlot status={{ job: { state: "Cancelling" } }} onAction={vi.fn()} />);
+    render(<QuickStopPlot status={{ configured: true, job: { state: "Cancelling" } }} onAction={vi.fn()} />);
     const button = screen.getByRole("button", { name: "plot.quickStopping" });
     expect(button).toBeDisabled();
     fireEvent.click(button);
@@ -37,7 +37,7 @@ describe("quick plot stop", () => {
     let resolveCommand!: (value: unknown) => void;
     mocks.jobCommand.mockReturnValue(new Promise((resolve) => { resolveCommand = resolve; }));
     const onAction = vi.fn();
-    render(<QuickStopPlot status={{ job: { state: "Printing" } }} onAction={onAction} />);
+    render(<QuickStopPlot status={{ configured: true, job: { state: "Printing" } }} onAction={onAction} />);
 
     fireEvent.click(screen.getByRole("button", { name: "plot.quickStop" }));
     expect(mocks.jobCommand).toHaveBeenCalledExactlyOnceWith("cancel");
@@ -52,7 +52,7 @@ describe("quick plot stop", () => {
   it("allows another attempt when cancellation fails", async () => {
     mocks.jobCommand.mockRejectedValueOnce(new Error("Printer unavailable"));
     const onAction = vi.fn();
-    render(<QuickStopPlot status={{ job: { state: "Paused" } }} onAction={onAction} />);
+    render(<QuickStopPlot status={{ configured: true, job: { state: "Paused" } }} onAction={onAction} />);
 
     fireEvent.click(screen.getByRole("button", { name: "plot.quickStop" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "plot.quickStop" })).toBeEnabled());

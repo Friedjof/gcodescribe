@@ -1,15 +1,16 @@
 import { useEffect, useState } from "react";
+import { errorMessage } from "../../api/errors";
 import { api, type SerialPortCandidate } from "../../api";
 import { useArrowKeys } from "../../hooks/index";
 import { useI18n } from "../../i18n";
 import Segmented from "../../components/Segmented";
 import { useToasts } from "../../components/Toasts";
+import type { PrinterBackendId, PrinterBackendInfo, PrinterStatus } from "../../api/types/printer";
+import { isPrinterBusy, isManualMotionLocked, isPaused, isPrinting, printerProgress } from "../../lib/printerState";
 
-type Backend = { id: string; configured: boolean; online: boolean; active: boolean };
-
-function PrinterOverview({ status, onAction }: { status: any; onAction: () => void }) {
+function PrinterOverview({ status, onAction }: { status: PrinterStatus | null; onAction: () => void }) {
   const { t } = useI18n();
-  const [backends, setBackends] = useState<Backend[]>([]);
+  const [backends, setBackends] = useState<PrinterBackendInfo[]>([]);
   const [busy, setBusy] = useState(false);
 
   const load = () => api.listBackends().then(setBackends).catch(() => {});
@@ -23,11 +24,9 @@ function PrinterOverview({ status, onAction }: { status: any; onAction: () => vo
   if (configured.length === 0) return null;
 
   const job = status?.job;
-  const jobRunning = ["printing", "paused"].some((s) =>
-    job?.state?.toLowerCase?.().includes(s)
-  );
+  const jobRunning = isPrinterBusy(status);
 
-  const activate = (id: string) => {
+  const activate = (id: PrinterBackendId) => {
     if (busy) return;
     setBusy(true);
     api
@@ -41,14 +40,13 @@ function PrinterOverview({ status, onAction }: { status: any; onAction: () => vo
   };
 
   // Live activity is only known for the active backend (single-active model).
-  const activity = (b: Backend): string => {
+  const activity = (b: PrinterBackendInfo): string => {
     if (!b.active) return b.online ? t("printer.state.ready") : t("printer.state.offline");
-    const state = job?.state?.toLowerCase?.() ?? "";
-    if (state.includes("printing")) {
-      const pct = job?.progress?.completion;
+    if (isPrinting(status)) {
+      const pct = printerProgress(status);
       return t("printer.printingPct", { pct: pct != null ? pct.toFixed(0) : "?" });
     }
-    if (state.includes("paused")) return t("printer.paused");
+    if (isPaused(status)) return t("printer.paused");
     return t("printer.idle");
   };
 
@@ -124,7 +122,7 @@ export default function Control({
   status,
   onAction,
 }: {
-  status: any;
+  status: PrinterStatus | null;
   onAction: () => void;
 }) {
   const { t } = useI18n();
@@ -135,17 +133,15 @@ export default function Control({
 
   const online = status?.online;
   const job = status?.job;
-  const progress = job?.progress?.completion;
-  const printing = job?.state?.toLowerCase?.().includes("printing");
-  const paused = job?.state?.toLowerCase?.().includes("paused");
-  const motionLocked = status?.motion_locked ||
-    ["printing", "starting", "pausing", "resuming", "finishing", "cancelling"]
-      .some((state) => job?.state?.toLowerCase?.().includes(state));
+  const progress = printerProgress(status);
+  const printing = isPrinting(status);
+  const paused = isPaused(status);
+  const motionLocked = isManualMotionLocked(status);
   const [refreshing, setRefreshing] = useState(false);
 
-  const run = (fn: () => Promise<any>) => {
+  const run = (fn: () => Promise<unknown>) => {
     setErr(null);
-    return fn().then(onAction).catch((e) => setErr(String(e.message)));
+    return fn().then(onAction).catch((e) => setErr(errorMessage(e)));
   };
 
   useEffect(() => {

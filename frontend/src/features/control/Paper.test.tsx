@@ -89,7 +89,7 @@ afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 async function setup(status = { online: true }) {
   const onAction = vi.fn();
-  const view = render(<Paper status={status} onAction={onAction} />);
+  const view = render(<Paper status={{ configured: true, ...status }} onAction={onAction} />);
   await screen.findByRole("button", { name: /paper.positions.title/ });
   await waitFor(() => expect(screen.getByRole("button", { name: "paper.clickMove" })).toBeEnabled());
   const svg = view.container.querySelector("svg")!;
@@ -224,8 +224,8 @@ it("discards targets on tab changes and keeps the user's click-to-move preferenc
   openPositions();
   targetClick(svg);
   await waitFor(() => expect(screen.getByRole("button", { name: "paper.positions.capture P" })).toBeEnabled());
-  rerender(<Paper status={{ online: true }} onAction={onAction} visible={false} />);
-  rerender(<Paper status={{ online: true }} onAction={onAction} visible={true} />);
+  rerender(<Paper status={{ configured: true, online: true }} onAction={onAction} visible={false} />);
+  rerender(<Paper status={{ configured: true, online: true }} onAction={onAction} visible={true} />);
   await screen.findByRole("button", { name: /paper.positions.title/ });
   expect(screen.getByRole("button", { name: /paper.positions.title/ })).toHaveAttribute("aria-expanded", "false");
   expect(screen.getByRole("button", { name: "paper.clickMove" })).toHaveAttribute("aria-pressed", "true");
@@ -234,7 +234,7 @@ it("discards targets on tab changes and keeps the user's click-to-move preferenc
 
 it("keeps special positions readable but blocks motion and capture before homing", async () => {
   head = { ...head, homed: false, homed_axes: [] };
-  const { container } = render(<Paper status={{ online: true }} onAction={vi.fn()} />);
+  const { container } = render(<Paper status={{ configured: true, online: true }} onAction={vi.fn()} />);
   await screen.findByRole("button", { name: /paper.positions.title/ });
   openPositions();
   expect(screen.getByText("paper.positions.stored")).toBeInTheDocument();
@@ -306,7 +306,7 @@ it("clears the target when the active profile changes while the step remains ope
 
 it.each(["P", "C"])("explicitly homes then visits saved %s, including before homing", async (marker) => {
   head = { ...head, homed: false, homed_axes: [] };
-  render(<Paper status={{ online: true }} onAction={vi.fn()} />);
+  render(<Paper status={{ configured: true, online: true }} onAction={vi.fn()} />);
   await screen.findByRole("button", { name: /paper.positions.title/ });
   openPositions();
   fireEvent.click(screen.getByRole("button", { name: new RegExp(`^${marker} `) }));
@@ -455,7 +455,7 @@ it("commits a complete bed dimension once instead of saving each keystroke", asy
 
 it("lets paper layout be edited before homing while keeping machine controls disabled", async () => {
   head = { ...head, homed: false, homed_axes: [] };
-  render(<Paper status={{ online: false }} onAction={vi.fn()} />);
+  render(<Paper status={{ configured: true, online: false }} onAction={vi.fn()} />);
   const corners = await screen.findByRole("button", { name: /paper.step3/ });
   expect(corners).toBeEnabled();
   fireEvent.click(corners);
