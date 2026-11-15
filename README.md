@@ -49,7 +49,7 @@ make dev-plain
 Download the `.deb` from the [release page](https://github.com/Friedjof/gcodescribe/releases/latest), then install and start the web application:
 
 ```sh
-sudo apt install ./gcodescribe_0.5.0_amd64.deb
+sudo apt install ./gcodescribe_0.5.1_amd64.deb
 gcodescribe-web
 ```
 
@@ -63,7 +63,7 @@ Open `http://localhost:8000`. The package requires Python 3.12 and provides the 
 - Create OSM map drawings with cached downloads and selectable stroke routing.
 - Control printers through OctoPrint or a serial connection, including pause/resume and configurable park and pen insertion positions.
 
-See the [0.5.0 release notes](docs/releases/0.5.0.md) for features, fixes and upgrade details.
+See the [0.5.1 release notes](docs/releases/0.5.1.md) for features, fixes and upgrade details.
 
 ## Build installation packages
 
