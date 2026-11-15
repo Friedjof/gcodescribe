@@ -1,0 +1,3 @@
+[D-BUS Service]
+Name=info.noweck.gcodescribe
+Exec=/app/bin/gcodescribe-desktop --gapplication-service

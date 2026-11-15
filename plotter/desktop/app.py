@@ -18,6 +18,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 import gi
 
@@ -26,6 +27,8 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("WebKit", "6.0")
 
 from gi.repository import Gdk, Gio, GLib, Gtk, WebKit  # noqa: E402
+
+from .notifications import DesktopNotifications  # noqa: E402
 
 log = logging.getLogger(__name__)
 
@@ -171,7 +174,13 @@ class MainWindow(Gtk.ApplicationWindow):
         self.set_default_size(1400, 900)
 
         # WebView — kiosk-mode: no browser chrome, no escape hatches
-        self._wv = WebKit.WebView()
+        context = WebKit.WebContext.new()
+        self._notifications = DesktopNotifications(
+            application, context, application._url,
+            Path(application._data_dir()) / "desktop_notifications.json",
+        )
+        self._wv = WebKit.WebView(web_context=context)
+        self._notifications.attach(self._wv, self)
         wv_settings = self._wv.get_settings()
         wv_settings.set_enable_developer_extras(False)
         wv_settings.set_javascript_can_open_windows_automatically(False)
@@ -253,6 +262,9 @@ class App(Gtk.Application):
 
     def do_startup(self) -> None:
         Gtk.Application.do_startup(self)
+        show_window = Gio.SimpleAction.new("show-window", None)
+        show_window.connect("activate", lambda *_: self.activate())
+        self.add_action(show_window)
         self._launch_backend()
 
     def do_activate(self) -> None:

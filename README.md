@@ -76,3 +76,18 @@ make deb
 ```
 
 This builds in Docker and writes the `.deb` to the repository root. `make rpm`, `make appimage` and `make packages` build the other distribution formats.
+
+## Plot notifications
+
+Click **Notify** in the header to enable notifications. Once enabled, the button
+sends a test notification so you can check delivery.
+
+- **Debian/RPM/AppImage web application:** notifications are delivered by your
+  browser. Use `localhost` or HTTPS and allow notifications in the browser and
+  desktop settings.
+- **Flatpak desktop application:** approve the app's notification prompt.
+  Messages use GCodeScribe's desktop identity; clicking one opens its window.
+  The permission is remembered across restarts.
+
+Keep the app or browser tab open while plotting; minimizing it is supported.
+System notification settings and Do Not Disturb can suppress pop-ups.

@@ -9,3 +9,5 @@ Type=Application
 Categories=Graphics;Engineering;
 Keywords=plotter;gcode;svg;pdf;drawing;pen;
 StartupNotify=true
+X-GNOME-UsesNotifications=true
+DBusActivatable=true
