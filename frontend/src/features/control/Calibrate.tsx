@@ -4,6 +4,8 @@ import CommittedNumberField from "../../components/CommittedNumberField";
 import { useI18n } from "../../i18n";
 import { useConfirm } from "../../components/dialogs";
 import { useToasts } from "../../components/Toasts";
+import { useProjectCalibration } from "../../state/ProjectCalibrationContext";
+import { errorMessage, isAbortError } from "../../api/errors";
 
 const FIELDS: { key: keyof Calibration; labelKey: string; unit: string; groupKey: string }[] = [
   { key: "bed_width", labelKey: "calibrate.bedWidth", unit: "mm", groupKey: "calibrate.groupMachine" },
@@ -30,6 +32,9 @@ const FIELDS: { key: keyof Calibration; labelKey: string; unit: string; groupKey
 export default function Calibrate() {
   const { t } = useI18n();
   const toast = useToasts();
+  const { profileRevision, profileChanged } = useProjectCalibration();
+  const read = useRef<AbortController | null>(null);
+  const draftRevision = useRef(0);
   const detailRef = useRef<HTMLElement>(null);
   const [profiles, setProfiles] = useState<CalibrationProfileSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -40,7 +45,7 @@ export default function Calibrate() {
   const [speedTesting, setSpeedTesting] = useState(false);
   const { confirm, ConfirmNode } = useConfirm();
 
-  const fail = (e: Error) => toast.error(String(e.message));
+  const fail = (e: unknown) => { if (!isAbortError(e)) toast.error(errorMessage(e)); };
 
   const loadProfiles = () =>
     api.listProfiles().then((list) => {
@@ -48,37 +53,40 @@ export default function Calibrate() {
       return list;
     });
 
-  const openProfile = (id: string) =>
-    api.getProfile(id).then((p) => {
-      setSelectedId(p.id);
-      setName(p.name);
-      setCal(p.calibration);
-      setDirty(false);
+  const openProfile = (id: string) => {
+    read.current?.abort();
+    const controller = new AbortController();
+    read.current = controller;
+    return api.getProfile(id, controller.signal).then(p => {
+      if (controller.signal.aborted) return;
+      draftRevision.current++;
+      setSelectedId(p.id); setName(p.name); setCal(p.calibration); setDirty(false);
     });
+  };
 
   useEffect(() => {
-    loadProfiles()
-      .then((list) => {
-        const active = list.find((p) => p.active) ?? list[0];
-        if (active) return openProfile(active.id);
-      })
-      .catch(fail);
+    let cancelled = false;
+    loadProfiles().then(list => {
+      if (cancelled) return;
+      const active = list.find(p => p.active) ?? list[0];
+      if (active) return openProfile(active.id);
+    }).catch(fail);
+    return () => { cancelled = true; read.current?.abort(); };
   }, []);
 
-  // Live-sync: pick up calibration changes made from Paper / LiveView without
-  // reloading the page.  Skip if the user has unsaved edits in this view.
+  // Persisted changes are shared; the editor's unsaved draft remains local.
   useEffect(() => {
-    const handle = () => {
-      if (dirty || !selectedId) return;
-      api.listProfiles().then(setProfiles).catch(() => {});
-      api.getProfile(selectedId).then((p) => {
-        setName(p.name);
-        setCal(p.calibration);
-      }).catch(() => {});
-    };
-    window.addEventListener("gcs:calibration-changed", handle);
-    return () => window.removeEventListener("gcs:calibration-changed", handle);
-  }, [selectedId, dirty]);
+    if (dirty || !selectedId || profileRevision === 0) return;
+    let cancelled = false;
+    const controller = new AbortController();
+    const revision = draftRevision.current;
+    loadProfiles().catch(fail);
+    api.getProfile(selectedId, controller.signal).then(p => {
+      if (cancelled || revision !== draftRevision.current) return;
+      setName(p.name); setCal(p.calibration);
+    }).catch(fail);
+    return () => { cancelled = true; controller.abort(); };
+  }, [profileRevision, selectedId, dirty]);
 
   if (!cal) return <div className="card">{t("calibrate.loading")}</div>;
 
@@ -111,18 +119,22 @@ export default function Calibrate() {
   };
 
   const set = (k: keyof Calibration, v: number | boolean) => {
+    read.current?.abort();
+    draftRevision.current++;
     setCal({ ...cal, [k]: v });
     setDirty(true);
   };
 
   const save = () => {
     if (!selectedId || focusInvalidInput()) return;
+    const revision = draftRevision.current;
     api
       .saveProfile(selectedId, { name, calibration: cal })
       .then((p) => {
-        setName(p.name);
-        setCal(p.calibration);
-        setDirty(false);
+        if (draftRevision.current === revision) {
+          setName(p.name); setCal(p.calibration); setDirty(false);
+        }
+        profileChanged(p.id);
         toast.success(t("profiles.saved"));
         return loadProfiles();
       })
@@ -133,6 +145,7 @@ export default function Calibrate() {
     api
       .activateProfile(id)
       .then((p) => {
+        profileChanged(p.id);
         toast.success(t("profiles.activated", { name: p.name }));
         return loadProfiles();
       })
@@ -142,7 +155,7 @@ export default function Calibrate() {
     if (!await confirmDiscard()) return;
     api
       .createProfile()
-      .then((p) => loadProfiles().then(() => openProfile(p.id)))
+      .then((p) => { profileChanged(p.id); return loadProfiles().then(() => openProfile(p.id)); })
       .catch(fail);
   };
 
@@ -150,7 +163,7 @@ export default function Calibrate() {
     if (!selectedId || !await confirmDiscard()) return;
     api
       .duplicateProfile(selectedId)
-      .then((p) => loadProfiles().then(() => openProfile(p.id)))
+      .then((p) => { profileChanged(p.id); return loadProfiles().then(() => openProfile(p.id)); })
       .catch(fail);
   };
 
@@ -158,7 +171,7 @@ export default function Calibrate() {
     if (!selectedId) return;
     api
       .archiveProfile(selectedId, archived)
-      .then(() => loadProfiles())
+      .then(() => { profileChanged(selectedId); return loadProfiles(); })
       .catch(fail);
   };
 
@@ -166,6 +179,7 @@ export default function Calibrate() {
     api
       .importProfile(file)
       .then(async (p) => {
+        profileChanged(p.id);
         toast.success(t("profiles.imported", { name: p.name }));
         await loadProfiles();
         if (await confirmDiscard()) openProfile(p.id);
@@ -176,6 +190,7 @@ export default function Calibrate() {
     api
       .importAllProfiles(file)
       .then((r) => {
+        profileChanged();
         toast.success(t("profiles.importedAll", { count: String(r.imported.length + r.replaced.length) }));
         return loadProfiles();
       })
@@ -185,6 +200,7 @@ export default function Calibrate() {
     api
       .importCalibration(file)
       .then(() => {
+        profileChanged();
         toast.success(t("calibrate.imported", { name: file.name }));
         // The XML import updates the *active* profile's calibration.
         return loadProfiles().then((list) => {
@@ -288,6 +304,8 @@ export default function Calibrate() {
                   type="text"
                   value={name}
                   onChange={(e) => {
+                    read.current?.abort();
+                    draftRevision.current++;
                     setName(e.target.value);
                     setDirty(true);
                   }}

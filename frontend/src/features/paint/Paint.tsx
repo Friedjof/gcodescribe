@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ApiError, errorMessage } from "../../api/errors";
+import { ApiError, errorMessage, isAbortError } from "../../api/errors";
 import type { PrinterStatus } from "../../api/types/printer";
 import { isPrinterBusy } from "../../lib/printerState";
-import { api, onAppEvent, type AppEvent, type Calibration, type GcodePreview3D, type Page, type PageIndex, type SceneObject, type ProfileRef } from "../../api";
+import { api, onAppEvent, type AppEvent, type GcodePreview3D, type Page, type PageIndex, type SceneObject } from "../../api";
 import PaintCanvas, { type Tool, type ViewRotation } from "./PaintCanvas";
 import MarkdownEditor from "../markdown/MarkdownEditor";
 import ProjectPagePanel from "./ProjectPagePanel";
@@ -39,6 +39,7 @@ import { useLatestCallbacks } from "../../hooks/useLatestCallbacks";
 import DelayedLoading from "../../components/DelayedLoading";
 import CalibrationPressureDialog from "../control/CalibrationPressureDialog";
 import { fitPageObjects } from "./lib/fitPage";
+import { useProjectCalibration } from "../../state/ProjectCalibrationContext";
 
 export default function Paint({
   visible = true,
@@ -54,12 +55,11 @@ export default function Paint({
   const { t } = useI18n();
   const toast = useToasts();
   const defaultText = t("paint.text");
-  const [cal, setCal] = useState<Calibration | null>(null);
-  const [renderProfile, setRenderProfile] = useState<ProfileRef | null>(null);
-  const [calibrationError, setCalibrationError] = useState<string | null>(null);
-  const [calibrationReload, setCalibrationReload] = useState(0);
-  const [index, setIndex] = useState<PageIndex | null>(null);
+  const { index, setIndex, profile, agentRevision, loading: calibrationLoading, error: calibrationError, refresh } = useProjectCalibration();
   const [page, setPage] = useState<Page | null>(null);
+  const projectMatches = !!page && page.projectId === index?.project?.id;
+  const renderProfile = projectMatches && !calibrationLoading ? profile : null;
+  const cal = projectMatches ? profile?.calibration ?? null : null;
   const [tool, setTool] = useState<Tool>("select");
   const [eraserBrush, setEraserBrush] = useState<EraserBrush>("small");
   const [fillStyle, setFillStyle] = useState<FillStyle>({ ...DEFAULT_VECTOR_STYLE.fill, enabled: true });
@@ -71,6 +71,7 @@ export default function Paint({
   const saveState = page ? editState(page.id) : { pending: false, error: undefined, conflict: false };
   const [calibrating, setCalibrating] = useState(false);
   const [pressureOpen, setPressureOpen] = useState(false);
+  useEffect(() => { setPressureOpen(false); }, [index?.project?.id, index?.project?.profileId]);
   const printerBusy = calibrating || isPrinterBusy(status);
   const [fullscreen, setFullscreen] = useState<GcodePreview3D | null>(null);
   const [gcode3dView, setGcode3dView] = useState<Gcode3DView>({ yaw: -0.7, pitch: 1.0, zoom: 1, panX: 0, panY: 0 });
@@ -94,10 +95,10 @@ export default function Paint({
   const { confirm, ConfirmNode } = useConfirm();
   const { prompt, PromptNode } = usePrompt();
 
-  const fail = (e: unknown) => toast.error(errorMessage(e));
+  const fail = (e: unknown) => { if (!isAbortError(e)) toast.error(errorMessage(e)); };
   const failPlot = (e: unknown) => {
     setPlotError(errorMessage(e));
-    if (e instanceof ApiError && e.status === 409) { reloadIndex(); setCalibrationReload((n) => n + 1); }
+    if (e instanceof ApiError && e.status === 409) { void refresh(true).catch(fail); }
   };
   useEffect(() => setPlotError(null), [page?.id]);
   const warnMissingGlyphs = (missing: string[]) => {
@@ -178,69 +179,35 @@ export default function Paint({
     if (v !== "select") setSelectedIds([]);
   };
 
-  const indexTimer = useRef<ReturnType<typeof setTimeout>>();
-  const reloadIndex = () => api.listPages().then(setIndex).catch(fail);
-  const refreshIndexSoon = () => { clearTimeout(indexTimer.current); indexTimer.current = setTimeout(reloadIndex, 200); };
-
+  const reloadIndex = () => refresh().catch(fail);
   const pageIdRef = useRef<string | null>(null);
+  const lastAgentRevision = useRef(0);
+  useEffect(() => { pageIdRef.current = page?.id ?? null; }, [page?.id]);
   useEffect(() => {
-    pageIdRef.current = page?.id ?? null;
-  }, [page?.id]);
-  useEffect(() => {
-    if (!visible) return;
-    api
-      .listPages()
-      .then((idx) => {
-        setIndex(idx);
-        const id = idx.activeId ?? idx.order[0]?.id;
-        if (id && id !== pageIdRef.current) {
-          ops.resetHistory();
-          setSelectedIds([]);
-          return api.getPage(id).then(setPage);
-        }
-      })
-      .catch(fail);
-  }, [visible]);
+    if (!visible || !index) return;
+    const id = index.activeId ?? index.order[0]?.id;
+    if (!id || (id === pageIdRef.current && projectMatches && lastAgentRevision.current === agentRevision)) return;
+    const controller = new AbortController();
+    api.getPage(id, controller.signal).then(next => {
+      if (controller.signal.aborted) return;
+      ops.resetHistory();
+      setSelectedIds([]);
+      setPage(next);
+      lastAgentRevision.current = agentRevision;
+    }).catch(fail);
+    return () => controller.abort();
+  }, [visible, index?.project?.id, agentRevision]);
 
-  // Live sync over the events WebSocket. `document` events (any UI/agent change)
-  // only refresh the page list so the open canvas's in-progress edits are never
-  // clobbered. A successful page-mutating MCP tool additionally pulls the active
-  // page so an agent's drawing shows up on the canvas immediately, following the
-  // page the agent left active.
+  // The shared context refreshes metadata and announces completed MCP changes.
+  // Ordinary document writes keep the canvas's in-progress edits intact.
   const liveHandlerRef = useRef<(event: AppEvent) => void>(() => {});
   liveHandlerRef.current = (event: AppEvent) => {
     if (event.type === "document") {
-      if (visible) refreshIndexSoon();
       if (event.action === "import" && event.pageId) refreshPage(event.pageId).catch(fail);
       return;
     }
-    if (visible && event.type === "mcp" && event.changed) {
-      api
-        .listPages()
-        .then((idx) => {
-          setIndex(idx);
-          const id = idx.activeId ?? idx.order[0]?.id;
-          if (!id) return;
-          return api
-            .getPage(id)
-            .then((p) => {
-              if (p.id !== pageIdRef.current) {
-                ops.resetHistory();
-                setSelectedIds([]);
-              }
-              setPage(p);
-            });
-        })
-        .catch(fail);
-    }
   };
   useEffect(() => onAppEvent((event) => liveHandlerRef.current(event)), []);
-  useEffect(() => {
-    const changed = () => { if (visible) refreshIndexSoon(); };
-    window.addEventListener("gcs:calibration-changed", changed);
-    return () => window.removeEventListener("gcs:calibration-changed", changed);
-  }, [visible]);
-
   useEffect(() => {
     const saved = (event: Event) => {
       const id = (event as CustomEvent<string>).detail;
@@ -253,24 +220,8 @@ export default function Paint({
       if (task.attached && task.target) void refreshPage(task.target.page_id).catch(fail);
     };
     window.addEventListener("gcs:asset-ready", imported);
-    return () => { window.removeEventListener("gcs:page-saved", saved); window.removeEventListener("gcs:asset-ready", imported); clearTimeout(indexTimer.current); };
+    return () => { window.removeEventListener("gcs:page-saved", saved); window.removeEventListener("gcs:asset-ready", imported); };
   }, []);
-
-  const calReqRef = useRef(0);
-  useEffect(() => {
-    if (!visible || !page || !index?.project || page.projectId !== index.project.id) return;
-    const token = ++calReqRef.current;
-    setRenderProfile(null);
-    setCalibrationError(null);
-    api.getProfile(index.project.profileId).then((profile) => {
-      if (calReqRef.current !== token) return;
-      setCal(profile.calibration);
-      setRenderProfile({ id: profile.id, name: profile.name, fingerprint: profile.fingerprint });
-    }).catch((error) => {
-      if (calReqRef.current === token) setCalibrationError(String(error.message ?? error));
-    });
-    return () => { if (calReqRef.current === token) calReqRef.current++; };
-  }, [visible, page?.id, page?.projectId, index?.project?.id, index?.project?.profileId, index?.activeProfile?.fingerprint, calibrationReload]);
 
   useLiveSource(live, {
     visible,
@@ -501,7 +452,7 @@ export default function Paint({
   });
   if (calibrationError) return <div className="card banner err" role="alert">
     <strong>Projektkalibrierung konnte nicht geladen werden</strong><p>{calibrationError}</p>
-    <button onClick={() => { setCalibrationError(null); setCalibrationReload((n) => n + 1); reloadIndex(); }}>Erneut laden</button>
+    <button onClick={() => { void refresh(true).catch(fail); }}>Erneut laden</button>
   </div>;
   if (!cal || !index || !page) return <DelayedLoading />;
 

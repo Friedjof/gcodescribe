@@ -5,7 +5,7 @@ import type { Obstacle } from "../types/calibration";
 const projectQuery = (projectId?: string) => projectId ? `?project_id=${encodeURIComponent(projectId)}` : "";
 
 export const paperClient = {
-  paper: (projectId?: string) => req<PaperState>(`/api/paper${projectQuery(projectId)}`),
+  paper: (projectId?: string, signal?: AbortSignal) => req<PaperState>(`/api/paper${projectQuery(projectId)}`, { signal }),
   setCorner: (corner: string, projectId?: string) =>
     req<PaperState>(`/api/paper/corner${projectQuery(projectId)}`, {
       method: "POST",

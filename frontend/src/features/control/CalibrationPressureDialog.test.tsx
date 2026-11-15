@@ -1,14 +1,20 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { ProjectCalibrationProvider } from "../../state/ProjectCalibrationContext";
+import type { ReactElement } from "react";
+import { cleanup, fireEvent, render as renderComponent, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import CalibrationPressureDialog from "./CalibrationPressureDialog";
+
+const render = (ui: ReactElement) => renderComponent(ui, { wrapper: ({ children }) =>
+  <ProjectCalibrationProvider active={false}>{children}</ProjectCalibrationProvider> });
 
 const mocks = vi.hoisted(() => ({
   activeProfile: vi.fn(), position: vi.fn(), saveProfile: vi.fn(),
   calibrationHeight: vi.fn(), homeAndMoveToPosition: vi.fn(), error: vi.fn(), success: vi.fn(),
 }));
+vi.mock("../../api/events", () => ({ onAppEvent: () => () => {} }));
 vi.mock("../../api", () => ({ api: mocks }));
 vi.mock("../../i18n", () => ({ useI18n: () => ({
   t: (key: string, vars?: Record<string, string>) => key + (vars?.z ? ` ${vars.z}` : vars?.marker ? ` ${vars.marker}` : ""),

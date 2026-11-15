@@ -5,7 +5,7 @@ import type { Job, GcodePreview3D } from "../types/jobs";
 import type { ProfileRef } from "../types/calibration";
 
 export const paintClient = {
-  listPages: () => req<PageIndex>("/api/pages"),
+  listPages: (signal?: AbortSignal) => req<PageIndex>("/api/pages", { signal }),
   listProjects: () => req<PaintProject[]>("/api/projects"),
   createProject: (name: string, templateProfileId?: string, profileId?: string) => req<PageIndex>("/api/projects", {
     method: "POST", headers: { "Content-Type": "application/json" },

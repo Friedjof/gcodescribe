@@ -5,6 +5,9 @@ export class ApiError extends Error {
   }
 }
 
+export const isAbortError = (error: unknown): boolean =>
+  !!error && typeof error === "object" && "name" in error && error.name === "AbortError";
+
 /** Catch values are unknown: network errors and HTTP failures share this path. */
 export function errorMessage(error: unknown, fallback = "Unknown error"): string {
   if (typeof error === "string" && error.trim()) return error;

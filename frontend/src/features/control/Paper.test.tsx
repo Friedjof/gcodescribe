@@ -1,10 +1,16 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { ProjectCalibrationProvider } from "../../state/ProjectCalibrationContext";
+import type { ReactElement } from "react";
+vi.mock("../../api/events", () => ({ onAppEvent: () => () => {} }));
+import { act, cleanup, fireEvent, render as renderComponent, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import Paper from "./Paper";
 import type { Calibration, Position, PositionKind } from "../../api";
+
+const render = (ui: ReactElement) => renderComponent(ui, { wrapper: ({ children }) =>
+  <ProjectCalibrationProvider active={true}>{children}</ProjectCalibrationProvider> });
 
 const mocks = vi.hoisted(() => ({
   paper: vi.fn(), position: vi.fn(), activeProfile: vi.fn(), listJobs: vi.fn(),
@@ -42,7 +48,7 @@ beforeEach(() => {
   mocks.activeProfile.mockImplementation(async () => ({ id: "active", name: "Active",
     fingerprint: "machine", calibration: { ...cal, origin_x: 1, pen_down_z: 4 } }));
   mocks.getProfile.mockImplementation(async (id) => ({ id, name: "Project profile",
-    fingerprint: "project", calibration: profileCalibration }));
+    fingerprint: id === "project-profile" ? "project" : id, calibration: profileCalibration }));
   mocks.listPages.mockResolvedValue({ project: { id: "project", name: "Project", profileId: "project-profile" },
     activeProfile: { id: "project-profile", name: "Project profile", fingerprint: "project",
       plot_width: 200, plot_height: 200, origin_x: 5, origin_y: 5 } });
@@ -107,8 +113,8 @@ it("uses the project's complete calibration even when the global profile differs
   profileCalibration = { ...cal, origin_x: 25, plot_width: 140, pen_down_z: 2 };
   await setup();
   expect(screen.getByText('paper.context Formelsammlungen Project profile')).toBeInTheDocument();
-  expect(mocks.getProfile).toHaveBeenCalledWith("project-profile");
-  expect(mocks.paper).toHaveBeenCalledWith("project");
+  expect(mocks.getProfile).toHaveBeenCalledWith("project-profile", expect.any(AbortSignal));
+  expect(mocks.paper).toHaveBeenCalledWith("project", expect.any(AbortSignal));
   expect(mocks.activeProfile).not.toHaveBeenCalled();
   expect(screen.queryByRole("img", { name: "A5 148 × 210 mm" })).not.toBeInTheDocument();
   expect(mocks.activateProfile).not.toHaveBeenCalled();
@@ -289,7 +295,7 @@ it("accepts previously defined positions on Next without carrying completion to 
   expect(step.querySelector(".badge")).toHaveClass("done");
   mocks.listPages.mockResolvedValue({ project: { id: "other-project", name: "Other", profileId: "other" },
     activeProfile: { id: "other", fingerprint: "other" } });
-  await waitFor(() => expect(step.querySelector(".badge")).not.toHaveClass("done"), { timeout: 3000 });
+  await waitFor(() => expect(screen.getByRole("button", { name: /paper.positions.title/ }).querySelector(".badge")).not.toHaveClass("done"), { timeout: 3000 });
 });
 
 it("clears the target when the active profile changes while the step remains open", async () => {
@@ -429,7 +435,8 @@ it("follows the main setup path without requiring custom positions or obstacles"
 });
 
 it("can keep the current plot area without capturing paper corners", async () => {
-  mocks.paper.mockResolvedValue({ calibration: { ...profileCalibration, paper_corners: {} }, rect: null });
+  profileCalibration = { ...profileCalibration, paper_corners: {} };
+  mocks.paper.mockResolvedValue({ calibration: profileCalibration, rect: null });
   await setup();
   fireEvent.click(screen.getByRole("button", { name: /paper.step3/ }));
   expect(screen.getByRole("button", { name: "paper.usePaperArea" })).toBeDisabled();

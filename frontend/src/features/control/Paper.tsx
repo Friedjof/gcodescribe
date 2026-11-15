@@ -9,7 +9,6 @@ import {
   type Job,
   type Obstacle,
   type PaperState,
-  type PaintProject,
   type Position,
 } from "../../api";
 import LiveView from "./LiveView";
@@ -23,6 +22,7 @@ import Segmented from "../../components/Segmented";
 import { useArrowKeys } from "../../hooks/index";
 import { useI18n } from "../../i18n";
 import { useToasts } from "../../components/Toasts";
+import { useProjectCalibration } from "../../state/ProjectCalibrationContext";
 
 const CORNERS: { id: string; labelKey: string }[] = [
   { id: "tl", labelKey: "paper.cornerTL" },
@@ -47,8 +47,15 @@ export default function Paper({
 }) {
   const { t } = useI18n();
   const toast = useToasts();
-  const [cal, setCal] = useState<Calibration | null>(null);
-  const [rect, setRect] = useState<[number, number, number, number] | null>(null);
+  const { index, profile, paper: paperState, loading, error, refresh, profileChanged } = useProjectCalibration();
+  const project = index?.project ?? null;
+  const projectId = project?.id;
+  const profileId = project?.profileId ?? null;
+  const profileName = profile?.name ?? null;
+  const [drag, setDrag] = useState<{ projectId?: string; base: Calibration; calibration: Calibration } | null>(null);
+  const cal = drag?.base === paperState?.calibration && drag?.projectId === projectId
+    ? drag?.calibration ?? null : paperState?.calibration ?? null;
+  const rect = paperState?.rect ?? null;
   const [pos, setPos] = useState<Position | null>(null);
   const [active, setActive] = useState<PaperStep | null>("home");
   const [xyStep, setXyStep] = useState(10);
@@ -60,11 +67,6 @@ export default function Paper({
   const [jobs, setJobs] = useState<Job[]>([]);
   const [previewJob, setPreviewJob] = useState("");
   const [preview, setPreview] = useState<GcodePreview | null>(null);
-  const [profileId, setProfileId] = useState<string | null>(null);
-  const [profileName, setProfileName] = useState<string | null>(null);
-  const [project, setProject] = useState<PaintProject | null>(null);
-  const [profileFingerprint, setProfileFingerprint] = useState<string | null>(null);
-  const projectId = project?.id;
   const [completedPositions, setCompletedPositions] = useState<Record<string, string>>({});
   const [pressureOpen, setPressureOpen] = useState(false);
   const [pressureBusy, setPressureBusy] = useState(false);
@@ -74,26 +76,19 @@ export default function Paper({
   const [obsCaptureCorner1, setObsCaptureCorner1] = useState<[number, number] | null>(null);
 
   const online = status?.online;
-  const motionLocked = isPrinterBusy(status);
+  const motionLocked = loading || isPrinterBusy(status);
   const homed = !!pos?.homed;
   const heightSaved = !!cal?.pen_calibrated;
 
-  const notifyCalibrationChanged = () => {
-    window.dispatchEvent(new CustomEvent("gcs:calibration-changed"));
-    if (!profileId) return;
-    api.getProfile(profileId).then((profile) => {
-      setProfileName(profile.name);
-      setProfileFingerprint(profile.fingerprint);
-    }).catch(() => {});
-  };
+  const notifyCalibrationChanged = () => profileChanged(profileId ?? undefined);
+  const applyPaperState = (_state: PaperState) => notifyCalibrationChanged();
 
-  const applyPaperState = (s: PaperState) => {
-    setCal(s.calibration);
-    setRect(s.rect);
-    setMargin(s.calibration.paper_margin ?? 0);
-    setObstacles(s.calibration.obstacles ?? []);
-    notifyCalibrationChanged();
-  };
+  useEffect(() => {
+    if (!paperState) return;
+    setMargin(paperState.calibration.paper_margin ?? 5);
+    setObstacles(paperState.calibration.obstacles ?? []);
+  }, [paperState]);
+  useEffect(() => { setPressureOpen(false); }, [projectId, profileId]);
 
   const refreshPosition = useCallback(
     () => api.position().then(setPos).catch(() => setPos(null)),
@@ -103,23 +98,7 @@ export default function Paper({
   useEffect(() => {
     if (!visible) return;
     let cancelled = false;
-    setCal(null);
-    setPressureOpen(false);
-    api.listPages().then(async (index) => {
-      if (!index.project) throw new Error("Kein aktives Projekt vorhanden.");
-      const selected = index.project;
-      const [profile, state] = await Promise.all([api.getProfile(selected.profileId), api.paper(selected.id)]);
-      if (cancelled) return;
-      setProject(selected);
-      setProfileId(profile.id);
-      setProfileName(profile.name);
-      setProfileFingerprint(profile.fingerprint);
-      setCal(state.calibration);
-      setRect(state.rect);
-      setObstacles(state.calibration.obstacles ?? []);
-      setMargin(state.calibration.paper_margin ?? 5);
-    }).catch((error) => { if (!cancelled) toast.error(errorMessage(error)); });
-    api.listJobs().then(setJobs).catch(() => {});
+    api.listJobs().then(jobs => { if (!cancelled) setJobs(jobs); }).catch(() => {});
     return () => { cancelled = true; };
   }, [visible]);
 
@@ -143,7 +122,7 @@ export default function Paper({
     active: visible && positionsOpen, cal, pos, profileId, projectId,
     canMove: !!online && !motionLocked && !pressureBusy,
     onPosition: setPos,
-    onCalibration: (updated) => { setCal(updated); notifyCalibrationChanged(); },
+    onCalibration: notifyCalibrationChanged,
     onAction,
   });
   const canMove = online && !motionLocked && !positions.busy && !pressureBusy;
@@ -152,32 +131,6 @@ export default function Paper({
     if (!visible && active === "positions") setActive(null);
     if (!visible) setPressureOpen(false);
   }, [visible, active]);
-
-  // Follow the project's calibration even when the global printer profile differs.
-  useEffect(() => {
-    if (!visible || !projectId || !profileId) return;
-    let cancelled = false;
-    const id = setInterval(() => {
-      api.listPages().then(async (index) => {
-        if (cancelled || !index.project) return;
-        const selected = index.project;
-        if (selected.id === projectId && selected.profileId === profileId
-            && index.activeProfile?.fingerprint === profileFingerprint) return;
-        const [profile, state] = await Promise.all([api.getProfile(selected.profileId), api.paper(selected.id)]);
-        if (cancelled) return;
-        setProject(selected);
-        setProfileId(profile.id);
-        setProfileName(profile.name);
-        setProfileFingerprint(profile.fingerprint);
-        setCal(state.calibration);
-        setRect(state.rect);
-        setMargin(state.calibration.paper_margin ?? 5);
-        setObstacles(state.calibration.obstacles ?? []);
-        setPressureOpen(false);
-      }).catch(() => {});
-    }, 2000);
-    return () => { cancelled = true; clearInterval(id); };
-  }, [visible, projectId, profileId, profileFingerprint]);
 
   const jogXY = (x: number, y: number) => run(() => api.jog(x * xyStep, y * xyStep, 0, { projectId }));
   const jogZ = (dz: number) => run(() => api.jog(0, 0, dz * zStep, { projectId }));
@@ -196,6 +149,8 @@ export default function Paper({
   );
   const kbd = (dir: string) => (pressed === dir ? " kbd-active" : "");
 
+  if (error) return <div className="card banner err" role="alert"><p>{error}</p>
+    <button onClick={() => { void refresh(true).catch(fail); }}>Erneut laden</button></div>;
   if (!cal) return <div className="card">{t("common.loading")}</div>;
 
   const homeAll = () =>
@@ -206,7 +161,6 @@ export default function Paper({
   const savePenHeight = (which: "up" | "down") =>
     api.penFromPosition(which, projectId)
       .then((c) => {
-        setCal(c);
         notifyCalibrationChanged();
         toast.success(
           which === "down"
@@ -221,12 +175,12 @@ export default function Paper({
       which === "down"
         ? { pen_down_z: z, pen_calibrated: true }
         : { pen_up_z: z };
-    api.saveCalibration(updates, projectId).then((c) => { setCal(c); notifyCalibrationChanged(); }).catch(fail);
+    api.saveCalibration(updates, projectId).then(() => { notifyCalibrationChanged(); }).catch(fail);
   };
 
   const saveBedDimension = (field: "bed_width" | "bed_height", val: number) => {
     if (val < 10) return;
-    api.saveCalibration({ [field]: val }, projectId).then((c) => { setCal(c); notifyCalibrationChanged(); }).catch(fail);
+    api.saveCalibration({ [field]: val }, projectId).then(() => { notifyCalibrationChanged(); }).catch(fail);
   };
 
   const capture = (corner: string) =>
@@ -261,14 +215,10 @@ export default function Paper({
 
   // Corner drag handlers (no machine movement)
   const handleDragCorner = (corner: string, x: number, y: number) => {
-    setCal((prev) =>
-      prev
-        ? {
-            ...prev,
-            paper_corners: { ...prev.paper_corners, [corner]: [x, y] as [number, number] },
-          }
-        : prev
-    );
+    if (!cal || !paperState) return;
+    setDrag({ projectId, base: paperState.calibration, calibration: {
+      ...cal, paper_corners: { ...cal.paper_corners, [corner]: [x, y] },
+    } });
   };
   const handleDropCorner = (corner: string, x: number, y: number) => {
     api.setCornerAt(corner, x, y, projectId).then(applyPaperState).catch(fail);
@@ -316,7 +266,7 @@ export default function Paper({
       {visible && pressureOpen && <CalibrationPressureDialog canMove={!!online && !motionLocked && !positions.busy}
         projectId={projectId} profileId={profileId ?? undefined}
         onClose={() => setPressureOpen(false)} onBusyChange={setPressureBusy}
-        onCalibration={(updated) => { setCal(updated); notifyCalibrationChanged(); }} onPosition={setPos} onAction={onAction} />}
+        onPosition={setPos} onAction={onAction} />}
       {/* ── Left: Wizard ────────────────────────────────────────── */}
       <section className="card paper-wizard-panel">
         <h2>{t("paper.title")}</h2>

@@ -1,10 +1,16 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render as renderComponent, screen, waitFor } from "@testing-library/react";
+import { ProjectCalibrationProvider, useProjectCalibration } from "../../state/ProjectCalibrationContext";
+import type { ReactElement } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import Calibrate from "./Calibrate";
 
+const render = (ui: ReactElement) => renderComponent(ui, { wrapper: ({ children }) =>
+  <ProjectCalibrationProvider active={false}>{children}</ProjectCalibrationProvider> });
+
 const mocks = vi.hoisted(() => ({ listProfiles: vi.fn(), getProfile: vi.fn(), speedTest: vi.fn(),
   saveProfile: vi.fn(), confirm: vi.fn(), createProfile: vi.fn(), duplicateProfile: vi.fn(), success: vi.fn(), error: vi.fn() }));
+vi.mock("../../api/events", () => ({ onAppEvent: () => () => {} }));
 vi.mock("../../api", () => ({ api: mocks }));
 vi.mock("../../i18n", () => ({ useI18n: () => ({ t: (key: string) => key }) }));
 vi.mock("../../components/Toasts", () => ({ useToasts: () => ({ success: mocks.success, error: mocks.error }) }));
@@ -67,4 +73,44 @@ it("keeps invalid numeric edits out of saves and physical movement tests", async
   fireEvent.click(screen.getByRole("button", { name: "calibrate.speedTestButton" }));
   expect(mocks.saveProfile).not.toHaveBeenCalled();
   expect(mocks.speedTest).not.toHaveBeenCalled();
+});
+
+function ExternalChange() {
+  const { profileChanged } = useProjectCalibration();
+  return <button onClick={() => profileChanged("active")}>External profile update</button>;
+}
+
+it("preserves an unsaved profile draft when another view reports calibration changes", async () => {
+  render(<><Calibrate /><ExternalChange /></>);
+  const name = await screen.findByRole("textbox", { name: "profiles.name" });
+  fireEvent.change(name, { target: { value: "My unsaved draft" } });
+  const calls = mocks.getProfile.mock.calls.length;
+  fireEvent.click(screen.getByRole("button", { name: "External profile update" }));
+  expect((name as HTMLInputElement).value).toBe("My unsaved draft");
+  expect(mocks.getProfile).toHaveBeenCalledTimes(calls);
+});
+
+it("refreshes a clean editor after another view reports calibration changes", async () => {
+  render(<><Calibrate /><ExternalChange /></>);
+  const name = await screen.findByRole("textbox", { name: "profiles.name" });
+  const original = await mocks.getProfile.mock.results[0].value;
+  mocks.getProfile.mockResolvedValue({ ...original, name: "Updated elsewhere" });
+  fireEvent.click(screen.getByRole("button", { name: "External profile update" }));
+  await waitFor(() => expect((name as HTMLInputElement).value).toBe("Updated elsewhere"));
+});
+
+it("does not replace edits made while an earlier save is still pending", async () => {
+  render(<Calibrate />);
+  const name = await screen.findByRole("textbox", { name: "profiles.name" });
+  const original = await mocks.getProfile.mock.results[0].value;
+  let resolve!: (profile: unknown) => void;
+  mocks.saveProfile.mockReturnValue(new Promise(done => { resolve = done; }));
+  fireEvent.change(name, { target: { value: "Saved draft" } });
+  fireEvent.click(screen.getByRole("button", { name: /common.save/ }));
+  await waitFor(() => expect(mocks.saveProfile).toHaveBeenCalledOnce());
+  fireEvent.change(name, { target: { value: "Newer draft" } });
+  resolve({ ...original, name: "Saved draft" });
+  await waitFor(() => expect(mocks.success).toHaveBeenCalledWith("profiles.saved"));
+  expect((name as HTMLInputElement).value).toBe("Newer draft");
+  expect((screen.getByRole("button", { name: /common.save/ }) as HTMLButtonElement).disabled).toBe(false);
 });

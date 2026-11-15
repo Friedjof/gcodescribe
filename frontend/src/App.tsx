@@ -21,6 +21,7 @@ import { useI18n } from "./i18n";
 
 import BackgroundTasks from "./components/BackgroundTasks";
 import DelayedLoading from "./components/DelayedLoading";
+import { ProjectCalibrationProvider } from "./state/ProjectCalibrationContext";
 
 type Tab = "paint" | "games" | "gallery" | "ai" | "convert" | "paper" | "calibrate" | "control" | "font";
 
@@ -120,6 +121,7 @@ function AdminApp() {
   ];
 
   return (
+    <ProjectCalibrationProvider active={tab === "paint" || tab === "paper"}>
     <div className={`app tab-${tab}`}>
       <header>
         <h1>
@@ -199,5 +201,6 @@ function AdminApp() {
         {tab === "control" && <Suspense fallback={<DelayedLoading />}><Control status={status} onAction={refreshStatus} /></Suspense>}
       </main>
     </div>
+    </ProjectCalibrationProvider>
   );
 }

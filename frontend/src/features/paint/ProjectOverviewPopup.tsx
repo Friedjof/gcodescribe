@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useProjectCalibration } from "../../state/ProjectCalibrationContext";
 import { api, type Calibration, type CalibrationProfile, type CalibrationProfileSummary, type PageIndex, type PaintProject } from "../../api";
 import Modal from "../../components/Modal";
 import PageThumbnail from "./PageThumbnail";
@@ -36,6 +37,7 @@ export default function ProjectOverviewPopup({ activeId, movePageId, onClose, on
   onRefresh: () => Promise<unknown>;
   confirm: (message: string) => Promise<boolean>;
 }) {
+  const { profileChanged } = useProjectCalibration();
   const [projects, setProjects] = useState<PaintProject[]>([]);
   const [profiles, setProfiles] = useState<CalibrationProfileSummary[]>([]);
   const [mode, setMode] = useState<"list" | "create" | "settings">("list");
@@ -130,6 +132,7 @@ export default function ProjectOverviewPopup({ activeId, movePageId, onClose, on
     }
     await api.updateProject(selected.id, { name: name.trim() || selected.name,
       ...(profile.id !== selected.profileId ? { profileId: profile.id } : {}) });
+    profileChanged(profile.id);
     await load(); await onRefresh(); setMode("list");
   });
   const archive = (p: PaintProject) => run(async () => {

@@ -4,6 +4,7 @@ import { api, type Calibration, type CalibrationProfile, type Position } from ".
 import Modal from "../../components/Modal";
 import { useToasts } from "../../components/Toasts";
 import { useI18n } from "../../i18n";
+import { useProjectCalibration } from "../../state/ProjectCalibrationContext";
 
 /** Manual insertion height for the supplied project or the active printer profile. */
 export default function CalibrationPressureDialog({ canMove, onClose, onBusyChange, onPosition, onCalibration, onAction, projectId, profileId }: {
@@ -18,6 +19,7 @@ export default function CalibrationPressureDialog({ canMove, onClose, onBusyChan
 }) {
   const { t } = useI18n();
   const toast = useToasts();
+  const { profileChanged } = useProjectCalibration();
   const inputId = useId();
   const [profile, setProfile] = useState<CalibrationProfile | null>(null);
   const [position, setPosition] = useState<Position | null>(null);
@@ -69,7 +71,7 @@ export default function CalibrationPressureDialog({ canMove, onClose, onBusyChan
     const updated = await api.saveProfile(profile!.id, { calibration: { calibration_pressure_offset: offset } });
     setProfile(updated);
     onCalibration?.(updated.calibration);
-    window.dispatchEvent(new CustomEvent("gcs:calibration-changed"));
+    profileChanged(updated.id);
   };
   const moved = (pos: Position) => {
     setPosition(pos);

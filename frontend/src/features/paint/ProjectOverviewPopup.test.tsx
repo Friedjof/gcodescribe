@@ -1,11 +1,17 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render as renderComponent, screen, waitFor, within } from "@testing-library/react";
+import { ProjectCalibrationProvider } from "../../state/ProjectCalibrationContext";
+import type { ReactElement } from "react";
 import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import ProjectOverviewPopup from "./ProjectOverviewPopup";
 
+const render = (ui: ReactElement) => renderComponent(ui, { wrapper: ({ children }) =>
+  <ProjectCalibrationProvider active={false}>{children}</ProjectCalibrationProvider> });
+
 const calls = vi.hoisted(() => ({ listProjects: vi.fn(), listProfiles: vi.fn(), activateProject: vi.fn(),
   getProfile: vi.fn(), saveProfile: vi.fn(), updateProject: vi.fn(), createProject: vi.fn() }));
+vi.mock("../../api/events", () => ({ onAppEvent: () => () => {} }));
 vi.mock("../../api", () => ({ api: calls }));
 vi.mock("../../i18n", () => ({ useI18n: () => ({ t: (key: string) => key }) }));
 afterEach(cleanup);
