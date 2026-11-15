@@ -64,6 +64,9 @@ async def publish_stream(websocket: WebSocket, session_id: str) -> None:
             if kind in {"hello", "snapshot"}:
                 await manager.update_snapshot(session, message)
                 await manager.relay_to_viewers(session, message)
+            elif kind == "scene-patch":
+                if await manager.update_delta(session, message):
+                    await manager.relay_to_viewers(session, message)
             elif kind == "cursor":
                 await manager.relay_to_viewers(session, message)
             elif kind == "click":
@@ -94,18 +97,11 @@ async def view_stream(websocket: WebSocket, session_id: str) -> None:
     ):
         await websocket.close(code=1008)
         return
-    await manager.attach_viewer(session, websocket)
-    await websocket.send_json(
-        {
-            "v": 1,
-            "t": "ready",
-            "ts": time.time(),
-            "sourceId": session.source_id,
-            "meta": session.last_meta,
-        }
+    capabilities = first.get("capabilities")
+    await manager.attach_viewer(
+        session, websocket,
+        deltas=isinstance(capabilities, list) and "scene-patch" in capabilities,
     )
-    if session.last_snapshot is not None:
-        await websocket.send_json(session.last_snapshot)
     await manager.send_presence(session)
     try:
         while True:

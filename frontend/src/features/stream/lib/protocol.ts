@@ -1,4 +1,4 @@
-import type { Calibration, GalleryPreview, GcodePreview3D, Page } from "../../../api";
+import type { Calibration, GalleryPreview, GcodePreview3D, Page, SceneObject } from "../../../api";
 import type { Gcode3DView } from "../../../components/Gcode3D";
 import type { Pt } from "../../paint/lib/geometry";
 
@@ -32,9 +32,10 @@ export interface DesignerSnapshot {
 
 export type StreamMessage =
   | { v: 1; t: "hello" | "snapshot"; ts: number; sourceId: string; meta: StreamMeta; snapshot: DesignerSnapshot }
+  | { v: 1; t: "scene-patch"; ts: number; pageId: string; changes: Partial<SceneObject>[]; removed: string[] }
   | { v: 1; t: "cursor"; ts: number; x: number; y: number; inside: boolean; tool?: string; clickId?: number }
   | { v: 1; t: "click"; ts: number; x: number; y: number; tool?: string }
-  | { v: 1; t: "join"; ts: number; token: string }
+  | { v: 1; t: "join"; ts: number; token: string; capabilities?: string[] }
   | { v: 1; t: "presence"; ts: number; viewers: number }
   | { v: 1; t: "ready"; ts: number; sourceId: string; meta?: StreamMeta | null }
   | { v: 1; t: "accepted"; ts: number; sessionId: string }

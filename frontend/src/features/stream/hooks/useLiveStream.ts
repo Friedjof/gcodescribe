@@ -1,3 +1,4 @@
+import { objectChanges } from "../../../api/pageEdits";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { req } from "../../../api/client/req";
 import { useI18n } from "../../../i18n";
@@ -16,6 +17,7 @@ let snapshotPending = false;
 let cursorFrame: number | undefined;
 let nextCursor: Cursor | null = null;
 let clickId = 0;
+let previousSnapshot: DesignerSnapshot | null = null;
 let controller: HookState = { state: "idle", viewers: 0, error: null, sourceId: null };
 const listeners = new Set<(state: HookState) => void>();
 
@@ -42,7 +44,16 @@ function send(message: StreamMessage) {
 function flushSnapshot(kind: "hello" | "snapshot" = "snapshot") {
   const snapshot = getActiveSnapshot?.();
   if (!snapshot || !activeSourceId) return;
-  send({ v: 1, t: kind, ts: Date.now(), sourceId: activeSourceId, meta: snapshot.meta, snapshot });
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  const old = previousSnapshot;
+  // A geometry-free update is enough when only scene objects changed.
+  if (kind !== "hello" && old && old.page.id === snapshot.page.id && old.cal === snapshot.cal &&
+      old.gcode3d === snapshot.gcode3d && old.game === snapshot.game && old.gallery === snapshot.gallery &&
+      JSON.stringify([old.meta, old.page.name, old.page.grid, old.gcode3dView]) === JSON.stringify([snapshot.meta, snapshot.page.name, snapshot.page.grid, snapshot.gcode3dView])) {
+    const delta = objectChanges(old.page.objects, snapshot.page.objects);
+    if (delta.changes.length || delta.removed.length) send({ v: 1, t: "scene-patch", ts: Date.now(), pageId: snapshot.page.id, ...delta });
+  } else send({ v: 1, t: kind, ts: Date.now(), sourceId: activeSourceId, meta: snapshot.meta, snapshot });
+  previousSnapshot = snapshot;
 }
 
 function sendSnapshotThrottled(kind: "hello" | "snapshot" = "snapshot") {
@@ -65,6 +76,7 @@ function sendSnapshotThrottled(kind: "hello" | "snapshot" = "snapshot") {
 }
 
 function clearTimers() {
+  previousSnapshot = null;
   window.clearTimeout(snapshotTimer);
   snapshotTimer = undefined;
   snapshotPending = false;
@@ -219,6 +231,7 @@ export function useLiveStream(sourceId: string, getSnapshot: () => DesignerSnaps
     });
     activeSourceId = null;
     getActiveSnapshot = null;
+    previousSnapshot = null;
     setController({ sourceId: null });
   }, [sourceId]);
 

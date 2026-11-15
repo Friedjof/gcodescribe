@@ -54,12 +54,19 @@ export default function LiveViewer() {
     }
     const ws = new WebSocket(wsUrl(`/api/stream/ws/view/${sessionId}`));
     wsRef.current = ws;
-    ws.onopen = () => ws.send(JSON.stringify({ v: 1, t: "join", ts: Date.now(), token } satisfies StreamMessage));
+    ws.onopen = () => ws.send(JSON.stringify({ v: 1, t: "join", ts: Date.now(), token, capabilities: ["scene-patch"] } satisfies StreamMessage));
     ws.onmessage = (event) => {
       const message = JSON.parse(event.data) as StreamMessage;
       if (message.t === "hello" || message.t === "snapshot") {
         setSnapshot(message.snapshot);
         setStatus("live");
+      } else if (message.t === "scene-patch") {
+        setSnapshot((previous) => {
+          if (!previous || previous.page.id !== message.pageId) return previous;
+          const objects = new Map(previous.page.objects.filter((o) => !message.removed.includes(o.id)).map((o) => [o.id, o]));
+          for (const patch of message.changes) objects.set(patch.id!, { ...objects.get(patch.id!), ...patch } as typeof previous.page.objects[number]);
+          return { ...previous, page: { ...previous.page, objects: [...objects.values()] } };
+        });
       } else if (message.t === "cursor") {
         setCursor({ x: message.x, y: message.y, inside: message.inside });
         if (message.clickId != null && message.clickId !== lastClickIdRef.current) {
