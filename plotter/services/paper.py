@@ -4,30 +4,44 @@ from plotter.core.calibration import Calibration
 from plotter.core.position import PositionTracker, get_tracker
 
 from .errors import NotHomedError, ServiceError
+from .profiles import ProfileService
 
 
 class PaperService:
-    """Paper corner calibration: capture corners at the head position and
-    turn the resulting rectangle (minus margin) into the active plot area."""
+    """Capture paper corners and inset the independently configured plot area."""
 
     CORNERS = ("bl", "br", "tr", "tl")
 
-    def __init__(self, tracker: PositionTracker | None = None):
+    def __init__(
+        self, tracker: PositionTracker | None = None, *, profile_id: str | None = None
+    ):
         self.tracker = tracker or get_tracker()
+        self.profile_id = profile_id
+
+    def _calibration(self) -> Calibration:
+        if self.profile_id is not None:
+            return Calibration.from_dict(ProfileService().get(self.profile_id)["calibration"])
+        return Calibration.load()
+
+    def _save(self, cal: Calibration) -> None:
+        if self.profile_id is not None:
+            ProfileService().save_calibration(self.profile_id, cal)
+        else:
+            cal.save()
 
     def state(self, cal: Calibration | None = None) -> dict:
-        cal = cal or Calibration.load()
+        cal = cal or self._calibration()
         return {"calibration": cal.as_dict(), "rect": cal.paper_rect()}
 
     def set_corner_at(self, corner: str, x: float, y: float) -> dict:
         """Set a corner to explicit coordinates (no head movement required)."""
         if corner not in self.CORNERS:
             raise ServiceError(f"unknown corner: {corner}")
-        cal = Calibration.load()
+        cal = self._calibration()
         corners = dict(cal.paper_corners)
         corners[corner] = [x, y]
         cal = cal.merged({"paper_corners": corners})
-        cal.save()
+        self._save(cal)
         return self.state(cal)
 
     def capture(self, corner: str) -> dict:
@@ -36,52 +50,47 @@ class PaperService:
         pos = self.tracker.snapshot()
         if not pos["homed"]:
             raise NotHomedError()
-        cal = Calibration.load()
+        cal = self._calibration()
         corners = dict(cal.paper_corners)
         corners[corner] = [pos["x"], pos["y"]]
         cal = cal.merged({"paper_corners": corners})
-        cal.save()
+        self._save(cal)
         return self.state(cal)
 
     def clear(self, corner: str) -> dict:
-        cal = Calibration.load()
+        cal = self._calibration()
         corners = dict(cal.paper_corners)
         corners.pop(corner, None)
         cal = cal.merged({"paper_corners": corners})
-        cal.save()
+        self._save(cal)
         return self.state(cal)
 
     def reset(self) -> dict:
-        cal = Calibration.load().merged({"paper_corners": {}})
-        cal.save()
+        cal = self._calibration().merged({"paper_corners": {}})
+        self._save(cal)
         return self.state(cal)
 
     def set_obstacles(self, obstacles: list) -> dict:
         """Replace the obstacle list for the active calibration profile."""
-        cal = Calibration.load()
+        cal = self._calibration()
         cal = cal.merged({"obstacles": obstacles})
-        cal.save()
+        self._save(cal)
         return self.state(cal)
 
-    def apply(self, margin: float) -> dict:
-        cal = Calibration.load()
-        rect = cal.paper_rect_inner()
-        if rect is None:
-            raise ServiceError(
-                "Mindestens zwei gegenüberliegende Ecken setzen (z. B. unten links + oben rechts)."
-            )
-        x0, y0, width, height = rect
-        margin = max(margin, 0.0)
-        if width - 2 * margin < 5 or height - 2 * margin < 5:
-            raise ServiceError("Rand zu groß für das erfasste Papier.")
-        cal = cal.merged(
-            {
-                "origin_x": round(x0 + margin, 3),
-                "origin_y": round(y0 + margin, 3),
-                "plot_width": round(width - 2 * margin, 3),
-                "plot_height": round(height - 2 * margin, 3),
-                "paper_margin": margin,
-            }
-        )
-        cal.save()
+    def apply(self, margin: float, *, from_paper: bool = False) -> dict:
+        cal = self._calibration()
+        updates = {"paper_margin": margin}
+        if from_paper:
+            rect = cal.paper_rect_inner()
+            if rect is None:
+                raise ServiceError(
+                    "Mindestens zwei gegenüberliegende Ecken setzen "
+                    "(z. B. unten links + oben rechts)."
+                )
+            updates["plot_area_base"] = dict(zip(("x", "y", "w", "h"), rect, strict=True))
+        try:
+            cal = cal.merged(updates)
+        except ValueError as exc:
+            raise ServiceError(str(exc)) from exc
+        self._save(cal)
         return self.state(cal)

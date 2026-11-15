@@ -8,6 +8,7 @@ from plotter.core.calibration import Calibration
 from plotter.services.profiles import (
     FINGERPRINT_FIELDS,
     ProfileConflict,
+    ProfileError,
     ProfileImportError,
     ProfileNotFound,
     ProfileService,
@@ -53,6 +54,34 @@ class TestMigration:
 
 
 class TestCrud:
+    def test_pressure_depth_updates_profile_and_roundtrips_xml(self, service):
+        from plotter.artwork.export import calibration_from_xml, calibration_to_xml
+        from plotter.core.calibration import same_plot_layout, slide_calibration_differences
+
+        profile = service.create("Pressure", calibration={"pen_down_z": 3})
+        updated = service.update(profile["id"], calibration={"pen_pressure_max_depth": 0.4})
+        assert updated["calibration"]["pen_pressure_max_depth"] == 0.4
+        assert updated["fingerprint"] != profile["fingerprint"]
+        saved = Calibration.from_dict(updated["calibration"])
+        assert calibration_from_xml(calibration_to_xml(saved)).pen_pressure_max_depth == 0.4
+        previous = Calibration.from_dict(profile["calibration"])
+        assert not same_plot_layout(previous, saved)
+        assert "Maximale Zusatzabsenkung" in slide_calibration_differences(previous, saved)
+
+    @pytest.mark.parametrize("depth", [-0.1, float("nan"), float("inf"), 3.1])
+    def test_rejects_invalid_pressure_depth_without_changing_profile(self, service, depth):
+        profile = service.create("Pressure", calibration={"pen_down_z": 3})
+        with pytest.raises(ProfileError, match="Zusatzabsenkung"):
+            service.update(profile["id"], calibration={"pen_pressure_max_depth": depth})
+        assert service.get(profile["id"])["fingerprint"] == profile["fingerprint"]
+
+    def test_recalibration_cannot_move_pressure_below_machine_zero(self, service):
+        profile = service.create("Pressure", calibration={
+            "pen_down_z": 3, "pen_pressure_max_depth": 0.4,
+        })
+        with pytest.raises(ProfileError, match="Maschinen-Z 0"):
+            service.update(profile["id"], calibration={"pen_down_z": 0.2})
+
     def test_create_copies_active_calibration(self, service):
         service.update(service.active_id(), calibration={"plot_width": 99.0})
         created = service.create("Postkarte")
@@ -119,6 +148,63 @@ class TestActivation:
         assert active["fingerprint"] != before
 
 
+class TestParkDefaults:
+    """Legacy profiles/dicts lack park_x/park_y/park_lift_z; the default must
+    resolve against *that data's own* bed size / pen-up height, not the
+    default Calibration() instance's."""
+
+    def test_build_resolves_park_against_own_bed_size(self, service):
+        legacy = Calibration(bed_width=300.0, bed_height=400.0, pen_up_z=12.0).as_dict()
+        del legacy["park_x"], legacy["park_y"], legacy["park_lift_z"]
+        created = service.create("Legacy", calibration=legacy)
+        assert created["calibration"]["park_x"] == 150.0
+        assert created["calibration"]["park_y"] == 400.0
+        assert created["calibration"]["park_lift_z"] == 12.0
+
+    def test_update_resolves_park_against_own_bed_size(self, service):
+        legacy = Calibration(bed_width=300.0, bed_height=400.0, pen_up_z=12.0).as_dict()
+        del legacy["park_x"], legacy["park_y"], legacy["park_lift_z"]
+        created = service.create("Legacy", calibration=legacy)
+        updated = service.update(created["id"], calibration={"pen_down_z": 0.5})
+        assert updated["calibration"]["park_x"] == 150.0
+        assert updated["calibration"]["park_y"] == 400.0
+        assert updated["calibration"]["park_lift_z"] == 12.0
+
+    def test_active_calibration_resolves_park_against_own_bed_size(self, service):
+        legacy = Calibration(bed_width=300.0, bed_height=400.0, pen_up_z=12.0).as_dict()
+        del legacy["park_x"], legacy["park_y"], legacy["park_lift_z"]
+        created = service.create("Legacy", calibration=legacy)
+        service.activate(created["id"])
+        active = service.active_calibration()
+        assert active.resolved_park() == (150.0, 400.0, 12.0)
+
+
+class TestCalibrationParkDefaults:
+    def test_defaults_resolve_from_own_bed_size(self):
+        cal = Calibration(bed_width=300.0, bed_height=400.0)
+        x, y, _ = cal.resolved_park()
+        assert x == 150.0
+        assert y == 400.0
+
+    def test_lift_defaults_to_pen_up_z(self):
+        cal = Calibration(pen_up_z=12.0)
+        assert cal.resolved_park()[2] == 12.0
+
+    def test_explicit_values_are_kept(self):
+        cal = Calibration(
+            bed_width=300.0, bed_height=400.0, park_x=1.0, park_y=2.0, park_lift_z=3.0
+        )
+        assert cal.resolved_park() == (1.0, 2.0, 3.0)
+
+    def test_defaults_track_source_fields_until_customised(self):
+        # Unset park_lift_z must keep following pen_up_z even after later
+        # updates change pen_up_z — it must not freeze at construction time.
+        cal = Calibration(pen_up_z=5.0).merged({"pen_up_z": 12.0})
+        assert cal.resolved_park()[2] == 12.0
+        cal = Calibration(bed_width=210.0).merged({"bed_width": 300.0})
+        assert cal.resolved_park()[0] == 150.0
+
+
 class TestFingerprint:
     def test_stable_for_equal_values(self):
         a = Calibration(plot_width=100.0)
@@ -127,10 +213,12 @@ class TestFingerprint:
 
     @pytest.mark.parametrize("field", FINGERPRINT_FIELDS)
     def test_every_safety_field_changes_fingerprint(self, field):
-        base = Calibration().as_dict()
+        base = Calibration(pen_down_z=3).as_dict()
         changed = dict(base)
         value = base[field]
-        if isinstance(value, bool):
+        if field == "plot_area_base":
+            changed[field] = {"x": 10, "y": 20, "w": 100, "h": 120}
+        elif isinstance(value, bool):
             changed[field] = not value
         elif isinstance(value, (int, float)):
             changed[field] = float(value) + 1.5
@@ -141,6 +229,23 @@ class TestFingerprint:
         else:  # pragma: no cover - defensive
             raise AssertionError(f"unhandled field type: {field}")
         assert calibration_fingerprint(base) != calibration_fingerprint(changed)
+
+    def test_missing_default_fields_match_a_current_calibration(self):
+        assert calibration_fingerprint({}) == calibration_fingerprint(Calibration())
+
+    def test_read_upgrades_fingerprint_without_changing_calibration_or_modified(self, service):
+        profile = service.active()
+        path = service.root / f"{profile['id']}.json"
+        before = json.loads(path.read_text())
+        before["fingerprint"] = "sha256:old-version"
+        before["modified"] = 123.456
+        before["calibration"].pop("plot_area_base", None)
+        path.write_text(json.dumps(before))
+        loaded = service.get(profile["id"])
+        after = json.loads(path.read_text())
+        assert loaded["fingerprint"] == calibration_fingerprint(before["calibration"])
+        assert after == {**before, "fingerprint": loaded["fingerprint"]}
+        assert loaded["modified"] == 123.456
 
 
 class TestImportExport:

@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from plotter.core.calibration import feed_word
 from plotter.core.position import PositionTracker
 from plotter.core.state import FileStateStore
 from plotter.printer.octoprint import OctoPrintClient
@@ -13,8 +14,52 @@ from plotter.services import NotHomedError, PrinterController
 @pytest.fixture
 def controller(workspace, cal):
     client = MagicMock(spec=OctoPrintClient)
+    client.status.return_value = {"online": True, "job": None}
     tracker = PositionTracker(FileStateStore(workspace / "state"))
     return PrinterController(client=client, tracker=tracker)
+
+
+@pytest.mark.parametrize("state", ["Printing", "Starting", "Pausing", "Resuming", "Finishing"])
+def test_manual_motion_is_blocked_during_print(controller, state):
+    from plotter.printer.base import PrinterBusyError
+
+    controller.client.status.return_value = {"job": {"state": state}}
+    for action in [controller.home, lambda: controller.jog(0, 0, 1),
+                   lambda: controller.pen(False), lambda: controller.move_to(1, 2),
+                   lambda: controller.raw_gcode(["G1 Z30"])]:
+        with pytest.raises(PrinterBusyError):
+            action()
+    controller.client.gcode.assert_not_called()
+    controller.client.home.assert_not_called()
+
+
+@pytest.mark.parametrize("action", ["gcode", "home", "jog"])
+def test_octoprint_checks_fresh_job_state_before_manual_command(action):
+    from plotter.printer.base import PrinterBusyError
+
+    client = OctoPrintClient(base_url="http://printer.invalid", api_key="test")
+    client._request = MagicMock()
+    client._request.return_value.json.return_value = {"state": "Printing"}
+    with pytest.raises(PrinterBusyError):
+        if action == "gcode":
+            client.gcode(["G1 Z30"])
+        else:
+            getattr(client, action)()
+    client._request.assert_called_once_with("GET", "/api/job")
+
+
+def test_home_never_sends_preliminary_z_lift_if_cached_status_is_stale(controller):
+    from plotter.printer.base import PrinterBusyError
+
+    client = OctoPrintClient(base_url="http://printer.invalid", api_key="test")
+    client.status = MagicMock(return_value={"job": {"state": "Operational"}})
+    client._request = MagicMock()
+    client._request.return_value.json.return_value = {"state": "Printing"}
+    controller.client = client
+    with pytest.raises(PrinterBusyError):
+        controller.home()
+    # In the previous code G91 / G0 Z5 was sent before OctoPrint rejected home.
+    client._request.assert_called_once_with("GET", "/api/job")
 
 
 class TestJogLimits:
@@ -70,7 +115,9 @@ class TestHomeSafety:
     def test_home_lifts_pen_before_homing(self, controller, cal):
         controller.home()
         commands = controller.client.gcode.call_args[0][0]
-        assert commands == ["G91", f"G0 Z5 F{cal.z_feed:.0f}", "G90"]
+        assert commands == [
+            f"M203 Z{cal.z_max_feedrate:.0f}", "G91", f"G0 Z5 {feed_word(cal.z_feed)}", "G90"
+        ]
         controller.client.home.assert_called_once()
 
     def test_home_is_conservative_by_default(self, controller):
@@ -180,7 +227,9 @@ class TestSendRevalidation:
             r = c.post("/api/printer/send", json={"filename": "safe.gcode", "start": True})
             assert r.status_code == 200
             assert events == ["lift", "home", "upload"]
-            gcode.assert_called_once_with(["G91", f"G0 Z5 F{cal.z_feed:.0f}", "G90"])
+            gcode.assert_called_once_with([
+                f"M203 Z{cal.z_max_feedrate:.0f}", "G91", f"G0 Z5 {feed_word(cal.z_feed)}", "G90"
+            ])
             home.assert_called_once()
             upload.assert_called_once_with(path, start=True)
 
@@ -220,9 +269,19 @@ class TestSendRevalidation:
         from fastapi.testclient import TestClient
 
         import plotter.printer.octoprint as op
+        from plotter.core.jobmeta import write_job_meta
 
+        jobs = workspace / "jobs"
+        jobs.mkdir()
+        path = jobs / "selected.gcode"
+        path.write_text(f"G21\nG90\nG0 Z{cal.pen_up_z:.3f} F1000\n")
+        write_job_meta(path)
         events = []
         with (
+            patch.object(op.OctoPrintClient, "status", return_value={
+                "online": True,
+                "job": {"state": "Operational", "job": {"file": {"name": path.name}}},
+            }),
             patch.object(
                 op.OctoPrintClient,
                 "job_command",
@@ -245,7 +304,9 @@ class TestSendRevalidation:
             r = c.post("/api/printer/job", json={"command": "start"})
             assert r.status_code == 200
             assert events == ["lift", "home", "start"]
-            gcode.assert_called_once_with(["G91", f"G0 Z5 F{cal.z_feed:.0f}", "G90"])
+            gcode.assert_called_once_with([
+                f"M203 Z{cal.z_max_feedrate:.0f}", "G91", f"G0 Z5 {feed_word(cal.z_feed)}", "G90"
+            ])
             home.assert_called_once()
             job_command.assert_called_once_with("start")
 
@@ -308,7 +369,8 @@ class TestMoveToCorner:
         commands = controller.client.gcode.call_args[0][0]
         assert commands == [
             "G90",
-            f"G0 Z{cal.pen_up_z:.3f} F{cal.z_feed:.0f}",
+            f"M203 Z{cal.z_max_feedrate:.0f}",
+            f"G0 Z{cal.pen_up_z:.3f} {feed_word(cal.z_feed)}",
             "G0 X20.000 Y30.000 F6000",
         ]
 

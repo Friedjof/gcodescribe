@@ -14,9 +14,15 @@ const FIELDS: { key: keyof Calibration; labelKey: string; unit: string; groupKey
   { key: "origin_y", labelKey: "calibrate.originY", unit: "mm", groupKey: "calibrate.groupArea" },
   { key: "pen_up_z", labelKey: "calibrate.penUpZ", unit: "mm", groupKey: "calibrate.groupPen" },
   { key: "pen_down_z", labelKey: "calibrate.penDownZ", unit: "mm", groupKey: "calibrate.groupPen" },
-  { key: "travel_feed", labelKey: "calibrate.travelFeed", unit: "mm/min", groupKey: "calibrate.groupSpeed" },
-  { key: "draw_feed", labelKey: "calibrate.drawFeed", unit: "mm/min", groupKey: "calibrate.groupSpeed" },
-  { key: "z_feed", labelKey: "calibrate.zFeed", unit: "mm/min", groupKey: "calibrate.groupSpeed" },
+  { key: "park_x", labelKey: "calibrate.parkX", unit: "mm", groupKey: "calibrate.groupPark" },
+  { key: "park_y", labelKey: "calibrate.parkY", unit: "mm", groupKey: "calibrate.groupPark" },
+  { key: "park_lift_z", labelKey: "calibrate.parkLiftZ", unit: "mm", groupKey: "calibrate.groupPark" },
+  { key: "calibration_x", labelKey: "calibrate.calibrationX", unit: "mm", groupKey: "calibrate.groupCalibrationPosition" },
+  { key: "calibration_y", labelKey: "calibrate.calibrationY", unit: "mm", groupKey: "calibrate.groupCalibrationPosition" },
+  { key: "travel_feed", labelKey: "calibrate.travelFeed", unit: "mm/s", groupKey: "calibrate.groupSpeed" },
+  { key: "draw_feed", labelKey: "calibrate.drawFeed", unit: "mm/s", groupKey: "calibrate.groupSpeed" },
+  { key: "z_feed", labelKey: "calibrate.zFeed", unit: "mm/s", groupKey: "calibrate.groupSpeed" },
+  { key: "z_max_feedrate", labelKey: "calibrate.zMaxFeedrate", unit: "mm/s", groupKey: "calibrate.groupSpeed" },
   { key: "merge_tolerance", labelKey: "calibrate.mergeTolerance", unit: "mm", groupKey: "calibrate.groupOptimize" },
 ];
 
@@ -29,6 +35,7 @@ export default function Calibrate() {
   const [name, setName] = useState("");
   const [dirty, setDirty] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+  const [speedTesting, setSpeedTesting] = useState(false);
   const { confirm, ConfirmNode } = useConfirm();
 
   const fail = (e: Error) => toast.error(String(e.message));
@@ -74,6 +81,19 @@ export default function Calibrate() {
   if (!cal) return <div className="card">{t("calibrate.loading")}</div>;
 
   const selected = profiles.find((p) => p.id === selectedId) ?? null;
+
+  const runSpeedTest = async () => {
+    if (!selectedId || !selected?.active || dirty || speedTesting) return;
+    setSpeedTesting(true);
+    try {
+      await api.speedTest(selectedId);
+      toast.success(t("calibrate.speedTestSent"));
+    } catch (error) {
+      fail(error instanceof Error ? error : new Error(String(error)));
+    } finally {
+      setSpeedTesting(false);
+    }
+  };
 
   const confirmDiscard = async () => !dirty || await confirm(t("profiles.unsaved"));
 
@@ -270,7 +290,10 @@ export default function Calibrate() {
             </div>
             {groups.map((g) => (
               <div key={g} className="field-group">
-                <h3>{t(g)}</h3>
+                <h3>
+                  {g === "calibrate.groupPark" ? "P · " : g === "calibrate.groupCalibrationPosition" ? "C · " : ""}
+                  {t(g)}
+                </h3>
                 <div className="fields">
                   {FIELDS.filter((f) => f.groupKey === g).map((f) => (
                     <label key={f.key} className="field">
@@ -287,6 +310,20 @@ export default function Calibrate() {
                     </label>
                   ))}
                 </div>
+                {g === "calibrate.groupSpeed" && <div className="calibrate-speed-test">
+                  <div>
+                    <strong>{t("calibrate.speedTestTitle")}</strong>
+                    <p>{t("calibrate.speedTestHint")}</p>
+                    <small>{t("calibrate.speedTestFeeds", {
+                      travel: cal.travel_feed, z: cal.z_feed,
+                    })}</small>
+                    {(!selected?.active || dirty) && <small>{t("calibrate.speedTestNeedsSavedActive")}</small>}
+                  </div>
+                  <button type="button" className="primary" disabled={!selected?.active || dirty || speedTesting}
+                    onClick={runSpeedTest}>
+                    {speedTesting ? t("calibrate.speedTestRunning") : t("calibrate.speedTestButton")}
+                  </button>
+                </div>}
               </div>
             ))}
             <div className="field-group">

@@ -6,7 +6,8 @@ from fastapi import APIRouter, File, Form, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from plotter.web.deps import profile_service
+from plotter.printer.base import require_profile_switch
+from plotter.web.deps import printer_controller, profile_service
 
 from ...services.profiles import ProfileImportError
 
@@ -67,11 +68,14 @@ def get_profile(profile_id: str) -> dict:
 
 @router.put("/profiles/{profile_id}")
 def update_profile(profile_id: str, req: ProfileRequest) -> dict:
+    if req.calibration is not None and profile_service().active_id() == profile_id:
+        require_profile_switch((printer_controller().status().get("job") or {}).get("state"))
     return profile_service().update(profile_id, name=req.name, calibration=req.calibration)
 
 
 @router.post("/profiles/{profile_id}/activate")
 def activate_profile(profile_id: str) -> dict:
+    require_profile_switch((printer_controller().status().get("job") or {}).get("state"))
     return profile_service().activate(profile_id)
 
 

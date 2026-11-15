@@ -4,17 +4,21 @@ import logging
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from plotter.core.calibration import Calibration
+from plotter.core.calibration import Calibration, PositionKind
 from plotter.core.jobmeta import job_profile_status, read_job_meta_checked
 from plotter.core.storage import jobs_dir
+from plotter.gcode.pressure import job_uses_pressure
 from plotter.gcode.safety import GcodeSafetyChecker, SafetyViolation
 from plotter.web.deps import printer_controller, profile_service
+from plotter.web.project_context import project_calibration
 
 from ...printer.manager import BackendBusyError, BackendUnavailableError
 from ...services import PrinterController
 from ...services.profiles import profile_meta
+from ...services.project_render import ProjectJobError
+from ...services.project_render import project_job_calibration as _project_job_calibration
 
 log = logging.getLogger(__name__)
 
@@ -176,29 +180,46 @@ def _require_profile_match(
         )
 
 
+def _validated_job_calibration(path: Path) -> Calibration:
+    """Read and validate a local job before uploading or starting any motion."""
+    if not path.is_file():
+        raise HTTPException(404, "Job nicht gefunden")
+    # Designer jobs carry their slide's calibration. Other jobs retain the
+    # existing active-profile guard, including legacy and imported G-code.
+    service = profile_service()
+    meta, meta_issue = read_job_meta_checked(path)
+    if meta_issue:
+        _refuse_print(path.name, "corrupt-meta", f"Drucken verweigert: {meta_issue}")
+    source = (meta or {}).get("source") or {}
+    if source.get("project_id") and source.get("kind") in (
+        "paint_page", "paint_coloring", "testpattern",
+    ):
+        try:
+            cal = _project_job_calibration(meta)
+        except ProjectJobError as exc:
+            _refuse_print(path.name, "project-job", str(exc))
+    else:
+        active = service.active()
+        profiles = {p["id"]: p for p in service.list(include_archived=True)}
+        _require_profile_match(path, profile_meta(active), profiles)
+        cal = Calibration.from_dict(active["calibration"])
+    try:
+        GcodeSafetyChecker(cal, allow_pressure=job_uses_pressure(meta)).check(
+            path.read_text(), name=path.name,
+        )
+    except SafetyViolation as exc:
+        log.warning("Print blocked (safety): %s — %s", path.name, exc)
+        raise
+    return cal
+
+
 @router.post("/printer/send")
 def octo_send(req: PrintRequest) -> dict:
     ctrl = controller()
     path = jobs_dir() / Path(req.filename).name
-    if not path.exists():
-        raise HTTPException(404, "Job nicht gefunden")
-    # Profile guard first: id + fingerprint must match the active profile.
-    # Read profile and calibration in one go so a concurrent profile switch
-    # cannot pass the guard with one profile and the safety check with another.
-    service = profile_service()
-    active = service.active()
-    profiles = {p["id"]: p for p in service.list(include_archived=True)}
-    _require_profile_match(path, profile_meta(active), profiles)
-    # Re-validate against the *current* calibration: catches jobs generated
-    # before a recalibration (other pen heights / plot area) or by old code.
-    cal = Calibration().merged(active["calibration"])
-    try:
-        GcodeSafetyChecker(cal).check(path.read_text(), name=req.filename)
-    except SafetyViolation as exc:
-        log.warning("Print blocked (safety): %s — %s", path.name, exc)
-        raise
+    cal = _validated_job_calibration(path)
     if req.start:
-        ctrl.home()
+        ctrl.home(cal=cal)
     return ctrl.client.upload(path, start=req.start)
 
 
@@ -211,7 +232,24 @@ class JobCommand(BaseModel):
 def octo_job(req: JobCommand) -> dict:
     ctrl = controller()
     if req.command in ("start", "restart"):
-        ctrl.home()
+        job = ctrl.status().get("job") or {}
+        selected = (job.get("job") or {}).get("file") or {}
+        filename = selected.get("name") or selected.get("path")
+        if not isinstance(filename, str) or not filename.strip():
+            _refuse_print(
+                "unbekannt", "unknown-selected-job",
+                "Der ausgewählte Druckjob kann nicht geprüft werden. "
+                "Bitte im Designer erneut auf Plot klicken und den Job neu senden.",
+            )
+        path = jobs_dir() / Path(filename).name
+        if not path.is_file():
+            _refuse_print(
+                path.name, "missing-local-job",
+                "Die lokale G-Code-Datei des ausgewählten Druckjobs fehlt. "
+                "Bitte im Designer erneut auf Plot klicken und den Job neu senden.",
+            )
+        cal = _validated_job_calibration(path)
+        ctrl.home(cal=cal)
     ctrl.client.job_command(req.command)
     return {"ok": True}
 
@@ -222,23 +260,44 @@ class JogRequest(BaseModel):
     z: float = 0.0
     speed: int | None = None
     limit: str = "bed"  # bed | plot
+    projectId: str | None = None
 
 
 @router.post("/printer/jog")
 def octo_jog(req: JogRequest) -> dict:
     return {
         "ok": True,
-        "position": controller().jog(req.x, req.y, req.z, req.speed, limit=req.limit),
+        "position": controller().jog(
+            req.x, req.y, req.z, req.speed, limit=req.limit,
+            cal=project_calibration(req.projectId),
+        ),
     }
+
+
+class SpeedTestRequest(BaseModel):
+    profile_id: str
+
+
+@router.post("/printer/speed-test")
+def speed_test(req: SpeedTestRequest) -> dict:
+    active = profile_service().active()
+    if active["id"] != req.profile_id:
+        raise HTTPException(409, "Das aktive Profil hat sich geändert. Bitte neu öffnen.")
+    cal = Calibration.from_dict(active["calibration"])
+    return {"ok": True, **controller().speed_test(cal=cal)}
 
 
 class HomeRequest(BaseModel):
     axes: list[str] | None = None
+    projectId: str | None = None
 
 
 @router.post("/printer/home")
 def octo_home(req: HomeRequest) -> dict:
-    return {"ok": True, "position": controller().home(req.axes)}
+    return {
+        "ok": True,
+        "position": controller().home(req.axes, cal=project_calibration(req.projectId)),
+    }
 
 
 class MoveRequest(BaseModel):
@@ -246,37 +305,102 @@ class MoveRequest(BaseModel):
     y: float
     pen_up_first: bool = True  # lift the pen before travelling
     limit: str = "bed"  # bed | plot
+    projectId: str | None = None
 
 
 @router.post("/printer/move")
 def octo_move(req: MoveRequest) -> dict:
     """Absolute XY move (used by click-to-move in the live view)."""
     position = controller().move_to(
-        req.x, req.y, pen_up_first=req.pen_up_first, limit=req.limit
+        req.x, req.y, pen_up_first=req.pen_up_first, limit=req.limit,
+        cal=project_calibration(req.projectId),
     )
     return {"ok": True, "position": position}
+
+
+@router.post("/printer/move-to-calibration")
+def move_to_calibration(project_id: str | None = None) -> dict:
+    """Prepare pen insertion at the active profile's calibration position."""
+    return {
+        "ok": True,
+        "position": controller().move_to_calibration(cal=project_calibration(project_id)),
+    }
+
+
+class PositionMoveRequest(BaseModel):
+    kind: PositionKind
+    x: float | None = None
+    y: float | None = None
+    projectId: str | None = None
+
+
+@router.post("/printer/move-to-position")
+def move_to_position(req: PositionMoveRequest) -> dict:
+    return {
+        "ok": True,
+        "position": controller().move_to_position(
+            req.kind, req.x, req.y, cal=project_calibration(req.projectId)
+        ),
+    }
+
+
+class PositionVisitRequest(BaseModel):
+    kind: PositionKind
+    projectId: str | None = None
+
+
+def _active_project_calibration(project_id: str, profile_id: str | None = None) -> Calibration:
+    return project_calibration(project_id, profile_id)
+
+
+@router.post("/printer/home-and-move-to-position")
+def home_and_move_to_position(req: PositionVisitRequest) -> dict:
+    cal = _active_project_calibration(req.projectId) if req.projectId else None
+    return {"ok": True, "position": controller().home_and_move_to_position(req.kind, cal=cal)}
+
+
+class CalibrationHeightRequest(BaseModel):
+    profile_id: str
+    offset: float = Field(ge=-3, le=3, allow_inf_nan=False)
+    project_id: str | None = None
+
+
+@router.post("/printer/calibration-height")
+def calibration_height(req: CalibrationHeightRequest) -> dict:
+    if req.project_id:
+        cal = _active_project_calibration(req.project_id, req.profile_id)
+    else:
+        active = profile_service().active()
+        if active["id"] != req.profile_id:
+            raise HTTPException(409, "Das aktive Profil hat sich geändert. Bitte neu öffnen.")
+        cal = Calibration.from_dict(active["calibration"])
+    return {"ok": True, "position": controller().calibration_height(req.offset, cal=cal)}
 
 
 class CornerMoveRequest(BaseModel):
     corner: str  # bl | br | tr | tl
     target: str = "paper"  # paper | plot
+    projectId: str | None = None
 
 
 @router.post("/printer/move-to-corner")
 def octo_move_to_corner(req: CornerMoveRequest) -> dict:
     """Drive to a corner; the pen is always lifted before the XY travel."""
-    position = controller().move_to_corner(req.corner, target=req.target)
+    position = controller().move_to_corner(
+        req.corner, target=req.target, cal=project_calibration(req.projectId)
+    )
     return {"ok": True, "position": position}
 
 
 class PenRequest(BaseModel):
     down: bool
+    projectId: str | None = None
 
 
 @router.post("/printer/pen")
 def octo_pen(req: PenRequest) -> dict:
     """Raise or lower the pen using the calibrated Z heights."""
-    result = controller().pen(req.down)
+    result = controller().pen(req.down, cal=project_calibration(req.projectId))
     return {"ok": True, **result}
 
 

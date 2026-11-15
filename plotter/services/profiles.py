@@ -4,7 +4,7 @@ import hashlib
 import json
 import shutil
 import threading
-from dataclasses import fields
+from dataclasses import asdict, fields
 from pathlib import Path
 
 from plotter.core.calibration import Calibration, data_dir
@@ -31,28 +31,40 @@ class ProfileImportError(ProfileError):
 
 # Bump when the meaning of fingerprinted fields changes, so old fingerprints
 # can never accidentally match new ones.
-FINGERPRINT_VERSION = 1
+FINGERPRINT_VERSION = 4
 
 # Safety-relevant calibration fields. Profile metadata (name, timestamps,
 # archived) is deliberately excluded so renaming never makes jobs stale.
 FINGERPRINT_FIELDS = (
     "bed_width",
     "bed_height",
+    "z_max",
     "plot_width",
     "plot_height",
     "origin_x",
     "origin_y",
     "pen_up_z",
     "pen_down_z",
+    "pen_pressure_max_depth",
     "pen_calibrated",
     "travel_feed",
     "draw_feed",
     "z_feed",
+    "z_max_feedrate",
     "fit_to_area",
     "flip_y",
     "paper_corners",
     "paper_margin",
+    "plot_area_base",
     "obstacles",
+    "park_x",
+    "park_y",
+    "park_lift_z",
+    "park_after_plot",
+    "merge_tolerance",
+    "trust_axis_home",
+    "calibration_x",
+    "calibration_y",
 )
 
 PROFILE_FORMAT = "gcodescribe-profile"
@@ -67,7 +79,10 @@ _lock = threading.RLock()
 
 
 def calibration_fingerprint(cal: Calibration | dict) -> str:
-    data = cal.as_dict() if isinstance(cal, Calibration) else dict(cal)
+    # Raw (dataclasses.asdict), not .as_dict(): stored calibration dicts keep
+    # unresolved park_x/park_y/park_lift_z as None, so a Calibration instance
+    # must be hashed the same raw way to compare equal to its stored form.
+    data = asdict(cal) if isinstance(cal, Calibration) else asdict(Calibration.from_dict(cal))
     payload = {"_v": FINGERPRINT_VERSION}
     payload.update({key: data.get(key) for key in FINGERPRINT_FIELDS})
     blob = json.dumps(payload, sort_keys=True, separators=(",", ":"))
@@ -97,9 +112,17 @@ class ProfileService:
         if not path.exists():
             return None
         try:
-            return json.loads(path.read_text())
+            profile = json.loads(path.read_text())
         except (OSError, json.JSONDecodeError):
             return None
+        if isinstance(profile, dict) and isinstance(profile.get("calibration"), dict):
+            fingerprint = calibration_fingerprint(profile["calibration"])
+            if profile.get("fingerprint") != fingerprint:
+                # Refresh derived metadata when the fingerprint definition changes.
+                # Physical calibration and its modification timestamp stay exact.
+                profile["fingerprint"] = fingerprint
+                self._write(profile)
+        return profile
 
     def _write(self, profile: dict) -> None:
         self.root.mkdir(parents=True, exist_ok=True)
@@ -137,9 +160,10 @@ class ProfileService:
                 if not backup.exists():
                     shutil.copy2(legacy, backup)
             cal = Calibration.load()
-            profile = self._build(DEFAULT_PROFILE_NAME, cal.as_dict())
+            raw = asdict(cal)
+            profile = self._build(DEFAULT_PROFILE_NAME, raw)
             self._write(profile)
-            self._set_active_id(profile["id"], mirror=cal.as_dict())
+            self._set_active_id(profile["id"], mirror=raw)
 
     # -- active profile ------------------------------------------------------
 
@@ -174,7 +198,8 @@ class ProfileService:
             return self.get(self.active_id())
 
     def active_calibration(self) -> Calibration:
-        return Calibration().merged(self.active()["calibration"])
+        with _lock:
+            return Calibration.from_dict(self._require(self.active_id())["calibration"])
 
     def active_profile_meta(self) -> dict:
         """Compact profile reference for job sidecars / G-code comments."""
@@ -205,7 +230,7 @@ class ProfileService:
                 return
             if profile is None:
                 return
-            data = cal.as_dict()
+            data = asdict(cal)
             if profile["calibration"] == data:
                 return
             profile["calibration"] = data
@@ -243,7 +268,9 @@ class ProfileService:
         with _lock:
             return {
                 **self._summary(profile, self.active_id()),
-                "calibration": profile["calibration"],
+                # Resolve park_x/park_y/park_lift_z for API consumers — the
+                # stored dict keeps them as None until customised.
+                "calibration": Calibration.from_dict(profile["calibration"]).as_dict(),
             }
 
     def list(self, include_archived: bool = True) -> list[dict]:
@@ -264,10 +291,14 @@ class ProfileService:
     # -- mutations ---------------------------------------------------------------
 
     def _build(self, name: str, cal_data: dict, profile_id: str | None = None) -> dict:
-        known = {f.name for f in fields(Calibration)}
-        clean = Calibration().merged({k: v for k, v in cal_data.items() if k in known})
+        try:
+            clean = Calibration.from_dict(cal_data)
+        except (TypeError, ValueError) as exc:
+            raise ProfileError(str(exc)) from exc
         ts = now()
-        data = clean.as_dict()
+        # Raw, not .as_dict(): keep park_x/park_y/park_lift_z as None (still
+        # auto-tracking bed size / pen height) until the user customises them.
+        data = asdict(clean)
         return {
             "id": profile_id or new_id("prof-", 8),
             "name": name,
@@ -291,7 +322,11 @@ class ProfileService:
         """New profile; calibration defaults to a copy of the active one."""
         with _lock:
             self.ensure_migrated()
-            cal_data = calibration if calibration is not None else self.active()["calibration"]
+            cal_data = (
+                calibration
+                if calibration is not None
+                else self._require(self.active_id())["calibration"]
+            )
             profile = self._build(
                 self._unique_name((name or "").strip() or "Neues Profil"), cal_data
             )
@@ -312,13 +347,30 @@ class ProfileService:
                 profile["name"] = name.strip()
             if calibration is not None:
                 known = {f.name for f in fields(Calibration)}
-                merged = (
-                    Calibration()
-                    .merged(profile["calibration"])
-                    .merged({k: v for k, v in calibration.items() if k in known})
-                )
-                profile["calibration"] = merged.as_dict()
+                try:
+                    merged = Calibration.from_dict(profile["calibration"]).merged(
+                        {k: v for k, v in calibration.items() if k in known}
+                    )
+                except (TypeError, ValueError) as exc:
+                    raise ProfileError(str(exc)) from exc
+                # Raw, not .as_dict(): preserve the None "not yet customised"
+                # sentinel on park_x/park_y/park_lift_z so they keep tracking
+                # bed size / pen height across future updates.
+                profile["calibration"] = asdict(merged)
                 profile["fingerprint"] = calibration_fingerprint(profile["calibration"])
+            profile["modified"] = now()
+            self._write(profile)
+            if profile["id"] == self.active_id():
+                self._write_mirror(profile["calibration"])
+            return self._full(profile)
+
+    def save_calibration(self, profile_id: str, cal: Calibration) -> dict:
+        """Persist an already merged calibration without applying its fields again."""
+        with _lock:
+            self.ensure_migrated()
+            profile = self._require(profile_id)
+            profile["calibration"] = asdict(cal)
+            profile["fingerprint"] = calibration_fingerprint(profile["calibration"])
             profile["modified"] = now()
             self._write(profile)
             if profile["id"] == self.active_id():

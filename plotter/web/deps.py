@@ -26,8 +26,8 @@ def profile_service() -> ProfileService:
     return ProfileService()
 
 
-def paper_service() -> PaperService:
-    return PaperService()
+def paper_service(profile_id: str | None = None) -> PaperService:
+    return PaperService(profile_id=profile_id)
 
 
 def printer_controller() -> PrinterController:

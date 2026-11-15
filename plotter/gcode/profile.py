@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from plotter.artwork.export import calibration_comment
-from plotter.core.calibration import Calibration
+from plotter.core.calibration import Calibration, feed_word, z_max_feedrate_line
 from plotter.gcode.safety import GcodeSafetyChecker
 
 
@@ -11,26 +11,29 @@ def build_vpype_config(cal: Calibration, profile: str = "plotter") -> str:
     The ``{x}`` / ``{y}`` placeholders stay literal so vpype fills them per
     point; everything else (pen heights, feedrates) is baked in here.
     """
-    pen_up = (
-        f"G0 Z{cal.pen_up_z:.3f} F{cal.z_feed:.0f}\n"
-    )
-    pen_down = (
-        f"G1 Z{cal.pen_down_z:.3f} F{cal.z_feed:.0f}\n"
-    )
+    pen_up = f"G0 Z{cal.pen_up_z:.3f} {feed_word(cal.z_feed)}\n"
+    pen_down = f"G1 Z{cal.pen_down_z:.3f} {feed_word(cal.z_feed)}\n"
 
     # Never home inside a job. Machine Z=0 is bed level, not pen level (there
     # is paper on the bed), so an in-job G28 could crush the pen.
     # The app refuses to start a print unless the machine was homed, so the
     # absolute coordinates are already trustworthy. First motion: lift the pen.
-    document_start = f"G21\nG90\n{pen_up}"
+    document_start = f"G21\nG90\n{z_max_feedrate_line(cal)}\n{pen_up}"
     # New polyline: lift, travel to first point, drop.
-    segment_first = (
-        f"{pen_up}"
-        f"G0 X{{x:.4f}} Y{{y:.4f}} F{cal.travel_feed:.0f}\n"
-        f"{pen_down}"
-    )
-    segment = f"G1 X{{x:.4f}} Y{{y:.4f}} F{cal.draw_feed:.0f}\n"
-    document_end = f"{pen_up}G0 X0 Y0 F{cal.travel_feed:.0f}\nM2\n"
+    segment_first = f"{pen_up}G0 X{{x:.4f}} Y{{y:.4f}} {feed_word(cal.travel_feed)}\n{pen_down}"
+    segment = f"G1 X{{x:.4f}} Y{{y:.4f}} {feed_word(cal.draw_feed)}\n"
+    if cal.park_after_plot:
+        park_x, park_y, park_lift_z = cal.resolved_park()
+        lift = (
+            f"G0 Z{park_lift_z:.3f} {feed_word(cal.z_feed)}\n"
+            if abs(park_lift_z - cal.pen_up_z) > 1e-6
+            else ""
+        )
+        document_end = (
+            f"{pen_up}{lift}G0 X{park_x:.3f} Y{park_y:.3f} {feed_word(cal.travel_feed)}\nM2\n"
+        )
+    else:
+        document_end = f"{pen_up}M2\n"
 
     def esc(value: str) -> str:
         return value.replace("\n", "\\n")
@@ -81,31 +84,40 @@ def layout_operations(cal: Calibration) -> list[str]:
 
 # --- Test patterns -------------------------------------------------------
 
+
 def _header(cal: Calibration) -> list[str]:
     # No homing inside jobs (see build_vpype_config); lift the pen first.
-    return ["G21", "G90", f"G0 Z{cal.pen_up_z:.3f} F{cal.z_feed:.0f}"]
-
-
-def _footer(cal: Calibration) -> list[str]:
     return [
-        f"G0 Z{cal.pen_up_z:.3f} F{cal.z_feed:.0f}",
-        f"G0 X0 Y0 F{cal.travel_feed:.0f}",
-        "M2",
+        "G21",
+        "G90",
+        z_max_feedrate_line(cal),
+        f"G0 Z{cal.pen_up_z:.3f} {feed_word(cal.z_feed)}",
     ]
 
 
+def _footer(cal: Calibration) -> list[str]:
+    lines = [f"G0 Z{cal.pen_up_z:.3f} {feed_word(cal.z_feed)}"]
+    if cal.park_after_plot:
+        park_x, park_y, park_lift_z = cal.resolved_park()
+        if abs(park_lift_z - cal.pen_up_z) > 1e-6:
+            lines.append(f"G0 Z{park_lift_z:.3f} {feed_word(cal.z_feed)}")
+        lines.append(f"G0 X{park_x:.3f} Y{park_y:.3f} {feed_word(cal.travel_feed)}")
+    lines.append("M2")
+    return lines
+
+
 def _pen_down(cal: Calibration) -> str:
-    return f"G1 Z{cal.pen_down_z:.3f} F{cal.z_feed:.0f}"
+    return f"G1 Z{cal.pen_down_z:.3f} {feed_word(cal.z_feed)}"
 
 
 def _pen_up(cal: Calibration) -> str:
-    return f"G0 Z{cal.pen_up_z:.3f} F{cal.z_feed:.0f}"
+    return f"G0 Z{cal.pen_up_z:.3f} {feed_word(cal.z_feed)}"
 
 
 def _move(cal: Calibration, x: float, y: float, draw: bool) -> str:
     feed = cal.draw_feed if draw else cal.travel_feed
     cmd = "G1" if draw else "G0"
-    return f"{cmd} X{x:.3f} Y{y:.3f} F{feed:.0f}"
+    return f"{cmd} X{x:.3f} Y{y:.3f} {feed_word(feed)}"
 
 
 def test_pattern(name: str, cal: Calibration) -> str:

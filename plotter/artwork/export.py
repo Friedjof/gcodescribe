@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from xml.etree.ElementTree import Element, ParseError, SubElement, fromstring, indent, tostring
 
@@ -17,14 +18,18 @@ def calibration_to_xml(cal: Calibration) -> str:
     root.set("exported", datetime.now(UTC).isoformat(timespec="seconds"))
 
     SubElement(root, "bed", width=f"{cal.bed_width}", height=f"{cal.bed_height}")
-    SubElement(
+    area = SubElement(
         root,
         "plotArea",
         x=f"{cal.origin_x}",
         y=f"{cal.origin_y}",
         width=f"{cal.plot_width}",
         height=f"{cal.plot_height}",
+        base="implicit" if cal.plot_area_base is None else "explicit",
     )
+    if cal.plot_area_base is not None:
+        x, y, width, height = cal.base_plot_area()
+        SubElement(area, "base", x=str(x), y=str(y), width=str(width), height=str(height))
 
     paper = SubElement(root, "paper", margin=f"{cal.paper_margin}")
     for name, point in sorted(cal.paper_corners.items()):
@@ -35,6 +40,7 @@ def calibration_to_xml(cal: Calibration) -> str:
         "pen",
         upZ=f"{cal.pen_up_z}",
         downZ=f"{cal.pen_down_z}",
+        pressureMaxDepth=f"{cal.pen_pressure_max_depth}",
         calibrated=str(cal.pen_calibrated).lower(),
     )
     SubElement(
@@ -51,6 +57,13 @@ def calibration_to_xml(cal: Calibration) -> str:
         flipY=str(cal.flip_y).lower(),
     )
     SubElement(root, "optimize", mergeTolerance=f"{cal.merge_tolerance}")
+    park_x, park_y, park_lift_z = cal.resolved_park()
+    SubElement(root, "park", x=f"{park_x}", y=f"{park_y}", liftZ=f"{park_lift_z}")
+    calibration_x, calibration_y = cal.resolved_calibration_position()
+    SubElement(
+        root, "calibrationPosition", x=f"{calibration_x}", y=f"{calibration_y}",
+        pressureOffset=f"{cal.calibration_pressure_offset}",
+    )
 
     indent(root)
     return '<?xml version="1.0" encoding="UTF-8"?>\n' + tostring(root, encoding="unicode") + "\n"
@@ -98,6 +111,15 @@ def calibration_from_xml(xml: str, *, base: Calibration | None = None) -> Calibr
     num(area, "y", "origin_y")
     num(area, "width", "plot_width")
     num(area, "height", "plot_height")
+    area_base = area.find("base") if area is not None else None
+    if area_base is not None:
+        try:
+            updates["plot_area_base"] = {
+                key: float(area_base.get(attr))
+                for key, attr in (("x", "x"), ("y", "y"), ("w", "width"), ("h", "height"))
+            }
+        except (TypeError, ValueError) as exc:
+            raise CalibrationImportError("Ungültiger allgemeiner Plotbereich.") from exc
 
     paper = root.find("paper")
     if paper is not None:
@@ -119,6 +141,7 @@ def calibration_from_xml(xml: str, *, base: Calibration | None = None) -> Calibr
     pen = root.find("pen")
     num(pen, "upZ", "pen_up_z")
     num(pen, "downZ", "pen_down_z")
+    num(pen, "pressureMaxDepth", "pen_pressure_max_depth")
     flag(pen, "calibrated", "pen_calibrated")
 
     feeds = root.find("feedrates")
@@ -133,7 +156,23 @@ def calibration_from_xml(xml: str, *, base: Calibration | None = None) -> Calibr
     optimize = root.find("optimize")
     num(optimize, "mergeTolerance", "merge_tolerance")
 
-    return cal.merged(updates)
+    park = root.find("park")
+    num(park, "x", "park_x")
+    num(park, "y", "park_y")
+    num(park, "liftZ", "park_lift_z")
+
+    calibration_position = root.find("calibrationPosition")
+    num(calibration_position, "x", "calibration_x")
+    num(calibration_position, "y", "calibration_y")
+    num(calibration_position, "pressureOffset", "calibration_pressure_offset")
+
+    try:
+        merged = cal.merged(updates)
+        if area is not None and area.get("base") == "implicit":
+            merged = replace(merged, plot_area_base=None)
+        return merged
+    except (TypeError, ValueError) as exc:
+        raise CalibrationImportError(str(exc)) from exc
 
 
 def calibration_comment(cal: Calibration) -> str:

@@ -1,5 +1,6 @@
 import { req } from "./req";
 import type { Position, SerialPortCandidate } from "../types/jobs";
+import type { PositionKind } from "../types/calibration";
 
 export const printerClient = {
   octoStatus: () => req<any>("/api/printer/status"),
@@ -39,35 +40,63 @@ export const printerClient = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ command }),
     }),
-  jog: (x: number, y: number, z: number, opts?: { speed?: number; limit?: "bed" | "plot" }) =>
+  jog: (x: number, y: number, z: number, opts?: { speed?: number; limit?: "bed" | "plot"; projectId?: string }) =>
     req("/api/printer/jog", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ x, y, z, speed: opts?.speed, limit: opts?.limit ?? "bed" }),
+      body: JSON.stringify({ x, y, z, speed: opts?.speed, limit: opts?.limit ?? "bed", projectId: opts?.projectId }),
     }),
-  home: (axes?: string[]) =>
+  home: (axes?: string[], projectId?: string) =>
     req("/api/printer/home", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ axes }),
+      body: JSON.stringify({ axes, projectId }),
     }),
-  pen: (down: boolean) =>
-    req("/api/printer/pen", {
+  pen: (down: boolean, projectId?: string) =>
+    req<{ ok: boolean; z: number; position: Position }>("/api/printer/pen", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ down }),
+      body: JSON.stringify({ down, projectId }),
+    }),
+  speedTest: (profileId: string) =>
+    req<{ ok: boolean; size: number; travelFeed: number; position: Position }>("/api/printer/speed-test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ profile_id: profileId }),
     }),
   position: () => req<Position>("/api/position"),
-  move: (x: number, y: number) =>
+  move: (x: number, y: number, projectId?: string) =>
     req<{ ok: boolean; position: Position }>("/api/printer/move", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ x, y }),
+      body: JSON.stringify({ x, y, projectId }),
     }),
-  moveToCorner: (corner: string, target: "paper" | "plot" = "paper") =>
+  moveToCalibration: () =>
+    req<{ ok: boolean; position: Position }>("/api/printer/move-to-calibration", {
+      method: "POST",
+    }),
+  homeAndMoveToPosition: (kind: PositionKind, projectId?: string) =>
+    req<{ ok: boolean; position: Position }>("/api/printer/home-and-move-to-position", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind, projectId }),
+    }),
+  calibrationHeight: (profileId: string, offset: number, projectId?: string) =>
+    req<{ ok: boolean; position: Position }>("/api/printer/calibration-height", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ profile_id: profileId, offset, project_id: projectId }),
+    }),
+  moveToPosition: (kind: PositionKind, target?: { x: number; y: number }, projectId?: string) =>
+    req<{ ok: boolean; position: Position }>("/api/printer/move-to-position", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind, ...target, projectId }),
+    }),
+  moveToCorner: (corner: string, target: "paper" | "plot" = "paper", projectId?: string) =>
     req<{ ok: boolean; position: Position }>("/api/printer/move-to-corner", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ corner, target }),
+      body: JSON.stringify({ corner, target, projectId }),
     }),
 };

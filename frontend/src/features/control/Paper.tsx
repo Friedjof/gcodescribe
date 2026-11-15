@@ -6,9 +6,15 @@ import {
   type Job,
   type Obstacle,
   type PaperState,
+  type PaintProject,
   type Position,
 } from "../../api";
 import LiveView from "./LiveView";
+import SpecialPositions from "./SpecialPositions";
+import CalibrationPressureDialog from "./CalibrationPressureDialog";
+import { useSpecialPositions } from "./useSpecialPositions";
+import { SPECIAL_POSITIONS } from "./specialPositions";
+import { PAPER_FORMATS, paperCornerAngles, plotArea, plotAreaBase } from "./paperLayout";
 import Segmented from "../../components/Segmented";
 import { useArrowKeys } from "../../hooks/index";
 import { useI18n } from "../../i18n";
@@ -20,6 +26,8 @@ const CORNERS: { id: string; labelKey: string }[] = [
   { id: "bl", labelKey: "paper.cornerBL" },
   { id: "br", labelKey: "paper.cornerBR" },
 ];
+
+type PaperStep = "home" | "pen" | "positions" | "corners" | "obstacles" | "apply";
 
 const XY_STEPS = [0.1, 1, 10, 50];
 const Z_STEPS = [0.05, 0.1, 0.5, 1, 5];
@@ -38,30 +46,49 @@ export default function Paper({
   const [cal, setCal] = useState<Calibration | null>(null);
   const [rect, setRect] = useState<[number, number, number, number] | null>(null);
   const [pos, setPos] = useState<Position | null>(null);
-  const [active, setActive] = useState(1);
+  const [active, setActive] = useState<PaperStep | null>("home");
   const [xyStep, setXyStep] = useState(10);
   const [zStep, setZStep] = useState(0.1);
   const [clickMove, setClickMove] = useState(true);
   const [margin, setMargin] = useState(5);
+  const [formatId, setFormatId] = useState<(typeof PAPER_FORMATS)[number]["id"] | null>(null);
+  const [formatLandscape, setFormatLandscape] = useState(false);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [previewJob, setPreviewJob] = useState("");
   const [preview, setPreview] = useState<GcodePreview | null>(null);
+  const [profileId, setProfileId] = useState<string | null>(null);
   const [profileName, setProfileName] = useState<string | null>(null);
+  const [project, setProject] = useState<PaintProject | null>(null);
+  const [profileFingerprint, setProfileFingerprint] = useState<string | null>(null);
+  const projectId = project?.id;
+  const [completedPositions, setCompletedPositions] = useState<Record<string, string>>({});
+  const [pressureOpen, setPressureOpen] = useState(false);
+  const [pressureBusy, setPressureBusy] = useState(false);
   // Obstacle (no-go zone) editing
   const [obstacles, setObstacles] = useState<Obstacle[]>([]);
   const [obsCaptureActive, setObsCaptureActive] = useState(false);
   const [obsCaptureCorner1, setObsCaptureCorner1] = useState<[number, number] | null>(null);
 
   const online = status?.online;
+  const motionLocked = status?.motion_locked ||
+    ["printing", "starting", "pausing", "paused", "resuming", "finishing", "cancelling"]
+      .some((state) => status?.job?.state?.toLowerCase?.().includes(state));
   const homed = !!pos?.homed;
   const heightSaved = !!cal?.pen_calibrated;
 
-  const notifyCalibrationChanged = () =>
+  const notifyCalibrationChanged = () => {
     window.dispatchEvent(new CustomEvent("gcs:calibration-changed"));
+    if (!profileId) return;
+    api.getProfile(profileId).then((profile) => {
+      setProfileName(profile.name);
+      setProfileFingerprint(profile.fingerprint);
+    }).catch(() => {});
+  };
 
   const applyPaperState = (s: PaperState) => {
     setCal(s.calibration);
     setRect(s.rect);
+    setMargin(s.calibration.paper_margin ?? 0);
     setObstacles(s.calibration.obstacles ?? []);
     notifyCalibrationChanged();
   };
@@ -72,16 +99,27 @@ export default function Paper({
   );
 
   useEffect(() => {
-    api
-      .paper()
-      .then((s) => {
-        applyPaperState(s);
-        setMargin(s.calibration.paper_margin ?? 5);
-      })
-      .catch((e) => toast.error(String(e.message)));
+    if (!visible) return;
+    let cancelled = false;
+    setCal(null);
+    setPressureOpen(false);
+    api.listPages().then(async (index) => {
+      if (!index.project) throw new Error("Kein aktives Projekt vorhanden.");
+      const selected = index.project;
+      const [profile, state] = await Promise.all([api.getProfile(selected.profileId), api.paper(selected.id)]);
+      if (cancelled) return;
+      setProject(selected);
+      setProfileId(profile.id);
+      setProfileName(profile.name);
+      setProfileFingerprint(profile.fingerprint);
+      setCal(state.calibration);
+      setRect(state.rect);
+      setObstacles(state.calibration.obstacles ?? []);
+      setMargin(state.calibration.paper_margin ?? 5);
+    }).catch((error) => { if (!cancelled) toast.error(String(error.message)); });
     api.listJobs().then(setJobs).catch(() => {});
-    api.activeProfile().then((p) => setProfileName(p.name)).catch(() => {});
-  }, []);
+    return () => { cancelled = true; };
+  }, [visible]);
 
   useEffect(() => {
     if (!visible) return;
@@ -98,31 +136,73 @@ export default function Paper({
   const fail = (e: any) => toast.error(String(e.message ?? e));
   const run = (fn: () => Promise<any>) => fn().then(refreshPosition).catch(fail);
 
-  const jogXY = (x: number, y: number) => run(() => api.jog(x * xyStep, y * xyStep, 0));
-  const jogZ = (dz: number) => run(() => api.jog(0, 0, dz * zStep));
+  const positionsOpen = active === "positions";
+  const positions = useSpecialPositions({
+    active: visible && positionsOpen, cal, pos, profileId, projectId,
+    canMove: !!online && !motionLocked && !pressureBusy,
+    onPosition: setPos,
+    onCalibration: (updated) => { setCal(updated); notifyCalibrationChanged(); },
+    onAction,
+  });
+  const canMove = online && !motionLocked && !positions.busy && !pressureBusy;
 
+  useEffect(() => {
+    if (!visible && active === "positions") setActive(null);
+    if (!visible) setPressureOpen(false);
+  }, [visible, active]);
+
+  // Follow the project's calibration even when the global printer profile differs.
+  useEffect(() => {
+    if (!visible || !projectId || !profileId) return;
+    let cancelled = false;
+    const id = setInterval(() => {
+      api.listPages().then(async (index) => {
+        if (cancelled || !index.project) return;
+        const selected = index.project;
+        if (selected.id === projectId && selected.profileId === profileId
+            && index.activeProfile?.fingerprint === profileFingerprint) return;
+        const [profile, state] = await Promise.all([api.getProfile(selected.profileId), api.paper(selected.id)]);
+        if (cancelled) return;
+        setProject(selected);
+        setProfileId(profile.id);
+        setProfileName(profile.name);
+        setProfileFingerprint(profile.fingerprint);
+        setCal(state.calibration);
+        setRect(state.rect);
+        setMargin(state.calibration.paper_margin ?? 5);
+        setObstacles(state.calibration.obstacles ?? []);
+        setPressureOpen(false);
+      }).catch(() => {});
+    }, 2000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [visible, projectId, profileId, profileFingerprint]);
+
+  const jogXY = (x: number, y: number) => run(() => api.jog(x * xyStep, y * xyStep, 0, { projectId }));
+  const jogZ = (dz: number) => run(() => api.jog(0, 0, dz * zStep, { projectId }));
+
+  const xyControls = active === "corners" || active === "obstacles";
   const pressed = useArrowKeys(
     {
-      left: (active === 3 || active === 4) ? () => jogXY(-1, 0) : undefined,
-      right: (active === 3 || active === 4) ? () => jogXY(1, 0) : undefined,
-      up: (active === 3 || active === 4) ? () => jogXY(0, 1) : active === 2 ? () => jogZ(1) : undefined,
-      down: (active === 3 || active === 4) ? () => jogXY(0, -1) : active === 2 ? () => jogZ(-1) : undefined,
+      left: xyControls ? () => jogXY(-1, 0) : undefined,
+      right: xyControls ? () => jogXY(1, 0) : undefined,
+      up: xyControls ? () => jogXY(0, 1) : active === "pen" ? () => jogZ(1) : undefined,
+      down: xyControls ? () => jogXY(0, -1) : active === "pen" ? () => jogZ(-1) : undefined,
       raise: homed ? () => jogZ(1) : undefined,
       lower: homed ? () => jogZ(-1) : undefined,
     },
-    visible && online && (active === 2 || active === 3 || active === 4)
+    visible && canMove && (active === "pen" || xyControls)
   );
   const kbd = (dir: string) => (pressed === dir ? " kbd-active" : "");
 
   if (!cal) return <div className="card">{t("common.loading")}</div>;
 
   const homeAll = () =>
-    api.home()
-      .then(() => { refreshPosition(); setActive(2); })
+    api.home(undefined, projectId)
+      .then(() => { refreshPosition(); setActive("pen"); })
       .catch(fail);
 
   const savePenHeight = (which: "up" | "down") =>
-    api.penFromPosition(which)
+    api.penFromPosition(which, projectId)
       .then((c) => {
         setCal(c);
         notifyCalibrationChanged();
@@ -139,39 +219,44 @@ export default function Paper({
       which === "down"
         ? { pen_down_z: z, pen_calibrated: true }
         : { pen_up_z: z };
-    api.saveCalibration(updates).then((c) => { setCal(c); notifyCalibrationChanged(); }).catch(fail);
+    api.saveCalibration(updates, projectId).then((c) => { setCal(c); notifyCalibrationChanged(); }).catch(fail);
   };
 
   const saveBedDimension = (field: "bed_width" | "bed_height", val: number) => {
     if (val < 10) return;
-    api.saveCalibration({ [field]: val }).then((c) => { setCal(c); notifyCalibrationChanged(); }).catch(fail);
+    api.saveCalibration({ [field]: val }, projectId).then((c) => { setCal(c); notifyCalibrationChanged(); }).catch(fail);
   };
 
   const capture = (corner: string) =>
-    api.setCorner(corner)
+    api.setCorner(corner, projectId)
       .then((s) => { applyPaperState(s); toast.success(t("paper.cornerSaved", { corner: corner.toUpperCase() })); })
       .catch(fail);
 
   const clearCorner = (corner: string) =>
-    api.clearCorner(corner).then(applyPaperState).catch(fail);
+    api.clearCorner(corner, projectId).then(applyPaperState).catch(fail);
 
-  const resetCorners = () => api.resetPaper().then(applyPaperState).catch(fail);
+  const resetCorners = () => api.resetPaper(projectId).then(applyPaperState).catch(fail);
 
   const apply = () =>
-    api.applyPaper(margin)
+    api.applyPaper(margin, projectId)
+      .then((s) => { applyPaperState(s); toast.success(t("paper.applied")); onAction(); })
+      .catch(fail);
+
+  const adoptPaperArea = () =>
+    api.applyPaper(margin, projectId, true)
       .then((s) => { applyPaperState(s); toast.success(t("paper.applied")); onAction(); })
       .catch(fail);
 
   const plotFrame = () =>
-    api.testPattern("frame")
+    api.testPattern("frame", projectId)
       .then((j) => api.send(j.filename, true))
       .then(() => { toast.success(t("paper.framePlotting")); onAction(); })
       .catch(fail);
 
-  const moveTo = (x: number, y: number) => run(() => api.move(x, y));
+  const moveTo = (x: number, y: number) => run(() => api.move(x, y, projectId));
 
   const driveToCorner = (corner: string, target: "paper" | "plot") =>
-    run(() => api.moveToCorner(corner, target));
+    run(() => api.moveToCorner(corner, target, projectId));
 
   // Corner drag handlers (no machine movement)
   const handleDragCorner = (corner: string, x: number, y: number) => {
@@ -185,96 +270,57 @@ export default function Paper({
     );
   };
   const handleDropCorner = (corner: string, x: number, y: number) => {
-    api.setCornerAt(corner, x, y).then(applyPaperState).catch(fail);
+    api.setCornerAt(corner, x, y, projectId).then(applyPaperState).catch(fail);
   };
 
   const capturedCount = Object.keys(cal.paper_corners ?? {}).length;
+  const currentFormat = PAPER_FORMATS.find((format) => format.id === formatId);
+  const currentPlot = plotArea(cal);
+  const currentBase = plotAreaBase(cal);
+  const marginValid = Number.isFinite(margin) && margin >= 0
+    && currentBase.w - 2 * margin >= 5 && currentBase.h - 2 * margin >= 5;
+  const cornerAngles = paperCornerAngles(cal.paper_corners ?? {});
 
   const saveObstacles = (next: Obstacle[]) => {
     setObstacles(next);
-    api.setObstacles(next).then(applyPaperState).catch(fail);
+    api.setObstacles(next, projectId).then(applyPaperState).catch(fail);
   };
 
   const deleteObstacle = (id: string) => {
     saveObstacles(obstacles.filter((o) => o.id !== id));
   };
 
-  const steps = [
-    { n: 1, title: t("paper.step1"), done: homed, locked: false },
-    { n: 2, title: t("paper.step2"), done: heightSaved, locked: !homed && !heightSaved },
-    { n: 3, title: t("paper.step3"), done: !!rect, locked: !homed },
-    { n: 4, title: t("paper.step4Obstacles"), done: false, locked: !rect },
-    { n: 5, title: t("paper.step5"), done: false, locked: !rect },
+  const positionsSignature = SPECIAL_POSITIONS.every(({ kind, x, y }) =>
+    cal.defined_positions?.includes(kind) && Number.isFinite(cal[x]) && Number.isFinite(cal[y]))
+    ? JSON.stringify(SPECIAL_POSITIONS.map(({ x, y }) => [cal[x], cal[y]])) : null;
+  const positionsDone = !!profileId && positionsSignature !== null && completedPositions[profileId] === positionsSignature;
+  const finishPositions = () => {
+    if (profileId && positionsSignature !== null) {
+      setCompletedPositions((current) => ({ ...current, [profileId]: positionsSignature }));
+    }
+    setActive("corners");
+  };
+
+  const steps: { id: PaperStep; title: string; done: boolean; locked: boolean }[] = [
+    { id: "home", title: t("paper.step1"), done: homed, locked: false },
+    { id: "pen", title: t("paper.step2"), done: heightSaved, locked: !homed && !heightSaved },
+    { id: "positions", title: t("paper.positions.title"), done: positionsDone, locked: false },
+    { id: "corners", title: t("paper.step3"), done: !!rect, locked: !homed },
+    { id: "obstacles", title: t("paper.step4Obstacles"), done: false, locked: !rect },
+    { id: "apply", title: t("paper.step5"), done: false, locked: false },
   ];
 
   return (
     <div className="grid paper-grid">
-      {/* ── Left: Live View ─────────────────────────────────────── */}
-      <section className="card">
-        <h2>{t("paper.liveView")}</h2>
-        <LiveView
-          cal={cal}
-          position={pos}
-          rect={rect}
-          preview={preview}
-          onMoveTo={clickMove && homed ? moveTo : undefined}
-          onDragCorner={active === 3 ? handleDragCorner : undefined}
-          onDropCorner={active === 3 ? handleDropCorner : undefined}
-          obstacles={obstacles}
-          editingObstacles={active === 4}
-          onObstaclesChange={saveObstacles}
-        />
-        <div className="legend">
-          <span><i className="sw paper" /> {t("paper.legPaper")}</span>
-          <span><i className="sw plot" /> {t("paper.legPlot")}</span>
-          <span><i className="sw corner" /> {t("paper.legCorner")}</span>
-          <span><i className="sw head" /> {t("paper.legPen")}</span>
-          {obstacles.length > 0 && <span><i className="sw obstacle" /> {t("paper.legObstacle")}</span>}
-          {preview && <span><i className="sw draw" /> {t("paper.legPreview")}</span>}
-        </div>
-        <div className="pos-readout">
-          {homed && pos ? (
-            <>
-              <span>X <strong>{pos.x.toFixed(1)}</strong></span>
-              <span>Y <strong>{pos.y.toFixed(1)}</strong></span>
-              <span>Z <strong>{pos.z.toFixed(2)}</strong></span>
-            </>
-          ) : (
-            <span className="muted">{t("paper.posUnknown")}</span>
-          )}
-          <label className="switch-label">
-            <span className="muted">{t("paper.clickMove")}</span>
-            <button
-              className={`switch ${clickMove ? "on" : ""}`}
-              disabled={!homed}
-              onClick={() => setClickMove(!clickMove)}
-              aria-pressed={clickMove}
-            >
-              <i />
-            </button>
-          </label>
-        </div>
-
-        <div className="field-group" style={{ marginTop: 16 }}>
-          <h3>{t("paper.gcodePreview")}</h3>
-          <div className="preview-row">
-            <select value={previewJob} onChange={(e) => setPreviewJob(e.target.value)}>
-              <option value="">{t("paper.chooseJob")}</option>
-              {jobs.map((j) => (
-                <option key={j.filename} value={j.filename}>{j.filename}</option>
-              ))}
-            </select>
-            <button className="ghost" onClick={() => api.listJobs().then(setJobs).catch(() => {})}>⟳</button>
-          </div>
-          {preview?.truncated && <p className="muted">{t("paper.previewTruncated")}</p>}
-        </div>
-      </section>
-
-      {/* ── Right: Wizard ────────────────────────────────────────── */}
-      <section className="card">
+      {visible && pressureOpen && <CalibrationPressureDialog canMove={!!online && !motionLocked && !positions.busy}
+        projectId={projectId} profileId={profileId ?? undefined}
+        onClose={() => setPressureOpen(false)} onBusyChange={setPressureBusy}
+        onCalibration={(updated) => { setCal(updated); notifyCalibrationChanged(); }} onPosition={setPos} onAction={onAction} />}
+      {/* ── Left: Wizard ────────────────────────────────────────── */}
+      <section className="card paper-wizard-panel">
         <h2>{t("paper.title")}</h2>
         {profileName && (
-          <p className="muted">{t("paper.activeProfile", { name: profileName })}</p>
+          <p className="muted">Projekt „{project?.name}“ · Profil „{profileName}“</p>
         )}
         {!online && (
           <div className="banner err" style={{ marginBottom: 14 }}>
@@ -283,27 +329,28 @@ export default function Paper({
         )}
 
         <div className="wizard">
-          {steps.map((s) => (
-            <div key={s.n} className={`wstep ${s.locked ? "locked" : ""} ${active === s.n ? "open" : ""}`}>
+          {steps.map((s, index) => (
+            <div key={s.id} className={`wstep ${s.locked ? "locked" : ""} ${active === s.id ? "open" : ""}`}>
               <button
                 className="wstep-head"
-                disabled={s.locked}
-                onClick={() => setActive(s.n)}
+                disabled={s.locked || positions.busy}
+                aria-expanded={active === s.id}
+                onClick={() => setActive(active === s.id ? null : s.id)}
               >
                 <span className={`badge ${s.done ? "done" : ""}`}>
-                  {s.done ? "✓" : s.locked ? "🔒" : s.n}
+                  {s.done ? "✓" : s.locked ? "🔒" : index + 1}
                 </span>
                 <span className="wstep-title">{s.title}</span>
               </button>
 
-              {active === s.n && !s.locked && (
+              {active === s.id && !s.locked && (
                 <div className="wstep-body">
 
                   {/* ── Step 1: Home & bed size ──────────────────── */}
-                  {s.n === 1 && (
+                  {s.id === "home" && (
                     <>
                       <p className="muted">{t("paper.step1Hint")}</p>
-                      <button className="primary big" disabled={!online} onClick={homeAll}>
+                      <button className="primary big" disabled={!canMove} onClick={homeAll}>
                         {t("paper.homeXYZ")}
                       </button>
                       <details className="collapsible" style={{ marginTop: 14 }}>
@@ -344,7 +391,7 @@ export default function Paper({
                   )}
 
                   {/* ── Step 2: Pen height ───────────────────────── */}
-                  {s.n === 2 && (
+                  {s.id === "pen" && (
                     <>
                       {heightSaved && (
                         <div className="banner ok" style={{ marginTop: 0, marginBottom: 12 }}>
@@ -358,7 +405,7 @@ export default function Paper({
                       {!homed && (
                         <div className="banner warn-inline" style={{ marginBottom: 10 }}>
                           <span>{t("paper.needHome")}</span>
-                          <button className="primary" disabled={!online} onClick={homeAll}>
+                          <button className="primary" disabled={!canMove} onClick={homeAll}>
                             {t("paper.homeXYZ")}
                           </button>
                         </div>
@@ -377,14 +424,14 @@ export default function Paper({
                         <div className="z-buttons">
                           <button
                             className={"big" + kbd("raise") + kbd("up")}
-                            disabled={!online || !homed}
+                            disabled={!canMove || !homed}
                             onClick={() => jogZ(1)}
                           >
                             Z + {zStep}
                           </button>
                           <button
                             className={"big" + kbd("lower") + kbd("down")}
-                            disabled={!online || !homed}
+                            disabled={!canMove || !homed}
                             onClick={() => jogZ(-1)}
                           >
                             Z − {zStep}
@@ -396,23 +443,23 @@ export default function Paper({
                           </p>
                         )}
                         <div className="save-row">
-                          <button disabled={!online || !homed} onClick={() => savePenHeight("down")}>
+                          <button disabled={!canMove || !homed} onClick={() => savePenHeight("down")}>
                             {t("paper.saveAsDown")}
                           </button>
-                          <button disabled={!online || !homed} onClick={() => savePenHeight("up")}>
+                          <button disabled={!canMove || !homed} onClick={() => savePenHeight("up")}>
                             {t("paper.saveAsUp")}
                           </button>
                         </div>
                         <div className="save-row" style={{ marginTop: 4 }}>
                           <button
-                            disabled={!online || !homed || !heightSaved}
-                            onClick={() => run(() => api.pen(true))}
+                            disabled={!canMove || !homed || !heightSaved}
+                            onClick={() => run(() => api.pen(true, projectId))}
                           >
                             {t("paper.testLower")}
                           </button>
                           <button
-                            disabled={!online || !homed || !heightSaved}
-                            onClick={() => run(() => api.pen(false))}
+                            disabled={!canMove || !homed || !heightSaved}
+                            onClick={() => run(() => api.pen(false, projectId))}
                           >
                             {t("paper.testRaise")}
                           </button>
@@ -454,15 +501,20 @@ export default function Paper({
                         className="primary"
                         style={{ marginTop: 14 }}
                         disabled={!heightSaved}
-                        onClick={() => setActive(3)}
+                        onClick={() => setActive("positions")}
                       >
-                        {t("paper.toCorners")}
+                        {t("paper.positions.next")}
                       </button>
                     </>
                   )}
 
-                  {/* ── Step 3: Paper corners ────────────────────── */}
-                  {s.n === 3 && (
+                  {s.id === "positions" && (
+                    <SpecialPositions cal={cal} pos={pos} controls={positions}
+                      onNext={finishPositions} onOpenPressure={() => setPressureOpen(true)} />
+                  )}
+
+                  {/* ── Step 4: Paper corners ────────────────────── */}
+                  {s.id === "corners" && (
                     <>
                       {/* Corner chips */}
                       <div className="corner-chips">
@@ -505,15 +557,15 @@ export default function Paper({
                           />
                           <div className="jog compact">
                             <div className="xy">
-                              <button disabled={!online} onClick={() => jogXY(0, 1)} className={"up" + kbd("up")}>↑</button>
-                              <button disabled={!online} onClick={() => jogXY(-1, 0)} className={"left" + kbd("left")}>←</button>
+                              <button disabled={!canMove} onClick={() => jogXY(0, 1)} className={"up" + kbd("up")}>↑</button>
+                              <button disabled={!canMove} onClick={() => jogXY(-1, 0)} className={"left" + kbd("left")}>←</button>
                               <span className="pad-center" />
-                              <button disabled={!online} onClick={() => jogXY(1, 0)} className={"right" + kbd("right")}>→</button>
-                              <button disabled={!online} onClick={() => jogXY(0, -1)} className={"down" + kbd("down")}>↓</button>
+                              <button disabled={!canMove} onClick={() => jogXY(1, 0)} className={"right" + kbd("right")}>→</button>
+                              <button disabled={!canMove} onClick={() => jogXY(0, -1)} className={"down" + kbd("down")}>↓</button>
                             </div>
                             <div className="z">
-                              <button disabled={!online} onClick={() => run(() => api.pen(true))}>{t("paper.penDownShort")}</button>
-                              <button disabled={!online} onClick={() => run(() => api.pen(false))}>{t("paper.penUpShort")}</button>
+                              <button disabled={!canMove} onClick={() => run(() => api.pen(true, projectId))}>{t("paper.penDownShort")}</button>
+                              <button disabled={!canMove} onClick={() => run(() => api.pen(false, projectId))}>{t("paper.penUpShort")}</button>
                             </div>
                           </div>
                           <p className="muted kbd-hint">
@@ -524,7 +576,7 @@ export default function Paper({
                               const captured = cal.paper_corners?.[c.id];
                               return (
                                 <div key={c.id} className={`corner ${captured ? "set" : ""}`}>
-                                  <button disabled={!online || !homed} onClick={() => capture(c.id)}>
+                                  <button disabled={!canMove || !homed} onClick={() => capture(c.id)}>
                                     {t(c.labelKey)}
                                   </button>
                                   {captured ? (
@@ -532,7 +584,7 @@ export default function Paper({
                                       {captured[0].toFixed(1)} / {captured[1].toFixed(1)}
                                       <button
                                         className="ghost tiny"
-                                        disabled={!online}
+                                        disabled={!canMove}
                                         title={t("paper.driveCorner")}
                                         onClick={() => driveToCorner(c.id, "paper")}
                                       >➜</button>
@@ -551,15 +603,15 @@ export default function Paper({
                         {capturedCount > 0 && (
                           <button className="ghost" onClick={resetCorners}>{t("paper.resetCorners")}</button>
                         )}
-                        <button className="primary" disabled={!rect} onClick={() => setActive(4)}>
+                        <button className="primary" disabled={!rect} onClick={() => setActive("obstacles")}>
                           {t("common.next")} →
                         </button>
                       </div>
                     </>
                   )}
 
-                  {/* ── Step 4: Obstacles ────────────────────────── */}
-                  {s.n === 4 && (
+                  {/* ── Step 5: Obstacles ────────────────────────── */}
+                  {s.id === "obstacles" && (
                     <>
                       <p className="muted">{t("paper.step4ObstaclesHint")}</p>
 
@@ -608,11 +660,11 @@ export default function Paper({
                           />
                           <div className="jog compact">
                             <div className="xy">
-                              <button disabled={!online} onClick={() => jogXY(0, 1)} className={"up" + kbd("up")}>↑</button>
-                              <button disabled={!online} onClick={() => jogXY(-1, 0)} className={"left" + kbd("left")}>←</button>
+                              <button disabled={!canMove} onClick={() => jogXY(0, 1)} className={"up" + kbd("up")}>↑</button>
+                              <button disabled={!canMove} onClick={() => jogXY(-1, 0)} className={"left" + kbd("left")}>←</button>
                               <span className="pad-center" />
-                              <button disabled={!online} onClick={() => jogXY(1, 0)} className={"right" + kbd("right")}>→</button>
-                              <button disabled={!online} onClick={() => jogXY(0, -1)} className={"down" + kbd("down")}>↓</button>
+                              <button disabled={!canMove} onClick={() => jogXY(1, 0)} className={"right" + kbd("right")}>→</button>
+                              <button disabled={!canMove} onClick={() => jogXY(0, -1)} className={"down" + kbd("down")}>↓</button>
                             </div>
                           </div>
                           <p className="muted kbd-hint">
@@ -668,52 +720,44 @@ export default function Paper({
                         </div>
                       )}
                       <div className="save-row" style={{ marginTop: 14 }}>
-                        <button className="primary" onClick={() => setActive(5)}>
+                        <button className="primary" onClick={() => setActive("apply")}>
                           {t("common.next")} →
                         </button>
                       </div>
                     </>
                   )}
 
-                  {/* ── Step 5: Apply ────────────────────────────── */}
-                  {s.n === 5 && (
+                  {/* ── Step 6: Apply ────────────────────────────── */}
+                  {s.id === "apply" && (
                     <>
-                      <p className="muted">
-                        {rect
-                          ? t("paper.capturedPaper", {
-                              w: rect[2].toFixed(1),
-                              h: rect[3].toFixed(1),
-                              x: rect[0].toFixed(1),
-                              y: rect[1].toFixed(1),
-                            })
-                          : t("paper.noPaper")}{" "}
-                        {t("paper.pdfFit")}
-                      </p>
+                      <p className="muted">{t("paper.marginHint")}</p>
                       <div className="apply-row">
                         <label className="field">
                           <span>{t("paper.margin")}</span>
                           <div className="input-unit">
                             <input
-                              type="number" step="1" min="0" value={margin}
+                              type="number" aria-label={t("paper.margin")} step="1" min="0" max={(Math.min(currentBase.w, currentBase.h) - 5) / 2} value={margin}
                               onChange={(e) => setMargin(parseFloat(e.target.value) || 0)}
                             />
                             <em>mm</em>
                           </div>
                         </label>
-                        <button className="primary" disabled={!rect} onClick={apply}>
-                          {t("common.apply")}
+                        <button className="primary" disabled={!marginValid} onClick={apply}>
+                          {t("paper.applyMargin")}
                         </button>
                         <button
-                          disabled={!online || !rect}
+                          disabled={!canMove}
                           onClick={plotFrame}
                           title={t("paper.testFrameTip")}
                         >
                           {t("paper.testFrame")}
                         </button>
-                        <a className="btn-link" href="/api/calibration/export" download>
+                        <a className="btn-link" href={`/api/calibration/export${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ""}`} download>
                           {t("common.exportXml")}
                         </a>
                       </div>
+                      <button type="button" className="ghost" disabled={!rect} onClick={adoptPaperArea}
+                        style={{ marginTop: 10 }}>{t("paper.fromCorners")}</button>
                       <div className="field-group" style={{ marginTop: 14 }}>
                         <h3>{t("paper.driveToPlotCorners")}</h3>
                         <p className="muted" style={{ margin: "0 0 8px" }}>
@@ -723,7 +767,7 @@ export default function Paper({
                           {CORNERS.map((c) => (
                             <button
                               key={c.id}
-                              disabled={!online || !homed}
+                              disabled={!canMove || !homed}
                               onClick={() => driveToCorner(c.id, "plot")}
                             >
                               {t(c.labelKey)}
@@ -740,6 +784,102 @@ export default function Paper({
           ))}
         </div>
       </section>
+      {/* ── Right: Live View ─────────────────────────────────────── */}
+      <section className="card paper-live-panel">
+        <h2>{t("paper.liveView")}</h2>
+        <div className="paper-format-controls" title={t("paper.formatPassive")}>
+          <label className="field">{t("paper.formatCompare")}
+            <select aria-label={t("paper.formatCompare")} value={formatId ?? ""}
+              onChange={(event) => setFormatId(event.target.value as typeof formatId || null)}>
+              <option value="">{t("paper.formatOff")}</option>
+              {PAPER_FORMATS.map((format) => <option key={format.id} value={format.id}>{format.id}</option>)}
+            </select>
+          </label>
+          {currentFormat && <button type="button" className="ghost paper-format-orientation"
+              aria-pressed={formatLandscape} onClick={() => setFormatLandscape((value) => !value)}>
+              {formatLandscape ? t("paper.landscape") : t("paper.portrait")} ↻
+            </button>}
+        </div>
+        <LiveView
+          cal={cal}
+          position={pos}
+          rect={rect}
+          preview={preview}
+          onMoveTo={positionsOpen
+            ? positions.ready && !positions.busy ? (x, y) => positions.move({ x, y }) : undefined
+            : visible && clickMove && homed && canMove ? moveTo : undefined}
+          selectedPosition={positionsOpen ? positions.kind : null}
+          target={positions.target}
+          onDragCorner={active === "corners" ? handleDragCorner : undefined}
+          onDropCorner={active === "corners" ? handleDropCorner : undefined}
+          formatPreview={currentFormat ? { format: currentFormat, landscape: formatLandscape } : undefined}
+          obstacles={obstacles}
+          editingObstacles={active === "obstacles"}
+          onObstaclesChange={saveObstacles}
+        />
+        <div className="paper-area-readout">
+          <span>{t("paper.drawingArea")} {currentPlot.w.toFixed(1)} × {currentPlot.h.toFixed(1)} mm</span>
+        </div>
+        <div className="paper-angle-readout" aria-label={t("paper.cornerAngles")}>
+          <strong>{t("paper.cornerAngles")}</strong>
+          {cornerAngles ? CORNERS.map(({ id, labelKey }) => {
+            const angle = cornerAngles[id];
+            const right = Math.abs(angle - 90) <= 1;
+            return <span key={id} className={right ? "right" : "skewed"}
+              title={t(labelKey)}>{t(labelKey).split(" ")[0]} {angle.toFixed(1)}° {right ? "✓" : "!"}</span>;
+          }) : <span className="muted">{t("paper.angleNeedCorners")}</span>}
+        </div>
+        <div className="legend">
+          <span><i className="sw paper" /> {t("paper.legPaper")}</span>
+          <span><i className="sw" style={{ background: "var(--muted)" }} /> {t("paper.legPlot")}</span>
+          <span><i className="sw corner" /> {t("paper.legCorner")}</span>
+          <span><i className="sw head" /> {t("paper.legPen")}</span>
+          <span><i className="sw park" /> {t("paper.legPark")}</span>
+          <span>
+            <i className="sw calibration" /> C · {t("calibrate.groupCalibrationPosition")}
+          </span>
+          {obstacles.length > 0 && <span><i className="sw obstacle" /> {t("paper.legObstacle")}</span>}
+          {preview && <span><i className="sw draw" /> {t("paper.legPreview")}</span>}
+        </div>
+        <div className="pos-readout">
+          {homed && pos ? (
+            <>
+              <span>X <strong>{pos.x.toFixed(1)}</strong></span>
+              <span>Y <strong>{pos.y.toFixed(1)}</strong></span>
+              <span>Z <strong>{pos.z.toFixed(2)}</strong></span>
+            </>
+          ) : (
+            <span className="muted">{t("paper.posUnknown")}</span>
+          )}
+          <label className={`switch-label ${positionsOpen ? "disabled" : ""}`}>
+            <span className="muted">{t("paper.clickMove")}</span>
+            <button
+              className={`switch ${clickMove && !positionsOpen ? "on" : ""}`}
+              disabled={!homed || positionsOpen || positions.busy}
+              aria-label={t("paper.clickMove")}
+              onClick={() => setClickMove(!clickMove)}
+              aria-pressed={clickMove && !positionsOpen}
+            >
+              <i />
+            </button>
+          </label>
+        </div>
+
+        <div className="paper-preview">
+          <label htmlFor="paper-preview-job">{t("paper.gcodePreview")}</label>
+          <div className="preview-row">
+            <select id="paper-preview-job" value={previewJob} onChange={(e) => setPreviewJob(e.target.value)}>
+              <option value="">{t("paper.chooseJob")}</option>
+              {jobs.map((j) => (
+                <option key={j.filename} value={j.filename}>{j.filename}</option>
+              ))}
+            </select>
+            <button className="ghost" onClick={() => api.listJobs().then(setJobs).catch(() => {})}>⟳</button>
+          </div>
+          {preview?.truncated && <p className="muted">{t("paper.previewTruncated")}</p>}
+        </div>
+      </section>
+
     </div>
   );
 }

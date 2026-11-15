@@ -1,5 +1,8 @@
 import { useRef, useState, useEffect } from "react";
-import type { Calibration, GcodePreview, Obstacle, Position } from "../../api";
+import type { Calibration, GcodePreview, Obstacle, Position, PositionKind } from "../../api";
+import { useI18n } from "../../i18n";
+import { SPECIAL_POSITIONS, positionDefinition, type PositionTarget } from "./specialPositions";
+import { formatSize, paperCornerAngles, plotArea, plotAreaBase, type PaperFormat } from "./paperLayout";
 
 const CORNER_LABELS: Record<string, string> = {
   bl: "↙",
@@ -36,14 +39,16 @@ function snapTo90(
 export default function LiveView({
   cal,
   position,
-  rect,
   preview,
   onMoveTo,
   onDragCorner,
   onDropCorner,
+  formatPreview,
   obstacles,
   editingObstacles,
   onObstaclesChange,
+  selectedPosition = null,
+  target = null,
 }: {
   cal: Calibration;
   position: Position | null;
@@ -52,18 +57,22 @@ export default function LiveView({
   onMoveTo?: (x: number, y: number) => void;
   onDragCorner?: (corner: string, x: number, y: number) => void;
   onDropCorner?: (corner: string, x: number, y: number) => void;
+  formatPreview?: { format: PaperFormat; landscape: boolean };
   obstacles?: Obstacle[];
   editingObstacles?: boolean;
   onObstaclesChange?: (obstacles: Obstacle[]) => void;
+  selectedPosition?: PositionKind | null;
+  target?: PositionTarget | null;
 }) {
+  const { t } = useI18n();
   const svgRef = useRef<SVGSVGElement>(null);
   const W = cal.bed_width;
   const H = cal.bed_height;
   const ty = (y: number) => H - y;
 
-  // Paper-corner drag state
   const [dragging, setDragging] = useState<{ corner: string; pointerId: number } | null>(null);
   const [snapTarget, setSnapTarget] = useState<[number, number] | null>(null);
+  const suppressClick = useRef(false);
 
   // Obstacle selection (for keyboard delete)
   const [selectedObsId, setSelectedObsId] = useState<string | null>(null);
@@ -105,7 +114,9 @@ export default function LiveView({
   };
 
   const handleClick = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (!onMoveTo || dragging || !svgRef.current) return;
+    if (dragging || !svgRef.current) return;
+    if (suppressClick.current) { suppressClick.current = false; return; }
+    if (!onMoveTo) return;
     const pt = svgRef.current.createSVGPoint();
     pt.x = e.clientX;
     pt.y = e.clientY;
@@ -128,6 +139,7 @@ export default function LiveView({
     if (!onDragCorner && !onDropCorner) return;
     e.stopPropagation();
     (e.target as SVGCircleElement).setPointerCapture(e.pointerId);
+    suppressClick.current = true;
     setDragging({ corner, pointerId: e.pointerId });
     setSnapTarget(null);
   };
@@ -137,10 +149,7 @@ export default function LiveView({
     const coords = svgBedCoords(e);
     if (!coords) return;
     const [x, y] = coords;
-    const snap = snapTo90(
-      cal.paper_corners as Record<string, [number, number]>,
-      dragging.corner, x, y
-    );
+    const snap = snapTo90(cal.paper_corners, dragging.corner, x, y);
     setSnapTarget(snap);
     onDragCorner?.(dragging.corner, snap ? snap[0] : x, snap ? snap[1] : y);
   };
@@ -150,10 +159,7 @@ export default function LiveView({
     const coords = svgBedCoords(e);
     if (coords) {
       const [x, y] = coords;
-      const snap = snapTo90(
-        cal.paper_corners as Record<string, [number, number]>,
-        dragging.corner, x, y
-      );
+      const snap = snapTo90(cal.paper_corners, dragging.corner, x, y);
       onDropCorner?.(dragging.corner, snap ? snap[0] : x, snap ? snap[1] : y);
     }
     setDragging(null);
@@ -175,8 +181,17 @@ export default function LiveView({
   }
 
   const cornersMap = (cal.paper_corners ?? {}) as Record<string, [number, number]>;
+  const angles = paperCornerAngles(cornersMap);
+  const drawingArea = plotArea(cal);
+  const area = plotAreaBase(cal);
+  const format = formatPreview ? formatSize(formatPreview.format, formatPreview.landscape) : null;
+  const formatX = format ? area.x + (area.w - format.w) / 2 : 0;
+  const formatY = format ? area.y + (area.h - format.h) / 2 : 0;
+  const viewLeft = Math.min(0, formatX, area.x, drawingArea.x) - 8;
+  const viewRight = Math.max(W, formatX + (format?.w ?? 0), area.x + area.w, drawingArea.x + drawingArea.w) + 8;
+  const viewBottom = Math.min(0, formatY, area.y, drawingArea.y) - 8;
+  const viewTop = Math.max(H, formatY + (format?.h ?? 0), area.y + area.h, drawingArea.y + drawingArea.h) + 8;
   const capturedCorners = CORNER_ORDER.filter((c) => cornersMap[c] != null);
-  const margin = cal.paper_margin ?? 0;
   const isDraggable = !!(onDragCorner || onDropCorner);
 
   const polyPoints = capturedCorners
@@ -186,34 +201,18 @@ export default function LiveView({
     })
     .join(" ");
 
-  let marginPolyPoints: string | null = null;
-  if (capturedCorners.length === 4 && margin > 0) {
-    const cx = capturedCorners.reduce((s, c) => s + cornersMap[c][0], 0) / 4;
-    const cy = capturedCorners.reduce((s, c) => s + cornersMap[c][1], 0) / 4;
-    marginPolyPoints = capturedCorners
-      .map((c) => {
-        const [px, py] = cornersMap[c];
-        const dx = px - cx;
-        const dy = py - cy;
-        const len = Math.hypot(dx, dy);
-        if (len < 1e-9) return `${px},${ty(py)}`;
-        const scale = Math.max(0, (len - margin)) / len;
-        return `${cx + dx * scale},${ty(cy + dy * scale)}`;
-      })
-      .join(" ");
-  }
-
   const displayObs = obstacles ?? [];
-
   return (
     <div className="liveview">
       <svg
         ref={svgRef}
-        viewBox={`-8 -8 ${W + 16} ${H + 16}`}
+        viewBox={`${viewLeft} ${H - viewTop} ${viewRight - viewLeft} ${viewTop - viewBottom}`}
         onClick={handleClick}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
+        onPointerCancel={() => {
+          setDragging(null); setSnapTarget(null); suppressClick.current = false;
+        }}
         style={{
           cursor: dragging ? "grabbing" : onMoveTo ? "crosshair" : "default",
         }}
@@ -250,30 +249,22 @@ export default function LiveView({
             })()}
           </g>
         )}
-        {/* margin polygon */}
-        {marginPolyPoints && (
-          <polygon
-            points={marginPolyPoints}
-            fill="none"
-            stroke="#cfd6e4"
-            strokeWidth={0.4}
-            strokeDasharray="2 2"
-          />
+        {format && formatPreview && (
+          <g pointerEvents="none" role="img" aria-label={`${formatPreview.format.id} ${format.w} × ${format.h} mm`}>
+            <title>{t("paper.formatPassive")}</title>
+            <rect x={formatX} y={ty(formatY + format.h)} width={format.w} height={format.h}
+              fill="rgba(160,165,175,0.08)" stroke="#aab0bb" strokeWidth={1.2} strokeDasharray="5 2" />
+            <text x={formatX + format.w / 2} y={ty(formatY + format.h / 2)}
+              fontSize={Math.min(11, Math.max(6, format.w * 0.07))}
+              fill="#aab0bb" fontWeight="bold"
+              textAnchor="middle" dominantBaseline="middle">{formatPreview.format.id}</text>
+          </g>
         )}
-        {!marginPolyPoints && rect && margin > 0 && rect[2] - 2 * margin > 0 && rect[3] - 2 * margin > 0 && (
-          <rect
-            x={rect[0] + margin} y={ty(rect[1] + rect[3] - margin)}
-            width={rect[2] - 2 * margin} height={rect[3] - 2 * margin}
-            fill="none" stroke="#cfd6e4" strokeWidth={0.4} strokeDasharray="2 2"
-          />
-        )}
-
-        {/* active plot area */}
-        <rect
-          x={cal.origin_x} y={ty(cal.origin_y + cal.plot_height)}
-          width={cal.plot_width} height={cal.plot_height}
-          fill="none" stroke="var(--accent)" strokeWidth={0.6} strokeDasharray="4 3"
-        />
+        <g pointerEvents="none" role="img" aria-label={t("paper.drawingArea")}>
+          <rect x={drawingArea.x} y={ty(drawingArea.y + drawingArea.h)}
+            width={drawingArea.w} height={drawingArea.h}
+            fill="none" stroke="var(--muted)" strokeWidth={0.6} strokeDasharray="3 2" />
+        </g>
 
         {/* gcode preview */}
         {preview && (
@@ -331,19 +322,27 @@ export default function LiveView({
           const pos = cornersMap[name];
           if (!pos) return null;
           const [cx, cy] = pos;
+          const angle = angles?.[name];
+          const angleOk = angle != null && Math.abs(angle - 90) <= 1;
+          const color = angle == null || angleOk ? "var(--ok)" : "var(--warn)";
+          const rightSide = name === "tr" || name === "br";
+          const topSide = name === "tl" || name === "tr";
           return (
             <g key={name}>
               {isDraggable && (
                 <circle
                   cx={cx} cy={ty(cy)} r={8}
                   fill="transparent"
-                  style={{ cursor: dragging?.corner === name ? "grabbing" : "grab" }}
+                  style={{
+                    cursor: dragging?.corner === name ? "grabbing" : "grab",
+                  }}
                   onPointerDown={(e) => handleCornerPointerDown(e, name)}
                 />
               )}
-              <circle cx={cx} cy={ty(cy)} r={3} fill="var(--ok)" />
-              <text x={cx + 4} y={ty(cy) - 3} fontSize={7} fill="var(--ok)">
-                {CORNER_LABELS[name] ?? name}
+              <circle cx={cx} cy={ty(cy)} r={3} fill={color} />
+              <text x={cx + (rightSide ? -5 : 5)} y={ty(cy) + (topSide ? 9 : -5)}
+                textAnchor={rightSide ? "end" : "start"} fontSize={7} fill={color} pointerEvents="none">
+                {CORNER_LABELS[name] ?? name}{angle == null ? "" : ` ${angle.toFixed(1)}°`}
               </text>
             </g>
           );
@@ -357,9 +356,20 @@ export default function LiveView({
           />
         )}
 
+        {/* Saved markers never intercept clicks or save by dragging. */}
+        {SPECIAL_POSITIONS.map((point) => (
+          <PositionMarker key={point.kind} x={cal[point.x]} y={ty(cal[point.y])} width={W}
+            label={point.marker} color={point.color} selected={selectedPosition === point.kind} />
+        ))}
+        {target && (
+          <PositionMarker x={target.x} y={ty(target.y)} width={W} draft
+            label={`${positionDefinition(target.kind).marker} · ${t("paper.positions.target")}`}
+            color={positionDefinition(target.kind).color} />
+        )}
+
         {/* head position */}
         {position && position.homed && (
-          <g>
+          <g pointerEvents="none">
             <line x1={position.x - 6} y1={ty(position.y)} x2={position.x + 6} y2={ty(position.y)}
               stroke="var(--err)" strokeWidth={0.6} />
             <line x1={position.x} y1={ty(position.y) - 6} x2={position.x} y2={ty(position.y) + 6}
@@ -379,5 +389,22 @@ export default function LiveView({
         <text x={1} y={H + 6.5} fontSize={6} fill="var(--muted)">0,0</text>
       </svg>
     </div>
+  );
+}
+
+function PositionMarker({ x, y, width, label, color, selected = false, draft = false }: {
+  x: number; y: number; width: number; label: string; color: string; selected?: boolean; draft?: boolean;
+}) {
+  const leftLabel = x > width - 25;
+  return (
+    <g pointerEvents="none" role="img" aria-label={label} className={draft ? "position-marker-draft" : "position-marker-saved"}>
+      {selected && <circle cx={x} cy={y} r={7} fill="none" stroke={color} strokeWidth={0.35} opacity={0.65} />}
+      <circle cx={x} cy={y} r={draft ? 6 : 4.5} fill="none" stroke={color}
+        strokeWidth={0.75} strokeDasharray={draft ? "1.5 1.2" : undefined} />
+      <path d={`M${x - 2} ${y - 2}L${x + 2} ${y + 2}M${x - 2} ${y + 2}L${x + 2} ${y - 2}`}
+        fill="none" stroke={color} strokeWidth={0.65} />
+      <text x={x + (leftLabel ? -8 : 8)} y={Math.max(5, y - (draft ? 9 : 4))} fontSize={5.5}
+        textAnchor={leftLabel ? "end" : "start"} fill={color} fontWeight="bold">{label}</text>
+    </g>
   );
 }
