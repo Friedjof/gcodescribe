@@ -89,3 +89,27 @@ def test_placed_gcode_continuous_lifts_pen_once():
     # continuous collapses 3 pen-downs into a single one
     assert continuous.count(pen_down) == 1
     assert normal.count(pen_down) >= continuous.count(pen_down)
+
+
+def test_large_network_retraces_only_existing_edges_without_repeated_bfs(monkeypatch):
+    import plotter.geometry.oneline as oneline
+
+    def forbidden_bfs(*args):
+        raise AssertionError("Large networks must use the bounded parity pass")
+
+    monkeypatch.setattr(oneline, "_nearest_other_path", forbidden_bfs)
+    # A corridor with many dead ends: thousands of odd vertices used to trigger
+    # a separate graph search for every pair.
+    roads = [_seg((i, 0), (i + 1, 0)) for i in range(1200)]
+    roads += [_seg((i, 0), (i, 1)) for i in range(1201)]
+    out = continuous_path(roads, tol=0.001)
+    assert len(out) == 1
+
+    def segments(lines):
+        return {
+            tuple(sorted(((a.real, a.imag), (b.real, b.imag))))
+            for line in lines for a, b in zip(line, line[1:], strict=False)
+        }
+
+    assert segments(out) == segments(roads)
+    assert len(out[0]) <= 2 * len(roads) + 1

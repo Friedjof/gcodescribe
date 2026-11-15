@@ -4,10 +4,10 @@ The wrong way (what we explicitly avoid) is to skip the pen-up and draw a
 straight line to the next stroke — that adds ink that isn't part of the artwork.
 
 Instead, per connected component, we draw it as **one continuous stroke** by
-retracing the minimum set of edges needed to make it traversable in a single
-trail (Chinese-postman / Eulerian path). Retraces always follow *existing*
-lines — the pen goes over ink it already laid down, so they are invisible and
-the shape is preserved exactly. Separate components are left separate: the pen
+retracing existing edges to make it traversable in a single trail. Shortest-path
+pairing and a weighted spanning-tree heuristic limit the extra drawing distance.
+Retraces preserve the geometry but put extra ink on some lines. Separate
+components are left separate: the pen
 lifts (invisibly) between them and the caller orders those moves to keep the
 pen-up travel short. No bridges, no straight connectors.
 
@@ -15,20 +15,21 @@ See vpype ``linemerge``/``linesort`` and the Chinese-postman problem.
 """
 from __future__ import annotations
 
-from collections import Counter, deque
+import heapq
+from collections import Counter
 
 import numpy as np
 
-# Only an out-of-memory safety ceiling — NOT a quality knob. Eulerisation is
-# O(E) and stays a few seconds even at ~140k edges / ~57k odd vertices, so a
-# whole city must always collapse to one stroke. The guard must never be the
-# reason a large map degrades into many pen lifts.
+# Out-of-memory safety ceiling. Large components use a linear parity pass;
+# a whole city should still collapse to one stroke.
 DEFAULT_MAX_LINES = 2_000_000
 
-# OOM safety ceiling only. The greedy odd-vertex pairing is near-linear, so a
-# whole city (one connected component) must still collapse to a single stroke
-# rather than fall back to per-stroke pen lifts.
+# OOM safety ceiling for odd-vertex processing.
 MAX_COMPONENT_ODD = 2_000_000
+
+# Repeated shortest-path searches become quadratic when a city has thousands
+# of odd junctions. Large graphs use a bounded spanning-tree parity pass.
+_SHORTEST_PATH_ODD_LIMIT = 2048
 
 
 def _node_snapper(tol: float):
@@ -87,32 +88,35 @@ def _orient(pts: np.ndarray, anchor: complex) -> np.ndarray:
 
 
 def _nearest_other_path(g, source: int, targets: set[int]) -> list[int] | None:
-    """BFS from ``source``; return the node path to the nearest node in
-    ``targets`` (following existing edges), or ``None`` if none is reachable."""
+    """Find the physically shortest path to another odd junction."""
     parent: dict[int, int | None] = {source: None}
-    queue: deque[int] = deque([source])
+    distances = {source: 0.0}
+    queue = [(0.0, source)]
     while queue:
-        node = queue.popleft()
+        distance, node = heapq.heappop(queue)
+        if distance != distances[node]:
+            continue
+        if node in targets:
+            path = [node]
+            cur = parent[node]
+            while cur is not None:
+                path.append(cur)
+                cur = parent[cur]
+            return list(reversed(path))
         for nb in g.neighbors(node):
-            if nb in parent:
-                continue
-            parent[nb] = node
-            if nb in targets:
-                path = [nb]
-                cur: int | None = node
-                while cur is not None:
-                    path.append(cur)
-                    cur = parent[cur]
-                path.reverse()
-                return path  # source ... nb
-            queue.append(nb)
+            cost = min(ed.get("length", 1.0) for ed in g.get_edge_data(node, nb).values())
+            candidate = distance + cost
+            if candidate < distances.get(nb, float("inf")):
+                distances[nb] = candidate
+                parent[nb] = node
+                heapq.heappush(queue, (candidate, nb))
     return None
 
 
 def _edge_pts(g, a: int, b: int, node_xy: dict[int, complex]) -> np.ndarray:
     data = g.get_edge_data(a, b)
     if data:
-        for ed in data.values():
+        for ed in sorted(data.values(), key=lambda edge: edge.get("length", float("inf"))):
             pts = ed.get("pts")
             if pts is not None:
                 return pts
@@ -120,16 +124,38 @@ def _edge_pts(g, a: int, b: int, node_xy: dict[int, complex]) -> np.ndarray:
 
 
 def _eulerise_component(g, node_xy: dict[int, complex]) -> bool:
-    """Duplicate edges along existing shortest paths until the component has an
-    Euler path (0 or 2 odd vertices). Retraces follow existing lines, so they
-    are invisible. Two odd vertices are left as the trail's endpoints to keep
-    overdraw minimal. Returns ``False`` if the component is too big to eulerise.
+    """Duplicate existing edges until the component has an Euler path.
+
+    Small components pair odd vertices using shortest paths; large components
+    use spanning-tree parity with at most one retrace per tree edge. Two odd
+    vertices remain as endpoints. Returns False above the memory safety limit.
     """
     odd = [n for n, d in g.degree() if d % 2 == 1]
     if len(odd) <= 2:
         return True
     if len(odd) > MAX_COMPONENT_ODD:
         return False
+    if len(odd) > _SHORTEST_PATH_ODD_LIMIT:
+        import networkx as nx
+
+        # In reverse tree order, an odd subtree requires its parent edge to be
+        # retraced. Each tree edge is duplicated at most once, all original
+        # edges survive, and exactly the two chosen endpoints remain odd.
+        # Prefer short physical segments over arbitrary DFS branches. This
+        # keeps the retrace bound tied to the lightest spanning tree.
+        tree = nx.minimum_spanning_tree(g, weight="length")
+        tree_edges = list(nx.dfs_edges(tree, source=odd[0]))
+        parity = set(odd[2:])
+        for a, b in reversed(tree_edges):
+            if b in parity:
+                parity.remove(b)
+                if a in parity:
+                    parity.remove(a)
+                else:
+                    parity.add(a)
+                pts = _edge_pts(g, a, b, node_xy)
+                g.add_edge(a, b, pts=pts, length=float(np.abs(np.diff(pts)).sum()), retrace=True)
+        return True
     pool = set(odd[2:])  # keep the first two as the open path's endpoints
     while pool:
         u = pool.pop()
@@ -138,7 +164,8 @@ def _eulerise_component(g, node_xy: dict[int, complex]) -> bool:
             break
         pool.discard(path[-1])
         for a, b in zip(path, path[1:], strict=False):
-            g.add_edge(a, b, pts=_edge_pts(g, a, b, node_xy), retrace=True)
+            pts = _edge_pts(g, a, b, node_xy)
+            g.add_edge(a, b, pts=pts, length=float(np.abs(np.diff(pts)).sum()), retrace=True)
     return True
 
 
@@ -199,7 +226,7 @@ def continuous_path(
         a, b = node_id(pl[0]), node_id(pl[-1])
         node_xy.setdefault(a, pl[0])
         node_xy.setdefault(b, pl[-1])
-        g.add_edge(a, b, key=i, pts=pl)
+        g.add_edge(a, b, key=i, pts=pl, length=float(np.abs(np.diff(pl)).sum()))
 
     out: list[np.ndarray] = []
     for comp in nx.connected_components(g):
