@@ -33,6 +33,26 @@ def test_fonts_lists_builtin_fonts(client):
     assert all(font["mode"] == "plotter" for font in fonts if font["id"] in builtins)
 
 
+def test_dearpigeon_handwriting_styles_render_as_plotter_lines(client):
+    styles = {"lotti", "pippa", "milo", "nelly", "theo"}
+    fonts = {font["id"]: font for font in client.get("/api/fonts").json()["fonts"]}
+    assert styles <= fonts.keys()
+    assert all(fonts[style]["builtin"] and fonts[style]["mode"] == "plotter" for style in styles)
+
+    rendered = {}
+    for style in styles:
+        response = client.post(
+            "/api/paint/text-polylines",
+            json={"text": "Grüße, Äpfel 123!", "font": style, "size": 12},
+        )
+        assert response.status_code == 200
+        rendered[style] = response.json()["polylines"]
+        assert rendered[style]
+
+    assert rendered["pippa"] != rendered["nelly"]
+    assert rendered["milo"] != rendered["theo"]
+
+
 def test_upload_font_adds_custom_font(client):
     with _font_file().open("rb") as fh:
         r = client.post(

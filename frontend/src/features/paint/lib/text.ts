@@ -9,6 +9,11 @@ export const DEFAULT_TEXT_FONTS: { id: TextFont; labelKey: string; label: string
   { id: "sans", labelKey: "font.sans", label: "Sans", builtin: true },
   { id: "hand", labelKey: "font.hand", label: "Handwriting", builtin: true },
   { id: "script", labelKey: "font.script", label: "Cursive", builtin: true },
+  { id: "lotti", labelKey: "font.lotti", label: "Lotti", builtin: true },
+  { id: "pippa", labelKey: "font.pippa", label: "Pippa", builtin: true },
+  { id: "milo", labelKey: "font.milo", label: "Milo", builtin: true },
+  { id: "nelly", labelKey: "font.nelly", label: "Nelly", builtin: true },
+  { id: "theo", labelKey: "font.theo", label: "Theo", builtin: true },
   { id: "block", labelKey: "font.drawnBlock", label: "Block", builtin: true },
 ];
 

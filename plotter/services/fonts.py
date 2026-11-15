@@ -43,6 +43,11 @@ BUILTIN_FONTS = [
     FontItem(id="sans", label="Sans", builtin=True, kind=BUILTIN_KIND),
     FontItem(id="hand", label="Handwriting", builtin=True, kind=BUILTIN_KIND),
     FontItem(id="script", label="Cursive", builtin=True, kind=BUILTIN_KIND),
+    FontItem(id="lotti", label="Lotti", builtin=True, kind=BUILTIN_KIND),
+    FontItem(id="pippa", label="Pippa", builtin=True, kind=BUILTIN_KIND),
+    FontItem(id="milo", label="Milo", builtin=True, kind=BUILTIN_KIND),
+    FontItem(id="nelly", label="Nelly", builtin=True, kind=BUILTIN_KIND),
+    FontItem(id="theo", label="Theo", builtin=True, kind=BUILTIN_KIND),
     FontItem(id="block", label="Block", builtin=True, kind=BUILTIN_KIND),
 ]
 
