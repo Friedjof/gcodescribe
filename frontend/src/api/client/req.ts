@@ -1,14 +1,16 @@
-export class ApiError extends Error { constructor(message: string, public status: number) { super(message); } }
+import { ApiError, apiDetailMessage } from "../errors";
+export { ApiError } from "../errors";
+
 const reads = new Map<string, Promise<unknown>>();
 async function fail(res: Response): Promise<never> {
-  let detail = res.statusText;
+  let detail: unknown;
   try {
-    const body = await res.json();
-    detail = body.detail ?? detail;
+    const body: unknown = await res.json();
+    if (body && typeof body === "object" && "detail" in body) detail = body.detail;
   } catch {
     /* ignore */
   }
-  throw new ApiError(detail, res.status);
+  throw new ApiError(apiDetailMessage(detail, res.statusText || `HTTP ${res.status}`), res.status, detail);
 }
 
 export async function req<T>(url: string, opts?: RequestInit): Promise<T> {
