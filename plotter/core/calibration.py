@@ -165,11 +165,26 @@ class Calibration:
         return cal
 
     @classmethod
+    def from_stored_dict(cls, data: dict) -> Calibration:
+        """Read persisted calibration, including pre-0.5 feedrates in mm/min.
+
+        z_max_feedrate was introduced with the mm/s schema. Its presence
+        distinguishes calibrations already saved by development builds too.
+        API updates use from_dict() and already contain mm/s values.
+        """
+        data = dict(data)
+        if "z_max_feedrate" not in data:
+            for key in ("travel_feed", "draw_feed", "z_feed"):
+                if key in data:
+                    data[key] = float(data[key]) / 60
+        return cls.from_dict(data)
+
+    @classmethod
     def load(cls) -> Calibration:
         path = cls.path()
         if not path.exists():
             return cls()
-        return cls.from_dict(json.loads(path.read_text()))
+        return cls.from_stored_dict(json.loads(path.read_text()))
 
     def save(self) -> None:
         self.path().write_text(json.dumps(asdict(self), indent=2))

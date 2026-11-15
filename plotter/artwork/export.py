@@ -46,6 +46,7 @@ def calibration_to_xml(cal: Calibration) -> str:
     SubElement(
         root,
         "feedrates",
+        unit="mm/s",
         travel=f"{cal.travel_feed}",
         draw=f"{cal.draw_feed}",
         z=f"{cal.z_feed}",
@@ -148,6 +149,10 @@ def calibration_from_xml(xml: str, *, base: Calibration | None = None) -> Calibr
     num(feeds, "travel", "travel_feed")
     num(feeds, "draw", "draw_feed")
     num(feeds, "z", "z_feed")
+    if feeds is not None and feeds.get("unit", "mm/min") == "mm/min":
+        for key in ("travel_feed", "draw_feed", "z_feed"):
+            if key in updates:
+                updates[key] /= 60
 
     layout = root.find("layout")
     flag(layout, "fitToArea", "fit_to_area")

@@ -76,9 +76,13 @@ class TestCrud:
         assert service.get(profile["id"])["fingerprint"] == profile["fingerprint"]
 
     def test_recalibration_cannot_move_pressure_below_machine_zero(self, service):
-        profile = service.create("Pressure", calibration={
-            "pen_down_z": 3, "pen_pressure_max_depth": 0.4,
-        })
+        profile = service.create(
+            "Pressure",
+            calibration={
+                "pen_down_z": 3,
+                "pen_pressure_max_depth": 0.4,
+            },
+        )
         with pytest.raises(ProfileError, match="Maschinen-Z 0"):
             service.update(profile["id"], calibration={"pen_down_z": 0.2})
 
@@ -288,3 +292,48 @@ class TestImportExport:
             service.import_bundle(
                 {"format": "gcodescribe-profile-bundle", "version": 99, "profiles": []}
             )
+
+
+class TestFeedrateUpgrade:
+    def test_legacy_calibration_preserves_physical_speed(self, workspace):
+        raw = {"travel_feed": 6000, "draw_feed": 3000, "z_feed": 1000}
+        Calibration.path().write_text(json.dumps(raw))
+        cal = Calibration.load()
+        assert (cal.travel_feed, cal.draw_feed, cal.z_feed) == pytest.approx((100, 50, 1000 / 60))
+        cal.save()
+        assert Calibration.load().z_feed == pytest.approx(1000 / 60)
+
+    def test_existing_profile_is_backed_up_and_migrated_once(self, service):
+        profile = service.active()
+        path = service._profile_path(profile["id"])
+        raw = json.loads(path.read_text())
+        raw["calibration"].pop("z_max_feedrate")
+        raw["calibration"].update(travel_feed=6000, draw_feed=3000, z_feed=1000)
+        path.write_text(json.dumps(raw))
+        assert service.get(profile["id"])["calibration"]["travel_feed"] == 100
+        assert service.get(profile["id"])["calibration"]["travel_feed"] == 100
+        backup = json.loads(path.with_suffix(".json.before-mm-s.bak").read_text())
+        assert backup["calibration"]["travel_feed"] == 6000
+
+    def test_imported_legacy_profile_and_bundle_preserve_speed(self, service):
+        payload = service.export_profile(service.active_id())
+        payload["profile"]["calibration"].pop("z_max_feedrate")
+        payload["profile"]["calibration"].update(travel_feed=6000, draw_feed=3000, z_feed=1000)
+        imported = service.import_profile(payload)
+        assert imported["calibration"]["draw_feed"] == 50
+        bundle = service.export_bundle()
+        payload["profile"]["id"] = service.active_id()
+        bundle["profiles"] = [payload["profile"]]
+        service.import_bundle(bundle, replace=True)
+        assert service.get(payload["profile"]["id"])["calibration"]["draw_feed"] == 50
+
+    def test_xml_units_roundtrip_and_legacy_import(self):
+        from plotter.artwork.export import calibration_from_xml, calibration_to_xml
+
+        legacy = (
+            '<plotterCalibration><feedrates travel="6000" draw="3000" '
+            'z="1000"/></plotterCalibration>'
+        )
+        cal = calibration_from_xml(legacy)
+        assert cal.travel_feed == 100
+        assert calibration_from_xml(calibration_to_xml(cal)).z_feed == pytest.approx(1000 / 60)

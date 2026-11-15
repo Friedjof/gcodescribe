@@ -116,6 +116,12 @@ class ProfileService:
         except (OSError, json.JSONDecodeError):
             return None
         if isinstance(profile, dict) and isinstance(profile.get("calibration"), dict):
+            stored = profile["calibration"]
+            if "z_max_feedrate" not in stored:
+                backup = path.with_suffix(".json.before-mm-s.bak")
+                if not backup.exists():
+                    shutil.copy2(path, backup)
+                profile["calibration"] = asdict(Calibration.from_stored_dict(stored))
             fingerprint = calibration_fingerprint(profile["calibration"])
             if profile.get("fingerprint") != fingerprint:
                 # Refresh derived metadata when the fingerprint definition changes.
@@ -452,7 +458,7 @@ class ProfileService:
             if not isinstance(raw, dict) or not isinstance(raw.get("calibration"), dict):
                 raise ProfileImportError("Dem Profil fehlt die Kalibrierung.")
             name = self._unique_name(str(raw.get("name") or "Importiertes Profil"))
-            profile = self._build(name, raw["calibration"])
+            profile = self._build(name, asdict(Calibration.from_stored_dict(raw["calibration"])))
             self._write(profile)
             return self._full(profile)
 
@@ -480,12 +486,14 @@ class ProfileService:
                     updated = self.update(
                         existing["id"],
                         name=str(raw.get("name") or existing["name"]),
-                        calibration=raw["calibration"],
+                        calibration=asdict(Calibration.from_stored_dict(raw["calibration"])),
                     )
                     replaced.append(updated["name"])
                 else:
                     name = self._unique_name(str(raw.get("name") or "Importiertes Profil"))
-                    profile = self._build(name, raw["calibration"])
+                    profile = self._build(
+                        name, asdict(Calibration.from_stored_dict(raw["calibration"]))
+                    )
                     self._write(profile)
                     imported.append(profile["name"])
             return {
