@@ -16,7 +16,7 @@ def _calibration_context(project_id: str | None) -> tuple[Calibration, str | Non
     if project_id is None:
         return Calibration.load(), None
     profile = active_project_profile(project_id)
-    return Calibration.from_dict(profile["calibration"]), profile["id"]
+    return profile_service().calibration(profile["id"]), profile["id"]
 
 
 def _save_calibration(cal: Calibration, profile_id: str | None) -> None:

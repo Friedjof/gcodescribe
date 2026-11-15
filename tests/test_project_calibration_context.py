@@ -50,15 +50,42 @@ def project_context(workspace, cal, monkeypatch):
     assert Calibration.load().origin_x == 10
 
 
-def test_project_paper_and_calibration_read_the_same_profile(project_context):
-    client, project, _, _ = project_context
+@pytest.mark.parametrize("margin", [0, 5])
+def test_project_paper_and_calibration_read_the_same_profile(project_context, margin):
+    client, project, profiles, _ = project_context
+    profiles.update(project["profileId"], calibration={"paper_margin": margin})
     params = {"project_id": project["id"]}
     calibration = client.get("/api/calibration", params=params).json()
     paper = client.get("/api/paper", params=params).json()["calibration"]
+    profile = client.get(f"/api/profiles/{project['profileId']}").json()
+    assert profile["calibration"] == paper
     assert calibration == paper
-    assert (calibration["origin_x"], calibration["origin_y"]) == (80, 90)
+    assert (calibration["origin_x"], calibration["origin_y"]) == (80 + margin, 90 + margin)
     assert client.get("/api/calibration").json()["origin_x"] == 10
     assert client.get("/api/paper").json()["calibration"]["origin_x"] == 10
+
+
+@pytest.mark.parametrize("park_x", [None, 42])
+def test_project_paper_edits_preserve_automatic_and_partial_position_defaults(
+    project_context, park_x
+):
+    client, project, profiles, _ = project_context
+    profiles.update(project["profileId"], calibration={"park_x": park_x})
+    params = {"project_id": project["id"]}
+    assert client.put(
+        "/api/paper/corner/bl", params=params, json={"x": 82, "y": 91}
+    ).status_code == 200
+    saved = profiles.get(project["profileId"])["calibration"]
+    assert saved["defined_positions"] == ["calibration"]
+    assert client.put(
+        "/api/calibration", params=params,
+        json={"bed_width": 300, "bed_height": 310, "pen_up_z": 12},
+    ).status_code == 200
+    saved = profiles.get(project["profileId"])["calibration"]
+    assert saved["defined_positions"] == ["calibration"]
+    assert saved["park_x"] == (150 if park_x is None else park_x)
+    assert saved["park_y"] == 310
+    assert saved["park_lift_z"] == 12
 
 
 def test_project_paper_edits_only_persist_its_profile(project_context):

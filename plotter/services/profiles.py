@@ -294,6 +294,16 @@ class ProfileService:
             self.ensure_migrated()
             return self._full(self._require(profile_id))
 
+    def calibration(self, profile_id: str) -> Calibration:
+        """Load editable calibration without resolving automatic positions.
+
+        Public responses contain concrete display coordinates. Reconstructing
+        editable state from them would turn automatic defaults into overrides.
+        """
+        with _lock:
+            self.ensure_migrated()
+            return Calibration.from_dict(self._require(profile_id)["calibration"])
+
     # -- mutations ---------------------------------------------------------------
 
     def _build(self, name: str, cal_data: dict, profile_id: str | None = None) -> dict:

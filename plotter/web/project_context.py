@@ -22,4 +22,5 @@ def project_calibration(
 ) -> Calibration | None:
     if project_id is None:
         return None
-    return Calibration.from_dict(active_project_profile(project_id, profile_id)["calibration"])
+    profile = active_project_profile(project_id, profile_id)
+    return profile_service().calibration(profile["id"])

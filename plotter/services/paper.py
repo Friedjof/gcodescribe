@@ -20,7 +20,7 @@ class PaperService:
 
     def _calibration(self) -> Calibration:
         if self.profile_id is not None:
-            return Calibration.from_dict(ProfileService().get(self.profile_id)["calibration"])
+            return ProfileService().calibration(self.profile_id)
         return Calibration.load()
 
     def _save(self, cal: Calibration) -> None:
