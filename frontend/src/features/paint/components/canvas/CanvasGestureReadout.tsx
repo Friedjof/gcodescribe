@@ -7,7 +7,7 @@ import type { Tool } from "../../PaintCanvas";
 import CanvasReadout from "./CanvasReadout";
 
 export interface RotationHint {
-  at: Pt; currentDeg: number; deltaDeg: number; snapped: boolean;
+  at: Pt; currentDeg: number; deltaDeg: number; snapped: boolean; constrained?: boolean;
 }
 
 export interface GestureFeedback {
@@ -24,7 +24,7 @@ export default function CanvasGestureReadout({ objects, feedback, rotationHint, 
 }) {
   const { t, lang } = useI18n();
   if (!feedback && !rotationHint && !draft) return null;
-  const formatter = new Intl.NumberFormat(lang, { maximumFractionDigits: 1 });
+  const formatter = new Intl.NumberFormat(lang === "ba" ? "de" : lang, { maximumFractionDigits: 1 });
   const readoutObjects = objects;
   const readoutBounds = feedback ? readoutObjects.reduce<Bounds | null>((bounds, obj) => {
     const next = objectWorldBounds(objectPlacementFrame(obj), obj.transform ?? IDENTITY);
@@ -35,7 +35,7 @@ export default function CanvasGestureReadout({ objects, feedback, rotationHint, 
   if (rotationHint) {
     readoutAt = rotationHint.at;
     readoutLines = [`${formatter.format(rotationHint.currentDeg)}° (${rotationHint.deltaDeg >= 0 ? "+" : ""}${formatter.format(rotationHint.deltaDeg)}°)`,
-      t(rotationHint.snapped ? "paint.canvas.angleSnapped" : "paint.canvas.rotationHelp")];
+      t(rotationHint.constrained ? "paint.canvas.plotLimit" : rotationHint.snapped ? "paint.canvas.angleSnapped" : "paint.canvas.rotationHelp")];
   } else if (feedback && readoutBounds) {
     readoutAt = feedback.at;
     let width = readoutBounds[2] - readoutBounds[0], height = readoutBounds[3] - readoutBounds[1];

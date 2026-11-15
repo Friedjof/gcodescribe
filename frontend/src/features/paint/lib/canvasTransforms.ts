@@ -22,13 +22,15 @@ export interface ResizeGesture {
   anchorLocal: Pt;
   handleLocal: Pt;
   anchorWorld: Pt;
+  pointerOffset?: Pt;
 }
 
 /** Resize around the opposite handle, preserving mirrors and the chosen anchor. */
 export function resizeTransform(gesture: ResizeGesture, pointer: Pt, keepAspect: boolean): Transform {
   const { startTransform: start, startLocalBounds: bounds, anchorLocal, handleLocal, anchorWorld } = gesture;
   const startSx = start.scaleX ?? start.scale, startSy = start.scaleY ?? start.scale;
-  const delta = screenVectorToRotatedLocal([pointer[0] - anchorWorld[0], pointer[1] - anchorWorld[1]], start.rotation);
+  const offset = gesture.pointerOffset ?? [0, 0];
+  const delta = screenVectorToRotatedLocal([pointer[0] - offset[0] - anchorWorld[0], pointer[1] - offset[1] - anchorWorld[1]], start.rotation);
   const dx = handleLocal[0] - anchorLocal[0], dy = handleLocal[1] - anchorLocal[1];
   const movesX = Math.abs(dx) > 0.0001, movesY = Math.abs(dy) > 0.0001;
   const minX = bounds[2] > bounds[0] ? 2 / (bounds[2] - bounds[0]) : Math.abs(startSx);
@@ -81,4 +83,41 @@ export function moveSelection(gesture: MoveGesture, pointer: Pt, options: {
   const snap: "free" | "guides" | "grid" = options.free ? "free" : guides.length ? "guides" : options.grid ? "grid" : "free";
   return { updates: new Map([...startTs].map(([id, transform]) =>
     [id, { ...transform, x: transform.x + boundedX, y: transform.y + boundedY }])), guides, constrained, snap };
+}
+
+export function sameTransform(a: Transform, b: Transform): boolean {
+  return [a.x - b.x, a.y - b.y, a.rotation - b.rotation,
+    (a.scaleX ?? a.scale) - (b.scaleX ?? b.scale), (a.scaleY ?? a.scale) - (b.scaleY ?? b.scale)]
+    .every(delta => Math.abs(delta) < 1e-8);
+}
+
+/** Fit the selection as one unit; individual clamps would distort its layout. */
+export function boundedSelectionTransforms(updates: Map<string, Transform>, frames: Map<string, Pt[][]>, width: number, height: number) {
+  const boundsOf = (transforms: Map<string, Transform>) => {
+    let bounds: Bounds | null = null;
+    for (const [id, transform] of transforms) {
+      const frame = frames.get(id);
+      if (!frame?.length) continue;
+      const next = objectWorldBounds(frame, transform);
+      bounds = bounds ? [Math.min(bounds[0], next[0]), Math.min(bounds[1], next[1]),
+        Math.max(bounds[2], next[2]), Math.max(bounds[3], next[3])] : next;
+    }
+    return bounds;
+  };
+  const bounds = boundsOf(updates);
+  if (!bounds) return { updates, constrained: false };
+  const factor = Math.min(1, width / Math.max(bounds[2] - bounds[0], .0001), height / Math.max(bounds[3] - bounds[1], .0001));
+  const cx = (bounds[0] + bounds[2]) / 2, cy = (bounds[1] + bounds[3]) / 2;
+  const scaled = factor < 1 ? new Map([...updates].map(([id, transform]) => [id, {
+    ...transform, x: cx + (transform.x - cx) * factor, y: cy + (transform.y - cy) * factor,
+    scaleX: (transform.scaleX ?? transform.scale) * factor,
+    scaleY: (transform.scaleY ?? transform.scale) * factor,
+    scale: Math.max(Math.abs(transform.scaleX ?? transform.scale), Math.abs(transform.scaleY ?? transform.scale)) * factor,
+  }])) : updates;
+  const next = factor < 1 ? boundsOf(scaled)! : bounds;
+  const dx = next[0] < 0 ? -next[0] : next[2] > width ? width - next[2] : 0;
+  const dy = next[1] < 0 ? -next[1] : next[3] > height ? height - next[3] : 0;
+  return { constrained: factor < 1 || Math.abs(dx) > 1e-8 || Math.abs(dy) > 1e-8,
+    updates: dx || dy ? new Map([...scaled].map(([id, transform]) =>
+      [id, { ...transform, x: transform.x + dx, y: transform.y + dy }])) : scaled };
 }

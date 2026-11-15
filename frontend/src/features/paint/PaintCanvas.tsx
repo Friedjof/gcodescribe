@@ -28,7 +28,7 @@ import {
   worldPoint,
   resizeLocals,
 } from "./lib/viewTransform";
-import { clampedTransform, gestureRotation, moveSelection, resizeTransform } from "./lib/canvasTransforms";
+import { boundedSelectionTransforms, clampedTransform, gestureRotation, moveSelection, resizeTransform, sameTransform } from "./lib/canvasTransforms";
 import { useCanvasMetrics } from "./hooks/useCanvasMetrics";
 import CanvasGestureReadout from "./components/canvas/CanvasGestureReadout";
 import type { GestureFeedback, RotationHint } from "./components/canvas/CanvasGestureReadout";
@@ -59,7 +59,7 @@ type Marquee = { start: Pt; current: Pt; additive: boolean };
 type ViewBox = { x: number; y: number; w: number; h: number };
 type Drag =
   | { mode: "move"; ids: string[]; primaryId: string; startMouse: Pt; startTs: Map<string, Transform>; startBoundsAll: [number, number, number, number]; vGuides: GuideCandidate[]; hGuides: GuideCandidate[] }
-  | { mode: "resize"; id: string; edge: ResizeEdge; startTransform: Transform; startLocalBounds: [number, number, number, number]; anchorLocal: Pt; handleLocal: Pt; anchorWorld: Pt }
+  | { mode: "resize"; id: string; edge: ResizeEdge; startTransform: Transform; startLocalBounds: [number, number, number, number]; anchorLocal: Pt; handleLocal: Pt; anchorWorld: Pt; pointerOffset: Pt }
   | { mode: "groupScale"; ids: string[]; center: Pt; startDist: number; startTs: Map<string, Transform> }
   | { mode: "groupRotate"; ids: string[]; center: Pt; startAngle: number; startTs: Map<string, Transform> }
   | { mode: "rotate"; id: string; center: Pt; startAngle: number; startRotation: number };
@@ -250,22 +250,26 @@ function PaintCanvas({
     });
   };
 
+  const placementFrames = useMemo(() => new Map(page.objects.map(object => [object.id, objectPlacementFrame(object)])), [page.objects]);
   // Wrappers that enforce the hard plot-area boundary before every transform write.
   const updateSafe = (id: string, t: Transform) => {
     const obj = page.objects.find((o) => o.id === id);
-    const local = obj ? objectPlacementFrame(obj) : [];
+    if (!obj) return false;
+    const bounded = clampedTransform(t, placementFrames.get(id) ?? [], W, H);
     const updates = new Map(pendingTransforms.current);
-    updates.set(id, clampedTransform(t, local, W, H));
+    if (sameTransform(bounded, obj.transform ?? IDENTITY)) updates.delete(id);
+    else updates.set(id, bounded);
     pendingTransforms.current = updates; setPreviewTransforms(updates);
+    return !sameTransform(t, bounded);
   };
   const updateManySafe = (updates: Map<string, Transform>) => {
-    const out = new Map<string, Transform>();
-    for (const [id, t] of updates) {
-      const obj = page.objects.find((o) => o.id === id);
-      const local = obj ? objectPlacementFrame(obj) : [];
-      out.set(id, clampedTransform(t, local, W, H));
-    }
-    pendingTransforms.current = out; setPreviewTransforms(out);
+    const result = boundedSelectionTransforms(updates, placementFrames, W, H);
+    const changed = new Map([...result.updates].filter(([id, transform]) => {
+      const original = page.objects.find(object => object.id === id);
+      return original && !sameTransform(original.transform ?? IDENTITY, transform);
+    }));
+    pendingTransforms.current = changed; setPreviewTransforms(changed);
+    return result.constrained;
   };
 
   const objectSelectionIds = (obj: SceneObject) =>
@@ -450,9 +454,9 @@ function PaintCanvas({
         const ny = d.center[1] + (t.y - d.center[1]) * factor;
         const next: Transform = {
           ...t,
-          x: cl(nx, 0, W),
-          y: cl(ny, 0, H),
-          scale: Math.max(0.05, t.scale * factor),
+          x: nx,
+          y: ny,
+          scale: t.scale * factor,
         };
         // Objects resized individually carry per-axis scales that the renderer
         // prefers over `scale` — keep them in sync or they won't grow/shrink.
@@ -460,13 +464,8 @@ function PaintCanvas({
         if (t.scaleY != null) next.scaleY = t.scaleY * factor;
         updates.set(id, next);
       }
-      const constrained = [...updates].some(([id, next]) => {
-        const object = page.objects.find(obj => obj.id === id);
-        const bounded = clampedTransform(next, object ? objectPlacementFrame(object) : [], W, H);
-        return Math.abs(next.x - bounded.x) > .001 || Math.abs(next.y - bounded.y) > .001 || Math.abs(next.scale - bounded.scale) > .001;
-      });
+      const constrained = updateManySafe(updates);
       setFeedback({ at: m, mode: "groupScale", snap: "free", constrained, linked: true });
-      updateManySafe(updates);
 
     } else if (d.mode === "groupRotate") {
       const angle = Math.atan2(m[1] - d.center[1], m[0] - d.center[0]);
@@ -483,17 +482,17 @@ function PaintCanvas({
         const dy = t.y - d.center[1];
         groupUpdates.set(id, {
           ...t,
-          x: cl(d.center[0] + dx * cos - dy * sin, 0, W),
-          y: cl(d.center[1] + dx * sin + dy * cos, 0, H),
+          x: d.center[0] + dx * cos - dy * sin,
+          y: d.center[1] + dx * sin + dy * cos,
           rotation: t.rotation + snappedDelta,
         });
       }
-      updateManySafe(groupUpdates);
+      const constrained = updateManySafe(groupUpdates);
       setRotationHint({
         at: [d.center[0], d.center[1] - HANDLE * 2.2],
         currentDeg: displayDeg(snappedDelta),
         deltaDeg: signedDeg(snappedDelta),
-        snapped,
+        snapped, constrained,
       });
 
     } else {
@@ -502,13 +501,13 @@ function PaintCanvas({
       const rawRotation = d.startRotation + angle - d.startAngle;
       const rotation = gestureRotation(rawRotation, e.shiftKey, e.altKey);
       const snapped = !e.altKey && (e.shiftKey || Math.abs(Math.sin(2 * rotation)) < .0001);
+      const constrained = obj ? updateSafe(d.id, { ...(obj.transform ?? IDENTITY), rotation }) : false;
       setRotationHint({
         at: [d.center[0], d.center[1] - HANDLE * 2.2],
         currentDeg: displayDeg(rotation),
         deltaDeg: signedDeg(rotation - d.startRotation),
-        snapped,
+        snapped, constrained,
       });
-      if (obj) updateSafe(d.id, { ...(obj.transform ?? IDENTITY), rotation });
     }
   };
 
@@ -655,6 +654,7 @@ function PaintCanvas({
     const localLines = objectPlacementFrame(obj);
     const startLocalBounds = localBounds(localLines);
     const { anchor, handle } = resizeLocals(edge, startLocalBounds);
+    const pointer = toMM(e), handleWorld = worldPoint(handle, t);
     drag.current = {
       mode: "resize",
       id: obj.id,
@@ -664,6 +664,7 @@ function PaintCanvas({
       anchorLocal: anchor,
       handleLocal: handle,
       anchorWorld: worldPoint(anchor, t),
+      pointerOffset: [pointer[0] - handleWorld[0], pointer[1] - handleWorld[1]],
     };
   };
 

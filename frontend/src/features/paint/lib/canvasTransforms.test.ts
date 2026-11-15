@@ -70,3 +70,42 @@ it("moves a selection as a unit when its outer edge reaches the plot boundary", 
   expect(moved.updates.get("b")!.x - moved.updates.get("a")!.x).toBe(30);
   expect(moved.constrained).toBe(true);
 });
+it("preserves layout and relative sizes when a selection grows beyond the plot", async () => {
+  const { boundedSelectionTransforms } = await import("./canvasTransforms");
+  const wanted = new Map<string, Transform>([
+    ["a", { ...IDENTITY, x: -40, y: -20, scaleX: -3, scaleY: 3 }],
+    ["b", { ...IDENTITY, x: 110, y: 70, scale: 3 }],
+  ]);
+  const wide: Pt[][] = [[[-20, -10], [20, 10]]];
+  const frames = new Map([["a", frame], ["b", wide]]);
+  const result = boundedSelectionTransforms(wanted, frames, 100, 80);
+  const a = result.updates.get("a")!, b = result.updates.get("b")!;
+  const factor = Math.abs(a.scaleX!) / 3;
+  expect(b.x - a.x).toBeCloseTo(150 * factor);
+  expect(b.y - a.y).toBeCloseTo(90 * factor);
+  expect(b.scale).toBeCloseTo(Math.abs(a.scaleX!));
+  expect(a.scaleX).toBeLessThan(0);
+  for (const [id, transform] of result.updates) {
+    const [x0, y0, x1, y1] = objectWorldBounds(frames.get(id)!, transform);
+    expect(x0).toBeGreaterThanOrEqual(-1e-8); expect(y0).toBeGreaterThanOrEqual(-1e-8);
+    expect(x1).toBeLessThanOrEqual(100 + 1e-8); expect(y1).toBeLessThanOrEqual(80 + 1e-8);
+  }
+  expect(result.constrained).toBe(true);
+});
+it("shifts a rotated selection together without resizing when its dimensions fit", async () => {
+  const { boundedSelectionTransforms } = await import("./canvasTransforms");
+  const wanted = new Map<string, Transform>([["a", { ...IDENTITY, x: -5, y: 20, rotation: Math.PI / 2 }],
+    ["b", { ...IDENTITY, x: 15, y: 50, rotation: Math.PI / 2 }]]);
+  const result = boundedSelectionTransforms(wanted, new Map([["a", frame], ["b", frame]]), 100, 80);
+  const a = result.updates.get("a")!, b = result.updates.get("b")!;
+  expect(b.x - a.x).toBeCloseTo(20); expect(b.y - a.y).toBeCloseTo(30);
+  expect(a.scale).toBe(1); expect(b.scale).toBe(1);
+  expectInside(a); expectInside(b);
+});
+it("keeps the grab offset when the user hits the larger resize target off-center", () => {
+  const { anchor, handle } = resizeLocals("br", [-10, -5, 10, 5]);
+  const result = resizeTransform({ startTransform: IDENTITY, startLocalBounds: [-10, -5, 10, 5],
+    anchorLocal: anchor, handleLocal: handle, anchorWorld: anchor, pointerOffset: [3, 2] }, [13, 7], false);
+  expect(result.x).toBeCloseTo(0); expect(result.y).toBeCloseTo(0);
+  expect(result.scaleX).toBeCloseTo(1); expect(result.scaleY).toBeCloseTo(1);
+});

@@ -128,3 +128,78 @@ it("does not steal Space from focused toolbar buttons", () => {
   expect(fireEvent.keyDown(button, { key: " ", code: "Space" })).toBe(true);
   expect(view.svg.getAttribute("style")).not.toContain("grab;");
 });
+it("does not jump or create undo history when a resize target is grabbed off-center", () => {
+  const view = setup();
+  const grips = view.getAllByLabelText("paint.canvas.resizeHandle");
+  fireEvent.pointerDown(grips[grips.length - 1], { clientX: 51, clientY: 36, button: 0, pointerId: 1 });
+  view.move(51, 36);
+  fireEvent.pointerUp(view.svg, { pointerId: 1 });
+  expect(view.props.onEditStart).not.toHaveBeenCalled();
+  expect(view.props.onUpdateMany).not.toHaveBeenCalled();
+});
+it("does not record an undo entry after moving back to the start", () => {
+  const view = setup();
+  fireEvent.pointerDown(view.moveHit(), { clientX: 40, clientY: 30, button: 0, pointerId: 1 });
+  view.move(55, 45, { altKey: true });
+  view.move(40, 30, { altKey: true });
+  fireEvent.pointerUp(view.svg, { pointerId: 1 });
+  expect(view.props.onEditStart).not.toHaveBeenCalled();
+});
+it("preserves a group's spacing and sizes when scaling at the plot boundary", () => {
+  const current = page();
+  current.objects.push({ ...current.objects[0], id: "other", transform: { x: 75, y: 45, scale: 1, rotation: 0 } });
+  const view = setup(current);
+  view.rerender(<PaintCanvas {...view.props} selectedIds={["object", "other"]} />);
+  fireEvent.pointerDown(view.getByLabelText("paint.canvas.resizeGroup"), { clientX: 85, clientY: 50, button: 0, pointerId: 1 });
+  view.move(220, 160);
+  expect(view.container.querySelector(".canvas-readout")?.textContent).toContain("paint.canvas.plotLimit");
+  fireEvent.pointerUp(view.svg, { pointerId: 1 });
+  const result = view.props.onUpdateMany.mock.calls[0][0] as Map<string, Transform>;
+  const first = result.get("object")!, second = result.get("other")!;
+  expect(second.x - first.x).toBeCloseTo(35 * first.scale);
+  expect(second.y - first.y).toBeCloseTo(15 * first.scale);
+  expect(second.scale).toBeCloseTo(first.scale);
+  for (const transform of result.values()) {
+    const [x0, y0, x1, y1] = objectWorldBounds(lines, transform);
+    expect(x0).toBeGreaterThanOrEqual(-1e-8); expect(y0).toBeGreaterThanOrEqual(-1e-8);
+    expect(x1).toBeLessThanOrEqual(100 + 1e-8); expect(y1).toBeLessThanOrEqual(80 + 1e-8);
+  }
+});
+it("keeps the live readout upright when the canvas view is rotated", () => {
+  const view = setup();
+  view.rerender(<PaintCanvas {...view.props} viewRotation={90} />);
+  fireEvent.pointerDown(view.moveHit(), { clientX: 60, clientY: 30, button: 0, pointerId: 1 });
+  view.move(65, 35, { altKey: true });
+  const readout = view.container.querySelector(".canvas-readout")!;
+  expect(readout.parentElement).toBe(view.svg);
+  expect(readout.getAttribute("transform")).toBeNull();
+  expect(readout.textContent).toContain("mm");
+});
+it("shows dimensions while drawing a new shape and allows cancelling it", () => {
+  const view = setup();
+  view.rerender(<PaintCanvas {...view.props} tool="rect" />);
+  fireEvent.pointerDown(view.svg, { clientX: 20, clientY: 20, button: 0, pointerId: 1 });
+  view.move(50, 40);
+  expect(view.container.querySelector(".canvas-readout")?.textContent).toContain("30 × 20 mm");
+  fireEvent.keyDown(window, { key: "Escape" });
+  fireEvent.pointerUp(view.svg, { pointerId: 1 });
+  expect(view.props.onAdd).not.toHaveBeenCalled();
+});
+it("rotates a constrained group without moving or shrinking its objects independently", () => {
+  const current = page();
+  current.objects[0].transform = { x: 15, y: 10, rotation: 0, scale: 1 };
+  current.objects.push({ ...current.objects[0], id: "other", transform: { x: 80, y: 70, scale: 1, rotation: 0 } });
+  const view = setup(current);
+  view.rerender(<PaintCanvas {...view.props} selectedIds={["object", "other"]} />);
+  fireEvent.pointerDown(view.getByLabelText("paint.canvas.rotateGroup"), { clientX: 47.5, clientY: -5, button: 0, pointerId: 1 });
+  view.move(92.5, -5, { shiftKey: true });
+  expect(view.container.querySelector(".canvas-readout")?.textContent).toContain("paint.canvas.plotLimit");
+  fireEvent.pointerUp(view.svg, { pointerId: 1 });
+  const result = view.props.onUpdateMany.mock.calls[0][0] as Map<string, Transform>;
+  const first = result.get("object")!, second = result.get("other")!;
+  const factor = first.scaleX ?? first.scale;
+  expect(second.scaleX ?? second.scale).toBeCloseTo(factor);
+  expect(first.rotation).toBeCloseTo(Math.PI / 4);
+  expect(second.x - first.x).toBeCloseTo((65 - 60) / Math.sqrt(2) * factor);
+  expect(second.y - first.y).toBeCloseTo((65 + 60) / Math.sqrt(2) * factor);
+});
