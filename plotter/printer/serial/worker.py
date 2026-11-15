@@ -8,7 +8,6 @@ status polls never reset the printer by opening the port.
 from __future__ import annotations
 
 import logging
-import os
 import threading
 import time
 from collections import deque
@@ -591,8 +590,12 @@ def get_worker(
     transport_factory: TransportFactory | None = None,
 ) -> SerialWorker:
     global _worker
-    port = port or os.environ.get("PRINTER_SERIAL_PORT", DEFAULT_PORT)
-    baud = baud or int(os.environ.get("PRINTER_SERIAL_BAUD", DEFAULT_BAUD))
+    from plotter.core.config import load_settings
+    from plotter.services.settings_store import load_saved
+
+    cfg = load_settings(load_saved()).printer
+    port = cfg.serial_port if port is None else port
+    baud = cfg.serial_baud if baud is None else baud
     with _worker_lock:
         if _worker is None:
             _worker = SerialWorker(port, baud, transport_factory)
@@ -621,57 +624,3 @@ def reset_worker() -> None:
 def shutdown_worker() -> None:
     """Stop the worker on app shutdown so the port is released."""
     reset_worker()
-
-
-class SerialClient:
-    """``PrinterBackend`` proxy over the process-wide :class:`SerialWorker`."""
-
-    def __init__(
-        self,
-        port: str | None = None,
-        baud: int | None = None,
-        transport_factory: TransportFactory | None = None,
-    ):
-        self.port = port or os.environ.get("PRINTER_SERIAL_PORT", DEFAULT_PORT)
-        self.baud = baud or int(os.environ.get("PRINTER_SERIAL_BAUD", DEFAULT_BAUD))
-        self._transport_factory = transport_factory
-
-    @property
-    def configured(self) -> bool:
-        return bool(self.port)
-
-    def _worker(self) -> SerialWorker:
-        return get_worker(self.port, self.baud, self._transport_factory)
-
-    def ensure_started(self) -> None:
-        """Start (and connect) the worker — called when serial becomes active."""
-        if self.configured:
-            self._worker()
-
-    def status(self) -> dict:
-        if not self.configured:
-            return {"configured": False, "backend": "serial"}
-        # Lazy: report from the worker only if it is already running. If serial is
-        # configured but not the active backend, the worker won't exist yet — we
-        # must not start it here just to answer a status poll.
-        worker = peek_worker()
-        if worker is None:
-            return {"configured": True, "backend": "serial", "online": False}
-        return worker.status()
-
-    def upload(self, gcode_path: Path, *, start: bool = False) -> dict:
-        return self._worker().upload(gcode_path, start=start)
-
-    def job_command(self, command: str) -> None:
-        self._worker().job_command(command)
-
-    def home(self, axes: list[str] | None = None) -> None:
-        self._worker().home(axes)
-
-    def jog(
-        self, x: float = 0.0, y: float = 0.0, z: float = 0.0, speed: int | None = None
-    ) -> None:
-        self._worker().jog(x, y, z, speed)
-
-    def gcode(self, commands: list[str]) -> None:
-        self._worker().gcode(commands)

@@ -50,10 +50,9 @@ async def _lifespan(_: FastAPI):
     shutdown_tasks()
     # Release the serial port on shutdown/reload so the next start can reopen it
     # (a still-held port causes "Resource busy").
-    if use_serial():
-        from ..printer.serial import shutdown_worker
+    from ..printer.serial import shutdown_worker
 
-        shutdown_worker()
+    shutdown_worker()
 
 
 def create_app() -> FastAPI:

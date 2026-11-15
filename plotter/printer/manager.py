@@ -73,9 +73,7 @@ class PrinterManager:
         try:
             return self._backends[self._active]
         except KeyError as exc:
-            raise BackendUnavailableError(
-                f"backend not configured: {self._active}"
-            ) from exc
+            raise BackendUnavailableError(f"backend not configured: {self._active}") from exc
 
     def set_active(self, backend_id: str) -> None:
         with self._lock:
@@ -121,7 +119,18 @@ class PrinterManager:
     def _job_active(self) -> bool:
         st = self.active().status()
         state = ((st.get("job") or {}).get("state") or "").lower()
-        return "printing" in state or "paused" in state
+        return bool(st.get("motion_locked")) or any(
+            active in state
+            for active in (
+                "printing",
+                "starting",
+                "pausing",
+                "paused",
+                "resuming",
+                "finishing",
+                "cancelling",
+            )
+        )
 
     @staticmethod
     def _release_serial() -> None:
@@ -157,9 +166,7 @@ class PrinterManager:
     def home(self, axes: list[str] | None = None) -> None:
         self.active().home(axes)
 
-    def jog(
-        self, x: float = 0.0, y: float = 0.0, z: float = 0.0, speed: int | None = None
-    ) -> None:
+    def jog(self, x: float = 0.0, y: float = 0.0, z: float = 0.0, speed: int | None = None) -> None:
         self.active().jog(x, y, z, speed)
 
     def gcode(self, commands: list[str]) -> None:

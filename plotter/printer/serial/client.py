@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
-from plotter.printer.serial.transport import DEFAULT_BAUD, DEFAULT_PORT, TransportFactory
+from plotter.core.config import load_settings
+from plotter.printer.serial.transport import TransportFactory
 from plotter.printer.serial.worker import SerialWorker, get_worker, peek_worker
+from plotter.services.settings_store import load_saved
 
 
 class SerialClient:
@@ -18,8 +19,9 @@ class SerialClient:
         baud: int | None = None,
         transport_factory: TransportFactory | None = None,
     ):
-        self.port = port or os.environ.get("PRINTER_SERIAL_PORT", DEFAULT_PORT)
-        self.baud = baud or int(os.environ.get("PRINTER_SERIAL_BAUD", DEFAULT_BAUD))
+        cfg = load_settings(load_saved()).printer
+        self.port = cfg.serial_port if port is None else port
+        self.baud = cfg.serial_baud if baud is None else baud
         self._transport_factory = transport_factory
 
     @property
