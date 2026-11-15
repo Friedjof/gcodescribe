@@ -23,6 +23,7 @@ from plotter.artwork.pipeline import (
     convert_pdf_to_svg_files,
     pdf_page_count,
 )
+from plotter.artwork.svg_raster import rasterize_svg_ink
 from plotter.artwork.trace import (
     IMAGE_DPI,
     TRACE_DPI,
@@ -31,6 +32,7 @@ from plotter.artwork.trace import (
     rasterize_pdf_page,
     trace_image_to_drawing,
 )
+from plotter.artwork.xopp import read_xopp, write_stroke_svg
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"}
 VALID_MODES = ("auto", "vector", "trace", "edges", "hatch", "lines", "dots", "handwriting")
@@ -138,6 +140,16 @@ def build_pages(
 ) -> tuple[list[dict], str]:
     """Convert an uploaded file into page SVGs under dst_dir; returns the page
     metas and the mode actually used. ``mode`` is assumed valid (see VALID_MODES)."""
+    if suffix == ".xopp":
+        pages = []
+        for n, drawing in enumerate(read_xopp(original), start=1):
+            if drawing.is_empty():
+                raise PlotterError("Die gewählte Xournal++-Seite enthält keine Stiftzüge.")
+            svg = dst_dir / f"page-{n:04d}.svg"
+            write_stroke_svg(svg, drawing)
+            pages.append(page_meta(svg, n, dst_dir, drawing=drawing))
+        return pages, "strokes"
+
     if suffix in IMAGE_EXTENSIONS:
         svg = dst_dir / "page-0001.svg"
         if mode in ("hatch", "lines", "dots"):
@@ -153,7 +165,26 @@ def build_pages(
         return [page_meta(svg, 1, dst_dir, drawing=drawing)], kind
 
     if suffix == ".svg":
-        return [page_meta(original, 1, dst_dir)], "vector"
+        if mode == "handwriting":
+            source_drawing = load_svg_drawing(original, quantization_mm=0.5)
+            if source_drawing.is_empty():
+                raise PlotterError("Das SVG enthält keine plottbaren Linien.")
+            with tempfile.TemporaryDirectory(prefix="plotter-svg-ink-") as tmp:
+                png = Path(tmp) / "ink.png"
+                dpi = rasterize_svg_ink(
+                    original, png, source_drawing.width, source_drawing.height
+                )
+                svg = dst_dir / "page-0001.svg"
+                drawing = centerline_image_to_drawing(
+                    png, svg, dpi=dpi, detail=detail, uniform_ink=True
+                )
+            return [page_meta(svg, 1, dst_dir, drawing=drawing)], "handwriting"
+        page = page_meta(original, 1, dst_dir)
+        if page["lines"] == 0:
+            raise PlotterError(
+                "Das SVG enthält keine plottbaren Linien oder verwendet nicht unterstützte Filter."
+            )
+        return [page], "vector"
 
     pdf = original
     if suffix in OFFICE_EXTENSIONS:

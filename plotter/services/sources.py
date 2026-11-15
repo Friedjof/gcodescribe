@@ -7,6 +7,7 @@ import uuid
 from pathlib import Path
 
 from plotter.artwork.drawing import load_svg_drawing, placed_gcode
+from plotter.artwork.xopp import read_xopp
 from plotter.core.calibration import Calibration, data_dir
 from plotter.core.storage import jobs_dir
 
@@ -84,6 +85,13 @@ class SourceService:
                 return self.root / source_id / p["file"]
         raise ServiceError(f"Seite {page} in Quelle {source_id} nicht gefunden")
 
+    def _page_drawing(self, source_id: str, page: int):
+        meta = self.get(source_id)
+        self._page_svg(source_id, page)  # validate page number
+        if meta["name"].lower().endswith(".xopp"):
+            return read_xopp(self.root / source_id / meta["name"])[page - 1]
+        return load_svg_drawing(self._page_svg(source_id, page), quantization_mm=0.15)
+
     def preview(self, source_id: str, page: int, *, max_points: int = 20000) -> dict:
         svg = self._page_svg(source_id, page)
         return preview_for(svg.parent, svg.name, page, max_points)
@@ -117,11 +125,12 @@ class SourceService:
 
         profile = ProfileService().active()
         active_meta = profile_meta(profile)
-        cal = Calibration().merged(profile["calibration"])
-        drawing = load_svg_drawing(self._page_svg(source_id, page), quantization_mm=0.15)
+        cal = Calibration.from_dict(profile["calibration"])
+        drawing = self._page_drawing(source_id, page)
         stem = Path(meta["name"]).stem
         name = f"{stem}-p{page}-{int(time.time())}.gcode"
-        gcode = placed_gcode(drawing, cal, x=x, y=y, width=width, name=name)
+        gcode = placed_gcode(drawing, cal, x=x, y=y, width=width, name=name,
+                             preserve_order=meta["name"].lower().endswith(".xopp"))
         out = jobs_dir() / name
         out.write_text(profile_comment(active_meta) + gcode)
         write_job_meta(
@@ -142,7 +151,8 @@ class SourceService:
         from .upload_validation import MAX_GCODE_BYTES
 
         profile = ProfileService().active()
-        cal = Calibration().merged(profile["calibration"])
-        drawing = load_svg_drawing(self._page_svg(source_id, page), quantization_mm=0.15)
-        gcode = placed_gcode(drawing, cal, x=x, y=y, width=width, name="score")
+        cal = Calibration.from_dict(profile["calibration"])
+        drawing = self._page_drawing(source_id, page)
+        gcode = placed_gcode(drawing, cal, x=x, y=y, width=width, name="score",
+                             preserve_order=self.get(source_id)["name"].lower().endswith(".xopp"))
         return evaluate_gcode(gcode, MAX_GCODE_BYTES)

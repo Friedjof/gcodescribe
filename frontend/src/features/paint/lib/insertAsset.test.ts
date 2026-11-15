@@ -65,6 +65,30 @@ describe("galleryPageObject", () => {
     const item = { id: "g2", title: "Bild", filename: "x.svg", pages: [{}] } as GalleryItem;
     expect(galleryPageObject(item, { ...preview, bounds: null }, 1, cal).data!.name).toBe("Bild");
   });
+  it("keeps a Xournal++ page's landscape frame and margins", () => {
+    const item = { id: "x1", kind: "xopp", title: "Notiz", filename: "notiz.xopp", pages: [{}] } as GalleryItem;
+    const page: GalleryPreview = { polylines: [[[20, 10], [30, 10]]], bounds: [20, 10, 30, 10], width: 210, height: 148 };
+    const obj = galleryPageObject(item, page, 1, { plot_width: 200, plot_height: 200 });
+    expect(obj.cachedPolylines).toEqual([[[-85, -64], [-75, -64]]]);
+    expect(obj.transform!.scale).toBeCloseTo(180 / 210);
+    expect(obj.transform!.rotation).toBe(0);
+    expect(obj.data).toMatchObject({ strokeOrder: "source", sourcePage: { width: 210, height: 148 } });
+  });
+  it("keeps native pressure aligned and disabled until requested", () => {
+    const item = { id: "x1", kind: "xopp", title: "Notiz", filename: "notiz.xopp", pages: [{}] } as GalleryItem;
+    const page: GalleryPreview = { polylines: [[[20, 10], [30, 10], [35, 15]]], width: 210, height: 148, segmentPressures: [[0.2, 0.8]] };
+    const obj = galleryPageObject(item, page, 1, cal);
+    expect(obj.data).toMatchObject({ baseSegmentPressures: [[0.2, 0.8]], cachedSegmentPressures: [[0.2, 0.8]], pressureEnabled: false });
+    expect(obj.cachedPolylines).toEqual([[[-85, -64], [-75, -64], [-70, -59]]]);
+  });
+  it("fits a portrait Xournal++ page without turning or stretching it", () => {
+    const item = { id: "x2", kind: "xopp", title: "Notiz", filename: "notiz.xopp", pages: [{}] } as GalleryItem;
+    const page: GalleryPreview = { polylines: [[[10, 20], [10, 30]]], bounds: [10, 20, 10, 30], width: 148, height: 210 };
+    const obj = galleryPageObject(item, page, 1, { plot_width: 200, plot_height: 200 });
+    expect(obj.cachedPolylines).toEqual([[[-64, -85], [-64, -75]]]);
+    expect(obj.transform).toMatchObject({ rotation: 0, scale: 180 / 210 });
+    expect(obj.data?.sourcePage).toEqual({ width: 148, height: 210 });
+  });
 });
 
 describe("sourcePlacementObject", () => {

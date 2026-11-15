@@ -5,7 +5,7 @@ from plotter.gcode.scene import scene_gcode
 
 
 def _cal() -> Calibration:
-    return Calibration(park_after_plot=False, draw_feed=3000.0, travel_feed=6000.0)
+    return Calibration(park_after_plot=False, draw_feed=50.0, travel_feed=100.0)
 
 
 def _pen_down(cal: Calibration) -> str:

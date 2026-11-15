@@ -17,6 +17,7 @@ _JPEG_MAGIC = b"\xff\xd8\xff"
 _PDF_MAGIC = b"%PDF"
 _ZIP_MAGIC = b"PK\x03\x04"  # docx/xlsx/pptx/odt… (OOXML / ODF are zip containers)
 _OLE_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"  # legacy doc/xls/ppt
+_GZIP_MAGIC = b"\x1f\x8b"
 
 # Document extensions the admin asset library accepts on top of images/SVG.
 DOCUMENT_EXTENSIONS = {"pdf"} | {ext.lstrip(".") for ext in OFFICE_EXTENSIONS}
@@ -71,6 +72,10 @@ def sniff_asset_kind(filename: str, data: bytes) -> str:
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     if ext in ("svg", "png", "jpg", "jpeg"):
         return sniff_kind(filename, data)
+    if ext == "xopp":
+        if not data.startswith(_GZIP_MAGIC):
+            raise UnsupportedUpload("Die Datei ist kein gültiges Xournal++-Dokument.")
+        return "xopp"
     if ext == "pdf":
         if not data.startswith(_PDF_MAGIC):
             raise UnsupportedUpload("Die Datei ist kein gültiges PDF.")
@@ -80,7 +85,7 @@ def sniff_asset_kind(filename: str, data: bytes) -> str:
             raise UnsupportedUpload(f"Die Datei ist kein gültiges {ext.upper()}-Dokument.")
         return ext
     raise UnsupportedUpload(
-        "Nur Bilder (SVG/PNG/JPG), PDF oder Office-Dokumente werden akzeptiert."
+        "Nur Xournal++-Dateien, Bilder (SVG/PNG/JPG), PDF oder Office-Dokumente werden akzeptiert."
     )
 
 

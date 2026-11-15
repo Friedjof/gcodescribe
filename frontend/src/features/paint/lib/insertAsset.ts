@@ -49,13 +49,21 @@ function galleryName(item: GalleryItem, page?: number): string {
   return page && item.pages && item.pages.length > 1 ? `${base} · S.${page}` : base;
 }
 
+/** Keep Xournal++ stroke coordinates relative to the whole paper, including margins. */
+function xoppPageLocal(polylines: Pt[][], width: number, height: number): Pt[][] {
+  return polylines.map((line) => line.map(([x, y]) => [x - width / 2, y - height / 2] as Pt));
+}
+
 /** Gallery item → image object, fitted to the plot area and centred. */
 export function galleryItemObject(item: GalleryItem, svg: GallerySvg, cal: CalArea): SceneObject {
   const { local } = localize(svg.polylines as Pt[][]);
+  const xopp = item.kind === "xopp";
   return imageObject(
-    local,
+    xopp ? xoppPageLocal(svg.polylines as Pt[][], svg.width, svg.height) : local,
     fitScale(svg.width, svg.height, cal),
-    { galleryId: item.id, name: galleryName(item) },
+    { galleryId: item.id, name: galleryName(item),
+      ...(xopp ? { strokeOrder: "source", sourcePage: { width: svg.width, height: svg.height },
+        baseSegmentPressures: svg.segmentPressures, cachedSegmentPressures: svg.segmentPressures, pressureEnabled: false } : {}) },
     cal
   );
 }
@@ -72,10 +80,13 @@ export function galleryPageObject(
   const { local } = localize(preview.polylines as Pt[][]);
   const contentW = preview.bounds ? preview.bounds[2] - preview.bounds[0] : preview.width;
   const contentH = preview.bounds ? preview.bounds[3] - preview.bounds[1] : preview.height;
+  const xopp = item.kind === "xopp";
   return imageObject(
-    local,
-    fitScale(contentW, contentH, cal),
-    { galleryId: item.id, galleryPage: page, name: galleryName(item, page) },
+    xopp ? xoppPageLocal(preview.polylines as Pt[][], preview.width, preview.height) : local,
+    fitScale(xopp ? preview.width : contentW, xopp ? preview.height : contentH, cal),
+    { galleryId: item.id, galleryPage: page, name: galleryName(item, page),
+      ...(xopp ? { strokeOrder: "source", sourcePage: { width: preview.width, height: preview.height },
+        baseSegmentPressures: preview.segmentPressures, cachedSegmentPressures: preview.segmentPressures, pressureEnabled: false } : {}) },
     cal
   );
 }
@@ -90,6 +101,14 @@ export function sourcePlacementObject(
   const name = source.name.replace(/\.[^.]+$/, "");
   const { local } = localize(preview.polylines as Pt[][]);
   const contentW = preview.bounds ? preview.bounds[2] - preview.bounds[0] : preview.width;
-  const scale = placeWidth / Math.max(contentW, 1);
-  return imageObject(local, scale, { sourceId: source.id, name }, cal);
+  const xopp = source.name.toLowerCase().endsWith(".xopp");
+  const scale = placeWidth / Math.max(xopp ? preview.width : contentW, 1);
+  return imageObject(
+    xopp ? xoppPageLocal(preview.polylines as Pt[][], preview.width, preview.height) : local,
+    scale,
+    { sourceId: source.id, name,
+      ...(xopp ? { strokeOrder: "source", sourcePage: { width: preview.width, height: preview.height },
+        baseSegmentPressures: preview.segmentPressures, cachedSegmentPressures: preview.segmentPressures, pressureEnabled: false } : {}) },
+    cal,
+  );
 }

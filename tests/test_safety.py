@@ -78,6 +78,48 @@ class TestPatternsRespectCalibration:
 
 
 class TestSafetyChecker:
+    @pytest.mark.parametrize("depth", [0.0, 0.2, 0.4])
+    def test_explicit_pressure_allows_calibrated_range(self, cal, depth):
+        cal = cal.merged({"pen_pressure_max_depth": 0.4})
+        gcode = (
+            f"G90\nG0 Z{cal.pen_up_z}\n"
+            f"G0 X{cal.origin_x} Y{cal.origin_y}\n"
+            f"G1 Z{cal.pen_down_z}\n"
+            f"G1 X{cal.origin_x + 10} Y{cal.origin_y + 10} Z{cal.pen_down_z - depth}\n"
+            f"G0 Z{cal.pen_up_z}\n"
+        )
+        GcodeSafetyChecker(cal, allow_pressure=True).check(gcode)
+
+    def test_pressure_requires_explicit_opt_in(self, cal):
+        cal = cal.merged({"pen_pressure_max_depth": 0.4})
+        with pytest.raises(SafetyViolation, match="keine kalibrierte Stift-Höhe"):
+            GcodeSafetyChecker(cal).check(f"G0 Z{cal.pen_down_z - 0.2}\n")
+
+    def test_pressure_stays_inside_small_configured_range(self, cal):
+        cal = cal.merged({"pen_pressure_max_depth": 0.01})
+        with pytest.raises(SafetyViolation, match="keine kalibrierte Stift-Höhe"):
+            GcodeSafetyChecker(cal, allow_pressure=True).check(
+                f"G0 Z{cal.pen_down_z - 0.02}\n"
+            )
+
+    def test_pressure_never_reaches_below_machine_zero(self, cal):
+        cal = cal.merged({"pen_pressure_max_depth": cal.pen_down_z})
+        with pytest.raises(SafetyViolation, match="keine kalibrierte Stift-Höhe"):
+            GcodeSafetyChecker(cal, allow_pressure=True).check("G0 Z-0.001\n")
+
+    @pytest.mark.parametrize("start_inside", [True, False])
+    def test_combined_xy_z_checks_both_ends_of_pressure_segment(self, cal, start_inside):
+        cal = cal.merged({"pen_pressure_max_depth": 0.4})
+        inside = (cal.origin_x + 10, cal.origin_y + 10)
+        outside = (0, 0)
+        start, end = (inside, outside) if start_inside else (outside, inside)
+        gcode = (
+            f"G90\nG0 Z{cal.pen_up_z}\nG0 X{start[0]} Y{start[1]}\n"
+            f"G1 X{end[0]} Y{end[1]} Z{cal.pen_down_z - 0.2}\n"
+        )
+        with pytest.raises(SafetyViolation, match="außerhalb des Plotbereichs"):
+            GcodeSafetyChecker(cal, allow_pressure=True).check(gcode)
+
     def test_rejects_bare_g28(self, cal):
         with pytest.raises(SafetyViolation, match="Homing im Job"):
             GcodeSafetyChecker(cal).check("G90\nG28\n")
@@ -132,3 +174,24 @@ class TestSafetyChecker:
     def test_rejects_xy_before_pen_lift(self, cal):
         with pytest.raises(SafetyViolation, match="bevor der Stift"):
             GcodeSafetyChecker(cal).check("G90\nG0 X50 Y50 F6000\n")
+
+    def test_allows_park_lift_z_only_on_last_z_line(self, cal):
+        cal = cal.merged({"park_lift_z": cal.pen_up_z + 20.0})
+        park_x, park_y, park_lift_z = cal.resolved_park()
+        gcode = (
+            f"G90\nG0 Z{cal.pen_up_z} F1000\nG1 Z{cal.pen_down_z} F1000\n"
+            f"G0 Z{cal.pen_up_z} F1000\n"
+            f"G0 Z{park_lift_z} F1000\n"
+            f"G0 X{park_x} Y{park_y} F6000\n"
+        )
+        GcodeSafetyChecker(cal).check(gcode)
+
+    def test_rejects_park_lift_z_mid_job(self, cal):
+        cal = cal.merged({"park_lift_z": cal.pen_up_z + 20.0})
+        park_lift_z = cal.resolved_park()[2]
+        gcode = (
+            f"G90\nG0 Z{park_lift_z} F1000\n"  # not the last Z line -> rejected
+            f"G0 Z{cal.pen_up_z} F1000\n"
+        )
+        with pytest.raises(SafetyViolation, match="keine kalibrierte Stift-Höhe"):
+            GcodeSafetyChecker(cal).check(gcode)

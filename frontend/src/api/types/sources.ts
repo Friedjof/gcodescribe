@@ -9,7 +9,7 @@ export interface SourcePage {
 export interface Source {
   id: string;
   name: string;
-  mode: "vector" | "trace" | "edges" | "hatch" | "lines" | "dots" | "handwriting";
+  mode: "vector" | "trace" | "edges" | "hatch" | "lines" | "dots" | "handwriting" | "strokes";
   detail: number;
   created: number;
   pages: SourcePage[];
@@ -17,6 +17,7 @@ export interface Source {
 
 export interface SourcePreview {
   polylines: number[][][];
+  segmentPressures?: (number[] | null)[];
   bounds: [number, number, number, number] | null;
   width: number;
   height: number;

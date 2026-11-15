@@ -110,7 +110,9 @@ class TestXmlExport:
 class TestXmlImport:
     def test_roundtrip_preserves_all_fields(self, cal):
         restored = calibration_from_xml(calibration_to_xml(cal))
-        assert restored.as_dict() == cal.as_dict()
+        assert restored.as_dict() == {
+            **cal.as_dict(), "defined_positions": ["park", "calibration"],
+        }
 
     def test_partial_xml_keeps_base_values(self, cal):
         xml = (

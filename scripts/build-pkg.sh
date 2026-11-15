@@ -62,6 +62,7 @@ case "$FORMAT" in
       --depends python3.12 \
       --depends poppler-utils \
       --depends libglib2.0-0 \
+      --depends librsvg2-2 \
       "${FPM_COMMON[@]}"
     ;;
   rpm)
@@ -70,6 +71,7 @@ case "$FORMAT" in
       --depends python3.12 \
       --depends poppler-utils \
       --depends glib2 \
+      --depends librsvg2 \
       "${FPM_COMMON[@]}"
     ;;
   appimage)

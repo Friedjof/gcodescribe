@@ -16,10 +16,11 @@ ENV PYTHONUNBUFFERED=1 \
 
 # poppler-utils: pdftocairo (PDF->SVG vector), pdftoppm/pdfinfo (raster trace).
 # libglib2.0-0: runtime lib for opencv (area-border tracing).
+# librsvg2-2: render SVG ink before handwriting centerline tracing.
 # Add libreoffice-core for Office support if needed.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        poppler-utils libglib2.0-0 \
+        poppler-utils libglib2.0-0 librsvg2-2 \
     && rm -rf /var/lib/apt/lists/*
 
 # Run as an unprivileged user. The data volume is created and chowned here so
