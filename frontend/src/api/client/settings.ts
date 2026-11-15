@@ -1,10 +1,10 @@
 import { req } from "./req";
-import type { AppSettings, EffectiveSettings, McpTokenResponse } from "../types/settings";
+import type { AppSettings, EffectiveSettings, McpTokenResponse, SettingsPatch } from "../types/settings";
 
 export const settingsClient = {
   getSettings: () => req<AppSettings>("/api/settings"),
   getEffectiveSettings: () => req<EffectiveSettings>("/api/settings/effective"),
-  patchSettings: (settings: Record<string, unknown>) =>
+  patchSettings: (settings: SettingsPatch) =>
     req<EffectiveSettings>("/api/settings", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },

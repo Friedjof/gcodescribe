@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from "react";
+import type { ConfigSource, OctoPrintCheckResult, SettingsSection, SettingsPatch, SettingValue } from "../../api";
+import { errorMessage } from "../../api/errors";
 import { api, type EffectiveSettings, type FontItem, type SerialPortCandidate } from "../../api";
 import Modal from "../../components/Modal";
 import { useI18n } from "../../i18n";
 import { fontLabel, useTextFonts } from "../paint/hooks/useTextFonts";
 
-type Section = "printer" | "ai" | "fonts" | "mcp" | "storage" | "auth" | "server";
+type Section = Exclude<SettingsSection, "gallery"> | "fonts";
+type DisplaySource = ConfigSource | "pending";
 const SECTIONS: Section[] = ["printer", "ai", "fonts", "mcp", "storage", "auth", "server"];
 
 // Computed server-side flags — rendered read-only, never patchable.
@@ -29,7 +32,7 @@ export default function SettingsDialog({
   const [section, setSection] = useState<Section>("printer");
   const [data, setData] = useState<EffectiveSettings | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [pending, setPending] = useState<Record<string, unknown>>({});
+  const [pending, setPending] = useState<SettingsPatch>({});
   const [saving, setSaving] = useState(false);
 
   const isDirty = Object.keys(pending).length > 0;
@@ -38,10 +41,10 @@ export default function SettingsDialog({
     api
       .getEffectiveSettings()
       .then((d) => { setData(d); setPending({}); })
-      .catch((e) => setErr(String(e.message ?? e)));
+      .catch((e) => setErr(errorMessage(e)));
   }, []);
 
-  const handleChange = (key: string, value: unknown) => {
+  const handleChange = (key: string, value: SettingValue) => {
     setPending((prev) => ({ ...prev, [key]: value }));
   };
 
@@ -54,7 +57,7 @@ export default function SettingsDialog({
     api
       .resetSetting(sec, field)
       .then((d) => { setData(d); onSaved?.(d); })
-      .catch((e) => setErr(String(e.message ?? e)));
+      .catch((e) => setErr(errorMessage(e)));
   };
 
   const save = () => {
@@ -68,7 +71,7 @@ export default function SettingsDialog({
     api
       .patchSettings(patch)
       .then((d) => { setData(d); setPending({}); onSaved?.(d); })
-      .catch((e) => setErr(String(e.message ?? e)))
+      .catch((e) => setErr(errorMessage(e)))
       .finally(() => setSaving(false));
   };
 
@@ -129,15 +132,15 @@ function SectionView({
 }: {
   section: Section;
   data: EffectiveSettings;
-  pending: Record<string, unknown>;
-  onChange: (key: string, value: unknown) => void;
+  pending: SettingsPatch;
+  onChange: (key: string, value: SettingValue) => void;
   onReset: (section: string, field: string) => void;
   onSettingsChange: (settings: EffectiveSettings) => void;
 }) {
   const { t } = useI18n();
   if (section === "fonts") return <FontSettingsSection />;
 
-  const rawSection = data[section] as Record<string, unknown>;
+  const rawSection = data[section] as SettingsPatch;
 
   return (
     <section className="settings-section">
@@ -234,7 +237,7 @@ function McpTokenSection({
         setToken(res.token);
         onSettingsChange(res.settings);
       })
-      .catch((e: Error) => setMessage(String(e.message ?? e)))
+      .catch((e: unknown) => setMessage(errorMessage(e)))
       .finally(() => setBusy(false));
   };
 
@@ -285,7 +288,7 @@ function FontSettingsSection() {
 
   const exportStrokeFont = (font: FontItem) => {
     setLocalError(null);
-    api.exportStrokeFont(font.id, font.label).catch((e) => setLocalError(String(e.message ?? e)));
+    api.exportStrokeFont(font.id, font.label).catch((e) => setLocalError(errorMessage(e)));
   };
 
   const importStrokeFont = (importFile: File | null) => {
@@ -294,7 +297,7 @@ function FontSettingsSection() {
     setLocalError(null);
     api.importStrokeFont(importFile)
       .then(() => reload())
-      .catch((e) => setLocalError(String(e.message ?? e)))
+      .catch((e) => setLocalError(errorMessage(e)))
       .finally(() => {
         setBusy(false);
         if (importRef.current) importRef.current.value = "";
@@ -312,7 +315,7 @@ function FontSettingsSection() {
         setFile(null);
         if (fileRef.current) fileRef.current.value = "";
       })
-      .catch((e) => setLocalError(String(e.message ?? e)))
+      .catch((e) => setLocalError(errorMessage(e)))
       .finally(() => setBusy(false));
   };
 
@@ -322,7 +325,7 @@ function FontSettingsSection() {
     setLocalError(null);
     api.deleteFont(font.id)
       .then((res) => setFonts(res.fonts))
-      .catch((e) => setLocalError(String(e.message ?? e)))
+      .catch((e) => setLocalError(errorMessage(e)))
       .finally(() => setBusy(false));
   };
 
@@ -415,7 +418,7 @@ function SecretRow({
 }: {
   label: string;
   isConfigured: boolean;
-  source?: string;
+  source?: DisplaySource;
   pendingValue: string;
   onChange: (v: string) => void;
 }) {
@@ -473,8 +476,8 @@ function EditableRow({
 }: {
   label: string;
   value: unknown;
-  source?: string;
-  onChange: (v: unknown) => void;
+  source?: DisplaySource;
+  onChange: (v: SettingValue) => void;
   onReset?: () => void;
 }) {
   const { t } = useI18n();
@@ -500,7 +503,7 @@ function EditableRow({
 
 // ── Shared primitives ─────────────────────────────────────────────────────────
 
-function FieldInput({ value, onChange }: { value: unknown; onChange: (v: unknown) => void }) {
+function FieldInput({ value, onChange }: { value: unknown; onChange: (v: SettingValue) => void }) {
   const { t } = useI18n();
 
   if (typeof value === "boolean") {
@@ -534,7 +537,7 @@ function FieldInput({ value, onChange }: { value: unknown; onChange: (v: unknown
   );
 }
 
-function SourceBadge({ source }: { source: string }) {
+function SourceBadge({ source }: { source: DisplaySource }) {
   const { t } = useI18n();
   return (
     <span className={`settings-source settings-source-${source}`}>
@@ -550,7 +553,7 @@ function SerialPortRow({
 }: {
   label: string;
   value: string;
-  source?: string;
+  source?: DisplaySource;
   onChange: (v: string) => void;
   onReset?: () => void;
 }) {
@@ -622,9 +625,7 @@ function SerialPortRow({
 
 function OctoPrintCheckSection() {
   const { t } = useI18n();
-  const [result, setResult] = useState<{
-    ok: boolean; version?: string; api?: string; error?: string;
-  } | null>(null);
+  const [result, setResult] = useState<OctoPrintCheckResult | null>(null);
   const [checking, setChecking] = useState(false);
 
   const check = () => {
@@ -632,7 +633,7 @@ function OctoPrintCheckSection() {
     setResult(null);
     api.octoprintCheck()
       .then(setResult)
-      .catch((e: Error) => setResult({ ok: false, error: String(e.message ?? e) }))
+      .catch((e: unknown) => setResult({ ok: false, error: errorMessage(e) }))
       .finally(() => setChecking(false));
   };
 

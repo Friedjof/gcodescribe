@@ -6,13 +6,14 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from plotter.core.config import load_settings_with_sources
+from plotter.core.settings_types import EffectiveSettings
 
 from ...services.settings_store import clear_field, load_saved, patch_saved
 
 router = APIRouter(tags=["settings"])
 
 
-def _effective() -> dict:
+def _effective() -> EffectiveSettings:
     settings, sources = load_settings_with_sources(saved=load_saved())
     return {**settings.redact(), "sources": sources}
 

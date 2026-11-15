@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Literal
 
-ConfigSource = Literal["default", "environment", "saved"]
+from .settings_types import ConfigSource, PublicSettings, SourceMap
 
 _TRUE = {"1", "true", "yes", "on"}
 
@@ -124,7 +123,7 @@ class AppSettings:
     gallery: GallerySettings
     mcp: McpSettings
 
-    def redact(self) -> dict:
+    def redact(self) -> PublicSettings:
         """Return an API-safe dict — secrets are replaced with presence flags."""
         return {
             "printer": {
@@ -168,11 +167,6 @@ class AppSettings:
                 "token_configured": bool(self.mcp.token),
             },
         }
-
-
-# ── source map ───────────────────────────────────────────────────────────────
-
-SourceMap = dict[str, dict[str, ConfigSource]]
 
 
 # ── per-type resolver helpers ─────────────────────────────────────────────────

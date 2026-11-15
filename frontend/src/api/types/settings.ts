@@ -26,8 +26,17 @@ export interface AppSettings {
   mcp: { enabled: boolean; token_configured: boolean };
 }
 
+export type SettingsSection = keyof AppSettings;
+export type ConfigSource = "default" | "environment" | "saved";
+export type SettingsSources = Record<SettingsSection, Partial<Record<string, ConfigSource>>>;
+export type SettingValue = string | number | boolean;
+
+// Flat section.field keys may also contain write-only secrets. Keep these
+// separate from AppSettings, which only exposes secret presence flags.
+export type SettingsPatch = Record<string, SettingValue>;
+
 export interface EffectiveSettings extends AppSettings {
-  sources: Record<string, Record<string, string>>;
+  sources: SettingsSources;
 }
 
 export interface McpTokenResponse {
