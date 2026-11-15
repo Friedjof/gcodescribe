@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from plotter.core.calibration import Calibration
 from plotter.core.document import get_document_store
 from plotter.core.jobmeta import read_job_meta
+from plotter.core.state import create_store
 from plotter.core.storage import jobs_dir
 from plotter.gcode.preview import parse_gcode_3d
 from plotter.services.profiles import ProfileService
@@ -170,7 +171,7 @@ class TestPageGcodeGuard:
         page = store.create_page("Alt")
         legacy = store.get_page(page["id"])
         legacy.pop("profileSnapshot")
-        store._store.set(store._page_key(page["id"]), legacy)
+        create_store().set(f"paint_page_{page['id']}", legacy)
         client.put(
             f"/api/pages/{page['id']}",
             json={"objects": [_line_object(10, 10, 50, 50)]},
