@@ -1,45 +1,45 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ApiError, errorMessage, isAbortError } from "../../api/errors";
+import { useEffect, useMemo, useState } from "react";
+import { api, type Page, type SceneObject } from "../../api";
+import { startImport } from "../../api/assetTasks";
+import { errorMessage, isAbortError } from "../../api/errors";
+import { discardEdits, flushEdits, queueObjects, rememberPage } from "../../api/pageEdits";
 import type { PrinterStatus } from "../../api/types/printer";
-import { isPrinterBusy } from "../../lib/printerState";
-import { api, onAppEvent, type AppEvent, type GcodePreview3D, type Page, type PageIndex, type SceneObject } from "../../api";
-import PaintCanvas, { type Tool, type ViewRotation } from "./PaintCanvas";
-import MarkdownEditor from "../markdown/MarkdownEditor";
-import ProjectPagePanel from "./ProjectPagePanel";
-import ProjectOverviewPopup from "./ProjectOverviewPopup";
-import GalleryPopup from "../gallery/GalleryPopup";
-import Gcode3DOverlay from "../../components/Gcode3DOverlay";
-import ColoringEditor from "../coloring/ColoringEditor";
+import DelayedLoading from "../../components/DelayedLoading";
 import type { Gcode3DView } from "../../components/Gcode3D";
-import { defaultSceneViewBox } from "./components/SceneView";
-import { useLiveRegistryState } from "../stream/lib/liveRegistry";
-import { useLiveStream } from "../stream/hooks/useLiveStream";
-import { useLiveSource } from "../../hooks/useLiveSource";
-import { localize, transformPolylines, type Pt, type Transform } from "./lib/geometry";
-import { type TextFont } from "./lib/text";
-import { objectStyle, randomTextSeed, textGeometryAsync } from "./lib/sceneObjects";
-import { DEFAULT_VECTOR_STYLE, type FillStyle } from "./lib/styling";
-import { bucketFillRegion } from "./lib/bucketFill";
-import { useObjectOps } from "./hooks/useObjectOps";
-import { usePaintPages } from "./hooks/usePaintPages";
-import { usePaintShortcuts } from "./hooks/usePaintShortcuts";
-import { type EraserBrush, ERASER_BRUSH_FACTOR } from "./lib/eraser";
-import { useI18n } from "../../i18n";
+import Gcode3DOverlay from "../../components/Gcode3DOverlay";
 import { useToasts } from "../../components/Toasts";
 import { useConfirm, usePrompt } from "../../components/dialogs";
-import { PaintImageModal, type ImageMode } from "./components/PaintImageModal";
+import { useLatestCallbacks } from "../../hooks/useLatestCallbacks";
+import { useLiveSource } from "../../hooks/useLiveSource";
+import { useI18n } from "../../i18n";
+import { isPrinterBusy } from "../../lib/printerState";
+import { useProjectCalibration } from "../../state/ProjectCalibrationContext";
+import ColoringEditor from "../coloring/ColoringEditor";
+import CalibrationPressureDialog from "../control/CalibrationPressureDialog";
+import GalleryPopup from "../gallery/GalleryPopup";
+import MarkdownEditor from "../markdown/MarkdownEditor";
+import { useLiveStream } from "../stream/hooks/useLiveStream";
+import { useLiveRegistryState } from "../stream/lib/liveRegistry";
+import PaintCanvas, { type Tool, type ViewRotation } from "./PaintCanvas";
+import ProjectOverviewPopup from "./ProjectOverviewPopup";
+import ProjectPagePanel from "./ProjectPagePanel";
 import PaintContextPanel from "./components/PaintContextPanel";
+import { PaintImageModal, type ImageMode } from "./components/PaintImageModal";
+import PaintInfoModal from "./components/PaintInfoModal";
+import PaintObjectMenu from "./components/PaintObjectMenu";
 import PaintToolRail, { paintTools } from "./components/PaintToolRail";
 import PaintToolbar from "./components/PaintToolbar";
-import PaintObjectMenu from "./components/PaintObjectMenu";
-import PaintInfoModal from "./components/PaintInfoModal";
-import { queueObjects, rememberPage, flushEdits, subscribeEdits, subscribeSaved, editState, discardEdits, cachedPage, refreshPage } from "../../api/pageEdits";
-import { startImport, type AssetTask } from "../../api/assetTasks";
-import { useLatestCallbacks } from "../../hooks/useLatestCallbacks";
-import DelayedLoading from "../../components/DelayedLoading";
-import CalibrationPressureDialog from "../control/CalibrationPressureDialog";
-import { fitPageObjects } from "./lib/fitPage";
-import { useProjectCalibration } from "../../state/ProjectCalibrationContext";
+import { defaultSceneViewBox } from "./components/SceneView";
+import { useObjectOps } from "./hooks/useObjectOps";
+import { usePaintCanvasActions } from "./hooks/usePaintCanvasActions";
+import { usePaintDocument } from "./hooks/usePaintDocument";
+import { usePaintJobs } from "./hooks/usePaintJobs";
+import { usePaintPages } from "./hooks/usePaintPages";
+import { usePaintShortcuts } from "./hooks/usePaintShortcuts";
+import { ERASER_BRUSH_FACTOR, type EraserBrush } from "./lib/eraser";
+import { type Pt } from "./lib/geometry";
+import { objectStyle } from "./lib/sceneObjects";
+import { DEFAULT_VECTOR_STYLE, type FillStyle } from "./lib/styling";
 
 export default function Paint({
   visible = true,
@@ -64,19 +64,9 @@ export default function Paint({
   const [eraserBrush, setEraserBrush] = useState<EraserBrush>("small");
   const [fillStyle, setFillStyle] = useState<FillStyle>({ ...DEFAULT_VECTOR_STYLE.fill, enabled: true });
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [, setSaveTick] = useState(0);
-  useEffect(() => subscribeEdits(() => setSaveTick((n) => n + 1)), []);
-  const saveState = page ? editState(page.id) : { pending: false, error: undefined, conflict: false };
-  const [calibrating, setCalibrating] = useState(false);
   const [pressureOpen, setPressureOpen] = useState(false);
   useEffect(() => { setPressureOpen(false); }, [index?.project?.id, index?.project?.profileId]);
-  const printerBusy = calibrating || isPrinterBusy(status);
-  const [fullscreen, setFullscreen] = useState<GcodePreview3D | null>(null);
   const [gcode3dView, setGcode3dView] = useState<Gcode3DView>({ yaw: -0.7, pitch: 1.0, zoom: 1, panX: 0, panY: 0 });
-  const [loadingPreview, setLoadingPreview] = useState(false);
-  const [plotError, setPlotError] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; ids: string[] } | null>(null);
   const [imageImport, setImageImport] = useState<{ file: File; at: Pt; mode: ImageMode; detail: number;
     pageId: string; projectId: string; profileId: string; fingerprint: string } | null>(null);
@@ -96,11 +86,6 @@ export default function Paint({
   const { prompt, PromptNode } = usePrompt();
 
   const fail = (e: unknown) => { if (!isAbortError(e)) toast.error(errorMessage(e)); };
-  const failPlot = (e: unknown) => {
-    setPlotError(errorMessage(e));
-    if (e instanceof ApiError && e.status === 409) { void refresh(true).catch(fail); }
-  };
-  useEffect(() => setPlotError(null), [page?.id]);
   const warnMissingGlyphs = (missing: string[]) => {
     const chars = Array.from(new Set(missing)).slice(0, 12).join(" ");
     toast.warn(t("paint.missingGlyphs", { chars, count: missing.length }));
@@ -119,6 +104,21 @@ export default function Paint({
   };
 
   const ops = useObjectOps(page, cal, selectedIds, setPage, setSelectedIds, persist, fail, warnMissingGlyphs, defaultText, sizeLinked);
+
+  const { saveState, reloadIndex, showProject } = usePaintDocument({ page, setPage, index, setIndex,
+    projectMatches, visible, agentRevision, ops, setSelectedIds, refresh, fail });
+
+  const { busy, sending, calibrating, setCalibrating, fullscreen, setFullscreen, loadingPreview, plotError,
+    setPlotError, createGcode, directPlot, plotSelection, moveToCalibration, openFullscreen } = usePaintJobs({
+      page, profile: renderProfile, projectId: index?.project?.id, visible, status,
+      printerBusy: isPrinterBusy(status), ops, selectedIds, setSelectedIds, onAction, refresh, fail,
+    });
+  const printerBusy = calibrating || isPrinterBusy(status);
+
+  const pageBlocked = !renderProfile;
+  const { handleBucketFill, handleAreaFill, fitDrawing, updateObject, updateObjects, addTextObject } = usePaintCanvasActions({
+    page, cal, pageBlocked, fillStyle, ops, setPage, persist, setPlotError, defaultText, warnMissingGlyphs, fail,
+  });
 
   const live = useLiveStream("designer", () => {
     if (!cal || !page) return null;
@@ -139,88 +139,10 @@ export default function Paint({
 
   const activeToolMeta = paintTools(t).find((o) => o.value === tool);
 
-  // Both fill tools produce a normal closed object with fill.enabled, so the
-  // existing style/render/G-code pipeline (withStyledCache → buildStyledPolylines
-  // → hatchFill) turns it into plottable hatch lines with no backend changes.
-  // Guard against degenerate/empty polygons: an empty localize() yields NaN
-  // centers, which serialise to null and crash the backend's transform math.
-  const makeFillObject = (polygonWorld: Pt[][]): SceneObject | null => {
-    const { local, cx, cy } = localize(polygonWorld);
-    if (!local.some((line) => line.length >= 2) || !Number.isFinite(cx) || !Number.isFinite(cy)) return null;
-    return {
-      id: crypto.randomUUID(),
-      type: "fill",
-      data: { basePolylines: local, style: { ...DEFAULT_VECTOR_STYLE, fill: { ...fillStyle, enabled: true } } },
-      transform: { x: cx, y: cy, rotation: 0, scale: 1 },
-      plotted: false,
-    };
-  };
-
-  const handleBucketFill = (at: Pt) => {
-    if (!page || !cal) return;
-    const world = page.objects
-      .filter((o) => !o.plotted)
-      .flatMap((o) => transformPolylines((o.cachedPolylines ?? []) as Pt[][], o.transform ?? { x: 0, y: 0, rotation: 0, scale: 1 }));
-    const poly = bucketFillRegion(world, at, cal.plot_width, cal.plot_height);
-    const obj = poly && makeFillObject([poly]);
-    if (!obj) { toast.error(t("paint.bucketFillFailed")); return; }
-    ops.addObject(obj);
-  };
-
-  const handleAreaFill = (polygonWorld: Pt[]) => {
-    if (polygonWorld.length < 3) return;
-    const obj = makeFillObject([polygonWorld]);
-    if (!obj) { toast.error(t("paint.bucketFillFailed")); return; }
-    ops.addObject(obj);
-  };
-
   const selectTool = (v: Tool) => {
     setTool(v);
     if (v !== "select") setSelectedIds([]);
   };
-
-  const reloadIndex = () => refresh().catch(fail);
-  const pageIdRef = useRef<string | null>(null);
-  const lastAgentRevision = useRef(0);
-  useEffect(() => { pageIdRef.current = page?.id ?? null; }, [page?.id]);
-  useEffect(() => {
-    if (!visible || !index) return;
-    const id = index.activeId ?? index.order[0]?.id;
-    if (!id || (id === pageIdRef.current && projectMatches && lastAgentRevision.current === agentRevision)) return;
-    const controller = new AbortController();
-    api.getPage(id, controller.signal).then(next => {
-      if (controller.signal.aborted) return;
-      ops.resetHistory();
-      setSelectedIds([]);
-      setPage(next);
-      lastAgentRevision.current = agentRevision;
-    }).catch(fail);
-    return () => controller.abort();
-  }, [visible, index?.project?.id, agentRevision]);
-
-  // The shared context refreshes metadata and announces completed MCP changes.
-  // Ordinary document writes keep the canvas's in-progress edits intact.
-  const liveHandlerRef = useRef<(event: AppEvent) => void>(() => {});
-  liveHandlerRef.current = (event: AppEvent) => {
-    if (event.type === "document") {
-      if (event.action === "import" && event.pageId) refreshPage(event.pageId).catch(fail);
-      return;
-    }
-  };
-  useEffect(() => onAppEvent((event) => liveHandlerRef.current(event)), []);
-  useEffect(() => {
-    const saved = (id: string) => {
-      const next = cachedPage(id);
-      if (next) setPage((previous) => previous?.id === id ? { ...previous, objects: next.objects, revision: next.revision } : previous);
-    };
-    const unsubscribeSaved = subscribeSaved(saved);
-    const imported = (event: Event) => {
-      const task = (event as CustomEvent<AssetTask>).detail;
-      if (task.attached && task.target) void refreshPage(task.target.page_id).catch(fail);
-    };
-    window.addEventListener("gcs:asset-ready", imported);
-    return () => { unsubscribeSaved(); window.removeEventListener("gcs:asset-ready", imported); };
-  }, []);
 
   useLiveSource(live, {
     visible,
@@ -235,14 +157,6 @@ export default function Paint({
     live.start();
   }, [visible, cal, page?.id, globalLive.active, globalLive.sourceId]);
 
-  const pageBlocked = !renderProfile;
-
-  const showProject = async (next: PageIndex) => {
-    const id = next.activeId ?? next.order[0]?.id;
-    const nextPage = id ? await api.getPage(id) : null;
-    setIndex(next); ops.resetHistory(); setSelectedIds([]);
-    setPage(nextPage);
-  };
 
   const pages = usePaintPages({
     page,
@@ -269,125 +183,9 @@ export default function Paint({
     api.savePage(page.id, { continuous }).then(reloadIndex).catch(fail);
   };
 
-  const generateJob = (objects?: SceneObject[]) => {
-    setPlotError(null);
-    if (!page) return Promise.reject(new Error(t("paint.noPage")));
-    if (!renderProfile) return Promise.reject(new Error("Die aktuelle Projektkalibrierung wird noch geladen."));
-    if (ops.processing) return Promise.reject(new Error(t("paint.processingGeometry")));
-    setBusy(true);
-    return flushEdits(page.id).then(() => api.pageGcode(page.id, renderProfile, objects))
-      .then((job) => {
-        toast.success(t("paint.jobCreated", { name: job.filename }));
-        return job.filename;
-      })
-      .finally(() => setBusy(false));
-  };
-
-  const createGcode = () => {
-    if (busy) return;
-    generateJob().catch(failPlot);
-  };
-
-  const moveToCalibration = () => {
-    if (!status?.online || busy || sending || printerBusy) return;
-    setCalibrating(true);
-    api.homeAndMoveToPosition("calibration", index?.project?.id)
-      .then(() => onAction?.())
-      .catch(fail)
-      .finally(() => setCalibrating(false));
-  };
-
-  const directPlot = () => {
-    if (busy || sending || printerBusy || pageBlocked) return;
-    generateJob()
-      .then((filename) => {
-        setSending(true);
-        return api.send(filename, true).then(() => toast.success(t("paint.jobStarted", { name: filename })));
-      })
-      .catch(failPlot)
-      .finally(() => setSending(false));
-  };
-
-  const plotSelection = () => {
-    if (!page || busy || sending || printerBusy || pageBlocked || selectedIds.length === 0) return;
-    const ids = [...selectedIds];
-    const subset = page.objects.filter((o) => ids.includes(o.id));
-    if (subset.length === 0) return;
-    generateJob(subset)
-      .then((filename) => {
-        setSending(true);
-        return api.send(filename, true).then(() => {
-          toast.success(t("paint.selectionPlotted", { name: filename }));
-          ops.remember();
-          ops.markPlotted(ids);
-          setSelectedIds([]);
-        });
-      })
-      .catch(failPlot)
-      .finally(() => setSending(false));
-  };
-
-  const openFullscreen = () => {
-    if (!page || loadingPreview || !renderProfile) return;
-    setPlotError(null);
-    setLoadingPreview(true);
-    api.pagePreview3D(page.id, page.objects, renderProfile)
-      .then(setFullscreen)
-      .catch(failPlot)
-      .finally(() => setLoadingPreview(false));
-  };
-
-  const fitDrawing = () => {
-    if (!page || !cal || pageBlocked) return;
-    const objects = fitPageObjects(page.objects, cal.plot_width, cal.plot_height);
-    if (!objects) return;
-    ops.remember();
-    setPage({ ...page, objects });
-    persist(page.id, objects);
-    setPlotError(null);
-  };
-
   const selectIds = (ids: string[]) => {
     setSelectedIds(ids);
     setMenu(null);
-  };
-
-  const updateObject = (id: string, transform: Transform) => {
-    if (!page) return;
-    const objects = page.objects.map((o) => (o.id === id ? { ...o, transform, plotted: false } : o));
-    setPage({ ...page, objects });
-    persist(page.id, objects);
-  };
-
-  const updateObjects = (updates: Map<string, Transform>) => {
-    if (!page || updates.size === 0) return;
-    const objects = page.objects.map((o) => {
-      const transform = updates.get(o.id);
-      return transform ? { ...o, transform, plotted: false } : o;
-    });
-    setPage({ ...page, objects });
-    persist(page.id, objects);
-  };
-
-  const addTextObject = (at: Pt) => {
-    const text = defaultText;
-    const size = 12;
-    const font: TextFont = "sans";
-    const seed = randomTextSeed();
-    textGeometryAsync(text, size, font, defaultText, false, seed)
-      .then(({ local, cx, cy, feeds, missing }) => {
-        if (missing?.length) warnMissingGlyphs(missing);
-        ops.addObject({
-          id: crypto.randomUUID(),
-          type: "text",
-          data: { text, mode: "single-line", size, font, seed, basePolylines: local, style: DEFAULT_VECTOR_STYLE },
-          cachedPolylines: local,
-          cachedFeeds: feeds,
-          transform: { x: at[0] + cx, y: at[1] + cy, rotation: 0, scale: 1 },
-          plotted: false,
-        });
-      })
-      .catch(fail);
   };
 
   const openImageImport = (file: File, at: Pt) => {

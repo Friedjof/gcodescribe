@@ -22,3 +22,17 @@ Das aktive Projekt liegt derzeit im gemeinsamen Dokumentindex; die zuletzt geöf
 ## Plotten und Sicherheit
 
 Designer-Jobs tragen einen Snapshot der beim Erzeugen aktuellen Projektkalibrierung in ihren Job-Metadaten. Der Drucker prüft diesen gegen die aktuelle Projektkalibrierung sowie gegen die Bett- und Z-Grenzen des aktiven Maschinenprofils. Wird die Projektkalibrierung nachträglich geändert, muss der G-Code neu erzeugt werden. Für andere Jobs gilt weiterhin die Prüfung des global aktiven Profils. Das tatsächliche Senden an einen Drucker wurde automatisiert mit einem simulierten Client geprüft; ein physischer Test steht aus.
+
+## Modulgrenzen im Designer
+
+`Paint.tsx` verbindet die Oberfläche mit drei Controllern:
+
+- `usePaintDocument` synchronisiert Seiten, Speicherstatus und abgeschlossene Importe. Lokale Entwürfe bleiben während Hintergrundaktualisierungen erhalten.
+- `usePaintCanvasActions` übersetzt Zeichenaktionen, Füllungen und Texteinfügen in Objektbefehle.
+- `usePaintJobs` verwaltet G-Code-Erzeugung, Vorschau und Druckstart. Ein synchroner Sperrstatus verhindert doppelte Befehle. Vor einem Druckstart wird nach jedem vorbereitenden Schritt geprüft, ob Seite, Projekt, Profilversion und aktiver Tab noch zur ursprünglichen Aktion gehören. Bereits angenommene Druckaufträge werden nicht automatisch abgebrochen oder erneut gesendet.
+
+`useObjectOps` bleibt die Schnittstelle für Canvas, Werkzeugleisten und Tastenkürzel. Die Implementierung liegt unter `hooks/objects/`: gemeinsamer Verlauf und Commit-Prüfungen sowie getrennte Text-, Geometrie-, Auswahl- und Transformationsbefehle. Hintergrundberechnungen halten ihre ursprüngliche Seite im Cache fest. Tokens für Text und Stil enthalten die Seiten-ID, weil kopierte Seiten gleiche Objekt-IDs besitzen können. Beim Seitenwechsel werden ausstehende Texteingaben noch auf der ursprünglichen Seite übernommen.
+
+`api/pageEdits.ts` stellt die bisherige Speicher-API bereit. Der injizierbare `api/documents/pageEditStore.ts` besitzt Entwürfe, Warteschlangen und Konfliktbehandlung; `objectPatches.ts` berechnet und verbindet Objektänderungen. Speicherereignisse laufen über typisierte Abonnements. Die App installiert und entfernt Browser-Lebenszyklus-Listener ausdrücklich. Beim Verwerfen bleiben lokale Änderungen erhalten, bis das Serverdokument erfolgreich geladen wurde; inzwischen neu eingegebene Änderungen werden nicht verworfen.
+
+Im Backend bleibt `DocumentStore` die öffentliche Fassade. `core/documents/` trennt Seiten, Projekte und Ordner. Alle Repositories teilen einen `DocumentState` mit derselben reentranten Sperre; Revisionsprüfungen und verschachtelte Schreiboperationen bleiben dadurch atomar. Speicher-Schlüssel und Migrationen bleiben kompatibel. Leere Löschmarkierungen gelten beim Lesen als fehlende Seiten und können durch verspätete Schreibzugriffe nicht wiederhergestellt werden.
