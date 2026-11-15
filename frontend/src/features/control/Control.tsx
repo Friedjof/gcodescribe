@@ -138,6 +138,9 @@ export default function Control({
   const progress = job?.progress?.completion;
   const printing = job?.state?.toLowerCase?.().includes("printing");
   const paused = job?.state?.toLowerCase?.().includes("paused");
+  const motionLocked = status?.motion_locked ||
+    ["printing", "starting", "pausing", "resuming", "finishing", "cancelling"]
+      .some((state) => job?.state?.toLowerCase?.().includes(state));
   const [refreshing, setRefreshing] = useState(false);
 
   const run = (fn: () => Promise<any>) => {
@@ -169,7 +172,7 @@ export default function Control({
       raise: () => jog(0, 0, 1),
       lower: () => jog(0, 0, -1),
     },
-    online
+    online && !motionLocked
   );
   const kbd = (dir: string) => (pressed === dir ? " kbd-active" : "");
 
@@ -215,29 +218,31 @@ export default function Control({
           onChange={setStep}
           options={[0.1, 1, 10, 50].map((s) => ({ value: s, label: `${s} mm` }))}
         />
-        <div className="jog">
-          <div className="xy">
-            <button onClick={() => jog(0, 1, 0)} className={"up" + kbd("up")}>↑ Y+</button>
-            <button onClick={() => jog(-1, 0, 0)} className={"left" + kbd("left")}>← X-</button>
-            <button onClick={() => run(() => api.home(["x", "y"]))} className="home">⌂</button>
-            <button onClick={() => jog(1, 0, 0)} className={"right" + kbd("right")}>X+ →</button>
-            <button onClick={() => jog(0, -1, 0)} className={"down" + kbd("down")}>↓ Y-</button>
+        <fieldset disabled={motionLocked} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+          <div className="jog">
+            <div className="xy">
+              <button onClick={() => jog(0, 1, 0)} className={"up" + kbd("up")}>↑ Y+</button>
+              <button onClick={() => jog(-1, 0, 0)} className={"left" + kbd("left")}>← X-</button>
+              <button onClick={() => run(() => api.home(["x", "y"]))} className="home">⌂</button>
+              <button onClick={() => jog(1, 0, 0)} className={"right" + kbd("right")}>X+ →</button>
+              <button onClick={() => jog(0, -1, 0)} className={"down" + kbd("down")}>↓ Y-</button>
+            </div>
+            <div className="z">
+              <button onClick={() => jog(0, 0, 1)} className={kbd("raise").trim()}>Z+ ↑</button>
+              <button onClick={() => run(() => api.home(["z"]))} className="home">⌂ Z</button>
+              <button onClick={() => jog(0, 0, -1)} className={kbd("lower").trim()}>Z- ↓</button>
+            </div>
           </div>
-          <div className="z">
-            <button onClick={() => jog(0, 0, 1)} className={kbd("raise").trim()}>Z+ ↑</button>
-            <button onClick={() => run(() => api.home(["z"]))} className="home">⌂ Z</button>
-            <button onClick={() => jog(0, 0, -1)} className={kbd("lower").trim()}>Z- ↓</button>
+          <p className="muted kbd-hint">
+            {t("common.keyboard")}: <kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> {t("control.kbdMove")} ·{" "}
+            <kbd>{t("common.pageUpKey")}</kbd><kbd>{t("common.pageDownKey")}</kbd> Z
+          </p>
+          <div className="pen-row">
+            <button onClick={() => run(() => api.pen(false))}>{t("control.penUp")}</button>
+            <button onClick={() => run(() => api.pen(true))}>{t("control.penDown")}</button>
+            <button onClick={() => run(() => api.home())}>{t("control.homeAll")}</button>
           </div>
-        </div>
-        <p className="muted kbd-hint">
-          {t("common.keyboard")}: <kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> {t("control.kbdMove")} ·{" "}
-          <kbd>{t("common.pageUpKey")}</kbd><kbd>{t("common.pageDownKey")}</kbd> Z
-        </p>
-        <div className="pen-row">
-          <button onClick={() => run(() => api.pen(false))}>{t("control.penUp")}</button>
-          <button onClick={() => run(() => api.pen(true))}>{t("control.penDown")}</button>
-          <button onClick={() => run(() => api.home())}>{t("control.homeAll")}</button>
-        </div>
+        </fieldset>
         <label className="switch-label" style={{ marginTop: 14, justifyContent: "flex-start" }}>
           <button
             className={`switch ${limitPlot ? "on" : ""}`}

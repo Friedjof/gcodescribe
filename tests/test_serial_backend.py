@@ -5,9 +5,12 @@ import select
 import threading
 import time
 from collections import deque
+from dataclasses import asdict
 
 import pytest
 
+from plotter.core.calibration import Calibration
+from plotter.core.jobmeta import write_job_meta
 from plotter.printer.base import PrinterBackend, PrinterError
 from plotter.printer.octoprint import OctoPrintClient
 from plotter.printer.serial import SerialClient, SerialWorker, reset_worker
@@ -142,6 +145,28 @@ def test_connects_and_reports_online():
         # Init sequence sent after the banner.
         assert "G21" in transport.sent
         assert "G90" in transport.sent
+    finally:
+        worker.shutdown()
+
+
+def test_project_job_uses_its_own_pen_lift_for_cancel(workspace):
+    machine = Calibration(pen_up_z=5.5, pen_down_z=3.8)
+    machine.save()
+    project = Calibration(pen_up_z=9, pen_down_z=2, park_x=30, park_y=180, park_lift_z=12)
+    path = workspace / "project.gcode"
+    path.write_text("G21\nG90\nG1 X10 Y10\nM2\n")
+    write_job_meta(path, source={"kind": "paint_page"}, calibration_snapshot={
+        "profileId": "project", "calibration": asdict(project),
+    })
+    worker, transport = _make_worker()
+    try:
+        assert _wait_until(lambda: worker.status().get("online") is True)
+        worker.upload(path)
+        assert "G1 Z9.000" in " ".join(worker._pen_up_lines(worker._job_calibration))
+        assert any(line.startswith("G0 X30.000 Y180.000 ")
+                   for line in worker._park_lines(worker._job_calibration))
+        worker.job_command("cancel")
+        assert _wait_until(lambda: "G1 Z9.000 F1602" in transport.sent)
     finally:
         worker.shutdown()
 
@@ -301,9 +326,47 @@ def test_pause_lifts_pen_and_parks_at_finish_position(cal):
         assert _wait_until(
             lambda: any(f"Z{cal.pen_up_z:.3f}" in s for s in transport.sent)
         )
+        park_x, park_y, _ = cal.resolved_park()
         assert _wait_until(
             lambda: any(
-                f"X{cal.bed_width / 2:.3f}" in s and f"Y{cal.bed_height:.3f}" in s
+                f"X{park_x:.3f}" in s and f"Y{park_y:.3f}" in s
+                for s in transport.sent
+            )
+        )
+    finally:
+        release.set()
+        worker.shutdown()
+
+
+def test_pause_parks_at_custom_position_with_custom_lift(cal):
+    cal = cal.merged({"park_x": 17.0, "park_y": 23.0, "park_lift_z": cal.pen_up_z + 15.0})
+    cal.save()
+    release = threading.Event()
+
+    def responder(cmd):
+        if cmd.startswith("G0 X"):
+            release.wait(2.0)
+        return [b"ok\n"]
+
+    worker, transport = _make_worker(responder=responder)
+    try:
+        assert _wait_until(lambda: worker.status().get("online") is True)
+        path = _tmp_gcode("G0 X1\nG0 X2\nG0 X3\n")
+        worker.upload(path, start=True)
+        assert _wait_until(
+            lambda: (worker.status().get("job") or {}).get("state") == "Printing"
+        )
+        worker.job_command("pause")
+        release.set()
+        assert _wait_until(
+            lambda: (worker.status().get("job") or {}).get("state") == "Paused"
+        )
+        assert _wait_until(
+            lambda: any(f"Z{cal.park_lift_z:.3f}" in s for s in transport.sent)
+        )
+        assert _wait_until(
+            lambda: any(
+                f"X{cal.park_x:.3f}" in s and f"Y{cal.park_y:.3f}" in s
                 for s in transport.sent
             )
         )
@@ -363,6 +426,131 @@ def test_cancel_quickstops_and_clears_job(cal):
         worker.job_command("cancel")
         release.set()
         assert _wait_until(lambda: worker.status()["job"] is None)
+        assert _wait_until(lambda: "M410" in transport.sent)
+    finally:
+        release.set()
+        worker.shutdown()
+
+
+@pytest.mark.parametrize("absolute", [True, False])
+@pytest.mark.parametrize("pen_down", [True, False])
+def test_resume_restores_z_feed_and_mode_before_streaming(cal, absolute, pen_down):
+    from plotter.printer.base import PrinterBusyError
+
+    release_first = threading.Event()
+    first_seen = threading.Event()
+    restore_seen = threading.Event()
+    release_restore = threading.Event()
+    z = cal.pen_down_z if pen_down else cal.pen_up_z
+    returning = False
+
+    def responder(cmd):
+        nonlocal returning
+        if cmd == "G1 X1 F3800":
+            first_seen.set()
+            release_first.wait(2)
+        if cmd.startswith("G0 X1.000 Y0.000"):
+            returning = True
+        if returning and cmd.startswith(f"G1 Z{z:.3f}"):
+            restore_seen.set()
+            release_restore.wait(2)
+        return [b"ok\n"]
+
+    worker, transport = _make_worker(responder=responder)
+    try:
+        assert _wait_until(lambda: worker.status().get("online") is True)
+        mode = "G90" if absolute else "G91"
+        worker.upload(_tmp_gcode(f"{mode}\nG1 Z{z:.3f} F1500\nG1 X1 F3800\nG1 X2\n"),
+                      start=True)
+        assert first_seen.wait(2)
+        worker.job_command("pause")
+        # Resume before the in-flight line / parking has completed.
+        worker.job_command("resume")
+        release_first.set()
+        assert restore_seen.wait(2)
+        assert worker.status()["job"]["state"] == "Paused"
+        assert worker.status()["motion_locked"] is True
+        assert "G1 X2" not in transport.sent
+        with pytest.raises(PrinterBusyError):
+            worker.gcode(["G1 Z30"])
+        release_restore.set()
+        assert _wait_until(lambda: worker.status()["job"] is None)
+        next_move = transport.sent.index("G1 X2")
+        assert transport.sent[next_move - 1] == ("G1 F3800" if absolute else "G91")
+        assert worker._z == pytest.approx(z)
+        assert worker._x == pytest.approx(2 if absolute else 3)
+        assert worker._feed == 3800
+        assert worker._absolute is absolute
+    finally:
+        release_first.set()
+        release_restore.set()
+        worker.shutdown()
+
+
+def test_failed_resume_stays_paused_and_can_retry(cal):
+    first_seen = threading.Event()
+    release = threading.Event()
+    returning = False
+    failed = False
+
+    def responder(cmd):
+        nonlocal returning, failed
+        if cmd == "G1 X1":
+            first_seen.set()
+            release.wait(2)
+        if cmd.startswith("G0 X1.000 Y0.000"):
+            returning = True
+        if returning and cmd.startswith(f"G1 Z{cal.pen_down_z:.3f}") and not failed:
+            failed = True
+            return [b"Error: Z movement failed\n"]
+        return [b"ok\n"]
+
+    worker, transport = _make_worker(responder=responder)
+    try:
+        assert _wait_until(lambda: worker.status().get("online") is True)
+        worker.upload(_tmp_gcode(f"G1 Z{cal.pen_down_z:.3f}\nG1 X1\nG1 X2\n"), start=True)
+        assert first_seen.wait(2)
+        worker.job_command("pause")
+        worker.job_command("resume")
+        release.set()
+        assert _wait_until(lambda: worker.status().get("error") is not None)
+        assert worker.status()["job"]["state"] == "Paused"
+        assert "G1 X2" not in transport.sent
+        worker.job_command("resume")
+        assert _wait_until(lambda: worker.status()["job"] is None)
+        assert worker._z == pytest.approx(cal.pen_down_z)
+        assert transport.sent.count("G1 X2") == 1
+    finally:
+        release.set()
+        worker.shutdown()
+
+
+def test_manual_commands_and_replacement_jobs_are_blocked_while_printing():
+    from plotter.printer.base import PrinterBusyError
+
+    seen = threading.Event()
+    release = threading.Event()
+
+    def responder(cmd):
+        if cmd == "G1 X1":
+            seen.set()
+            release.wait(2)
+        return [b"ok\n"]
+
+    worker, transport = _make_worker(responder=responder)
+    try:
+        assert _wait_until(lambda: worker.status().get("online") is True)
+        path = _tmp_gcode("G1 X1\nG1 X2\n")
+        worker.upload(path, start=True)
+        assert seen.wait(2)
+        for action in [lambda: worker.gcode(["G1 Z30"]), lambda: worker.jog(z=5),
+                       worker.home, lambda: worker.upload(path),
+                       lambda: worker.job_command("restart")]:
+            with pytest.raises(PrinterBusyError):
+                action()
+        assert "G1 Z30" not in transport.sent
+        worker.job_command("cancel")
+        release.set()
         assert _wait_until(lambda: "M410" in transport.sent)
     finally:
         release.set()

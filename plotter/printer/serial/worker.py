@@ -12,9 +12,10 @@ import os
 import threading
 import time
 from collections import deque
+from dataclasses import dataclass
 from pathlib import Path
 
-from plotter.printer.base import PrinterError
+from plotter.printer.base import PrinterBusyError, PrinterError, require_manual_motion
 from plotter.printer.serial.transport import (
     ACK_TIMEOUT,
     BANNER_QUIET,
@@ -35,6 +36,16 @@ from plotter.printer.serial.transport import (
 )
 
 log = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class PausePosition:
+    x: float
+    y: float
+    z: float
+    absolute: bool
+    feed: float | None
+
 
 class SerialWorker:
     """Owns the serial port on a single background thread.
@@ -65,15 +76,18 @@ class SerialWorker:
         self._state = IDLE
         self._job_lines: list[str] = []
         self._job_name: str | None = None
+        self._job_calibration = None
         self._job_index = 0
         self._job_generation = 0
         self._absolute = True
         self._x = 0.0
         self._y = 0.0
         self._z = 0.0
+        self._feed: float | None = None
         self._park_requested = False
         self._resume_requested = False
-        self._resume_xy: tuple[float, float] | None = None
+        self._resume_position: PausePosition | None = None
+        self._control_in_progress = False
 
         self._running = True
         self._thread = threading.Thread(
@@ -101,15 +115,33 @@ class SerialWorker:
                     "progress": {"completion": completion},
                     "job": {"file": {"name": self._job_name}},
                 }
-            return {"configured": True, "backend": "serial", "online": True, "job": job}
+            return {
+                "configured": True, "backend": "serial", "online": True,
+                "job": job, "error": self._last_error,
+                "motion_locked": self._state == PRINTING or self._park_requested
+                or self._resume_requested or self._control_in_progress,
+            }
 
     def upload(self, gcode_path: Path, *, start: bool = False) -> dict:
         lines = prepare_lines(gcode_path.read_text())
+        from plotter.core.calibration import Calibration
+        from plotter.core.jobmeta import read_job_meta_checked
+
+        cal = Calibration.load()
+        meta, _ = read_job_meta_checked(gcode_path)
+        snapshot = (meta or {}).get("calibrationSnapshot") or {}
+        if isinstance(snapshot, dict) and isinstance(snapshot.get("calibration"), dict):
+            cal = Calibration.from_dict(snapshot["calibration"])
         with self._lock:
+            if self._state in (PRINTING, PAUSED) or self._control_in_progress:
+                raise PrinterBusyError("Bitte den laufenden Druck zuerst beenden.")
             self._job_lines = lines
             self._job_name = gcode_path.name
+            self._job_calibration = cal
             self._job_index = 0
             self._job_generation += 1
+            self._reset_pause()
+            self._last_error = None
             self._state = PRINTING if start else LOADED
         self._wake.set()
         # Mimic OctoPrint's upload response so callers stay backend-agnostic.
@@ -164,9 +196,15 @@ class SerialWorker:
         with self._lock:
             if not self._job_lines:
                 raise PrinterError("no job loaded")
+            if self._state == PRINTING or self._control_in_progress:
+                raise PrinterBusyError("Der Druck läuft bereits.")
+            if self._state == PAUSED and not reset:
+                raise PrinterBusyError("Bitte den pausierten Druck mit Fortsetzen weiterführen.")
             if reset:
                 self._job_index = 0
                 self._job_generation += 1
+                self._reset_pause()
+            self._last_error = None
             self._state = PRINTING
         self._wake.set()
 
@@ -174,15 +212,7 @@ class SerialWorker:
         with self._lock:
             if self._state != PAUSED:
                 return
-            if self._park_requested:
-                self._resume_requested = True
-                self._wake.set()
-                return
-            resume_xy = self._resume_xy
-            self._resume_xy = None
-            if resume_xy is not None:
-                self._queue.append(Command(self._return_from_pause_lines(*resume_xy)))
-            self._state = PRINTING
+            self._resume_requested = True
         self._wake.set()
 
     def _pause(self) -> None:
@@ -191,51 +221,75 @@ class SerialWorker:
                 return
             self._state = PAUSED
             self._park_requested = True
+            log.info("Pause requested: %s at line %s", self._job_name, self._job_index)
         self._wake.set()
 
     def _cancel(self) -> None:
         with self._lock:
+            cal = self._job_calibration
             self._state = IDLE
             self._job_lines = []
             self._job_name = None
+            self._job_calibration = None
             self._job_index = 0
             self._job_generation += 1
+            self._reset_pause()
         # Quickstop flushes Marlin's planner buffer so the head stops promptly,
         # then lift the pen.
-        self._submit(["M410", *self._pen_up_lines()], wait=False)
+        self._submit(["M410", *self._pen_up_lines(cal)], wait=False, internal=True)
+
+    def _reset_pause(self) -> None:
+        """Called with _lock held; invalidate parked state for the old job."""
+        self._park_requested = False
+        self._resume_requested = False
+        self._resume_position = None
 
     @staticmethod
-    def _pen_up_lines() -> list[str]:
-        from plotter.core.calibration import Calibration
+    def _pen_up_lines(cal=None) -> list[str]:
+        from plotter.core.calibration import Calibration, feed_word, z_max_feedrate_line
 
-        cal = Calibration.load()
-        return ["G90", f"G1 Z{cal.pen_up_z:.3f} F{cal.z_feed:.0f}"]
+        cal = cal or Calibration.load()
+        return [z_max_feedrate_line(cal), "G90", f"G1 Z{cal.pen_up_z:.3f} {feed_word(cal.z_feed)}"]
 
     @staticmethod
-    def _park_lines() -> list[str]:
-        from plotter.core.calibration import Calibration
+    def _park_lines(cal=None) -> list[str]:
+        from plotter.core.calibration import Calibration, feed_word
 
-        cal = Calibration.load()
-        return [
-            *SerialWorker._pen_up_lines(),
-            f"G0 X{cal.bed_width / 2:.3f} Y{cal.bed_height:.3f} F{cal.travel_feed:.0f}",
+        cal = cal or Calibration.load()
+        park_x, park_y, park_lift_z = cal.resolved_park()
+        lines = SerialWorker._pen_up_lines(cal)
+        if abs(park_lift_z - cal.pen_up_z) > 1e-6:
+            lines.append(f"G0 Z{park_lift_z:.3f} {feed_word(cal.z_feed)}")
+        lines.append(f"G0 X{park_x:.3f} Y{park_y:.3f} {feed_word(cal.travel_feed)}")
+        return lines
+
+    @staticmethod
+    def _return_from_pause_lines(position: PausePosition, cal=None) -> list[str]:
+        from plotter.core.calibration import Calibration, feed_word
+
+        cal = cal or Calibration.load()
+        lines = [
+            *SerialWorker._pen_up_lines(cal),
+            f"G0 X{position.x:.3f} Y{position.y:.3f} {feed_word(cal.travel_feed)}",
+            f"G1 Z{position.z:.3f} {feed_word(cal.z_feed)}",
         ]
-
-    @staticmethod
-    def _return_from_pause_lines(x: float, y: float) -> list[str]:
-        from plotter.core.calibration import Calibration
-
-        cal = Calibration.load()
-        return [
-            *SerialWorker._pen_up_lines(),
-            f"G0 X{x:.3f} Y{y:.3f} F{cal.travel_feed:.0f}",
-        ]
+        if position.feed is not None:
+            lines.append(f"G1 F{position.feed:g}")
+        if not position.absolute:
+            lines.append("G91")
+        return lines
 
     # -- command submission ------------------------------------------------
 
-    def _submit(self, lines: list[str], *, wait: bool) -> None:
-        cmd = Command(lines)
+    def _submit(self, lines: list[str], *, wait: bool, internal: bool = False) -> None:
+        cmd = Command(lines, purpose="cancel" if internal else "manual")
         with self._lock:
+            if not internal:
+                require_manual_motion(STATE_LABELS[self._state])
+                if self._park_requested or self._resume_requested or self._control_in_progress:
+                    raise PrinterBusyError(
+                        "Bitte warten, bis die Stiftposition wiederhergestellt ist."
+                    )
             self._queue.append(cmd)
         self._wake.set()
         if not wait:
@@ -293,20 +347,31 @@ class SerialWorker:
             if self._state != PAUSED or not self._park_requested:
                 return None
             self._park_requested = False
-            self._resume_xy = (self._x, self._y)
-        return Command(self._park_lines())
+            self._resume_position = PausePosition(
+                self._x, self._y, self._z, self._absolute, self._feed
+            )
+            self._control_in_progress = True
+            generation = self._job_generation
+            cal = self._job_calibration
+            log.info("Parking %s at line %s, saved %s",
+                     self._job_name, self._job_index, self._resume_position)
+        return Command(self._park_lines(cal), purpose="park", generation=generation)
 
     def _take_pending_resume_command(self) -> Command | None:
         with self._lock:
             if self._state != PAUSED or not self._resume_requested:
                 return None
             self._resume_requested = False
-            resume_xy = self._resume_xy
-            self._resume_xy = None
-            self._state = PRINTING
-        if resume_xy is None:
-            return None
-        return Command(self._return_from_pause_lines(*resume_xy))
+            position = self._resume_position
+            if position is None:
+                self._last_error = "Keine gespeicherte Stiftposition zum Fortsetzen vorhanden."
+                return None
+            self._control_in_progress = True
+            generation = self._job_generation
+            cal = self._job_calibration
+            log.info("Restoring %s at line %s to %s", self._job_name, self._job_index, position)
+        return Command(self._return_from_pause_lines(position, cal),
+                       purpose="resume", generation=generation)
 
     def _take_job_line(self) -> tuple[int, int, str] | None:
         with self._lock:
@@ -317,6 +382,7 @@ class SerialWorker:
                 self._state = IDLE
                 self._job_lines = []
                 self._job_name = None
+                self._job_calibration = None
                 self._job_index = 0
                 return None
             return (self._job_generation, self._job_index, self._job_lines[self._job_index])
@@ -329,6 +395,7 @@ class SerialWorker:
             with self._lock:
                 self._state = IDLE
                 self._last_error = str(exc)
+                self._job_calibration = None
             return
         with self._lock:
             if self._job_generation == generation and self._job_index == index:
@@ -337,10 +404,29 @@ class SerialWorker:
     def _run_command(self, cmd: Command) -> None:
         try:
             for line in cmd.lines:
+                if cmd.generation is not None:
+                    with self._lock:
+                        if cmd.generation != self._job_generation:
+                            return
                 self._send_line(line)
+            with self._lock:
+                if cmd.purpose == "resume" and cmd.generation == self._job_generation:
+                    self._resume_position = None
+                    self._resume_requested = False
+                    self._last_error = None
+                    self._state = PRINTING
         except PrinterError as exc:
             cmd.error = exc
+            log.warning("Serial %s failed: %s", cmd.purpose, exc)
+            with self._lock:
+                self._last_error = str(exc)
+                if cmd.purpose in ("park", "resume") and cmd.generation == self._job_generation:
+                    self._resume_requested = False
+                    self._state = PAUSED
         finally:
+            if cmd.purpose in ("park", "resume"):
+                with self._lock:
+                    self._control_in_progress = False
             cmd.done.set()
 
     def _fail_queue(self, reason: str) -> None:
@@ -464,7 +550,7 @@ class SerialWorker:
         values: dict[str, float] = {}
         for part in parts[1:]:
             axis = part[:1].upper()
-            if axis not in ("X", "Y", "Z"):
+            if axis not in ("X", "Y", "Z", "F"):
                 continue
             try:
                 values[axis] = float(part[1:])
@@ -473,6 +559,8 @@ class SerialWorker:
         if not values:
             return
         with self._lock:
+            if "F" in values:
+                self._feed = values["F"]
             if self._absolute:
                 self._x = values.get("X", self._x)
                 self._y = values.get("Y", self._y)

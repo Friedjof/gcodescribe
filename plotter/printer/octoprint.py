@@ -7,7 +7,7 @@ from pathlib import Path
 
 import httpx
 
-from .base import PrinterError
+from .base import PrinterError, require_manual_motion
 
 # A short connect timeout keeps an unreachable/slow printer from tying up a
 # request worker for 30s (the old default) — the status loop polls every few
@@ -143,7 +143,14 @@ class OctoPrintClient:
 
     # --- printer control -------------------------------------------------
 
+    def _require_manual_motion(self) -> None:
+        # Never use the UI status cache for a motion decision: a print may
+        # have started since the last poll, including through OctoPrint itself.
+        job = self._request("GET", "/api/job").json()
+        require_manual_motion(job.get("state"))
+
     def home(self, axes: list[str] | None = None) -> None:
+        self._require_manual_motion()
         self._request(
             "POST",
             "/api/printer/printhead",
@@ -151,10 +158,12 @@ class OctoPrintClient:
         )
 
     def jog(self, x: float = 0.0, y: float = 0.0, z: float = 0.0, speed: int | None = None) -> None:
+        self._require_manual_motion()
         body: dict = {"command": "jog", "x": x, "y": y, "z": z}
         if speed is not None:
             body["speed"] = speed
         self._request("POST", "/api/printer/printhead", json=body)
 
     def gcode(self, commands: list[str]) -> None:
+        self._require_manual_motion()
         self._request("POST", "/api/printer/command", json={"commands": commands})

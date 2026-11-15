@@ -106,6 +106,26 @@ def test_set_active_blocked_while_printing(workspace):
     assert mgr.active_id == OCTOPRINT
 
 
+@pytest.mark.parametrize("path, body", [
+    ("/api/printer/home", {}),
+    ("/api/printer/pen", {"down": False}),
+    ("/api/printer/jog", {"z": 5}),
+    ("/api/printer/move", {"x": 1, "y": 2}),
+    ("/api/printer/gcode", {"commands": ["G1 Z30"]}),
+    ("/api/printer/job", {"command": "start"}),
+])
+def test_motion_routes_refuse_running_print_before_sending_commands(workspace, path, body):
+    from plotter.services.printer import PrinterController
+    from plotter.web.app import app
+
+    backend = FakeBackend(job_state="Printing")
+    ctrl = PrinterController(client=backend)
+    with patch("plotter.web.routes.printer.controller", return_value=ctrl):
+        response = TestClient(app).post(path, json=body)
+    assert response.status_code == 409
+    assert backend.calls == []
+
+
 def test_switch_invalidates_position(workspace):
     tracker = get_tracker()
     tracker.home(["x", "y", "z"])

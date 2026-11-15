@@ -66,7 +66,9 @@ def prepare_lines(text: str) -> list[str]:
 class Command:
     """An immediate (non-print) command, run by the worker between job lines."""
 
-    def __init__(self, lines: list[str]):
+    def __init__(self, lines: list[str], *, purpose: str = "manual", generation: int | None = None):
         self.lines = lines
+        self.purpose = purpose
+        self.generation = generation
         self.done = threading.Event()
         self.error: Exception | None = None

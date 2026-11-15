@@ -12,6 +12,50 @@ class PrinterError(RuntimeError):
     knowing which backend is active.
     """
 
+    status_code = 502
+
+
+class PrinterBusyError(PrinterError):
+    """A manual command would interfere with the running plot."""
+
+    status_code = 409
+
+
+def require_manual_motion(state: str | None) -> None:
+    if isinstance(state, str) and state.lower() in {
+        "printing",
+        "starting",
+        "pausing",
+        "resuming",
+        "finishing",
+        "cancelling",
+        "printing from sd",
+    }:
+        raise PrinterBusyError(
+            "Manuelle Bewegungen sind während des Drucks gesperrt. Bitte zuerst pausieren."
+        )
+
+
+def require_profile_switch(state: str | None) -> None:
+    """Changing the mirrored calibration during a job can alter pen lift/cancel."""
+    value = (state or "").lower()
+    if any(
+        active in value
+        for active in (
+            "printing",
+            "starting",
+            "pausing",
+            "paused",
+            "resuming",
+            "finishing",
+            "cancelling",
+        )
+    ):
+        raise PrinterBusyError(
+            "Das Druckerprofil kann während eines laufenden oder pausierten Plots "
+            "nicht gewechselt werden."
+        )
+
 
 @runtime_checkable
 class PrinterBackend(Protocol):
