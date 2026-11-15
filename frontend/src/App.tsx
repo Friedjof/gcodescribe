@@ -14,7 +14,13 @@ const Gallery = lazy(() => import("./features/gallery/Gallery"));
 const Calibrate = lazy(() => import("./features/control/Calibrate"));
 const Control = lazy(() => import("./features/control/Control"));
 const Paper = lazy(() => import("./features/control/Paper"));
-import Segmented from "./components/Segmented";
+import WorkspaceTabs from "./components/editor/WorkspaceTabs";
+import TabSettings from "./components/editor/TabSettings";
+import InterfaceMenu from "./components/editor/InterfaceMenu";
+import EditorIcon from "./components/editor/EditorIcon";
+import { InterfaceProvider, useInterface } from "./interface/InterfaceProvider";
+import { WORKSPACES, visibleWorkspaces, usableWorkspace, workspaceById, type WorkspaceId } from "./interface/workspaces";
+const StartOverview = lazy(() => import("./features/start/StartOverview"));
 const SettingsDialog = lazy(() => import("./features/settings/SettingsDialog"));
 import { useToasts } from "./components/Toasts";
 import { useI18n } from "./i18n";
@@ -25,33 +31,44 @@ import { ProjectCalibrationProvider } from "./state/ProjectCalibrationContext";
 
 import { installPageEditLifecycle } from "./api/pageEdits";
 
-type Tab = "paint" | "games" | "gallery" | "ai" | "convert" | "paper" | "calibrate" | "control" | "font";
+type Tab = WorkspaceId;
 
 export default function App() {
   useEffect(installPageEditLifecycle, []);
   return (
-    <AuthGate>
+    <InterfaceProvider><AuthGate>
       <AdminApp />
-    </AuthGate>
+    </AuthGate></InterfaceProvider>
   );
 }
 
 // Heavy, stateful tabs: mount once on first visit and keep them alive (hidden)
 // so switching back is instant instead of refetching + rebuilding the canvas.
 // The lighter list/state tabs stay unmount-on-switch so they reflect fresh data.
-const KEEP_ALIVE: Tab[] = ["paint", "games", "gallery", "ai", "convert", "paper", "calibrate", "font"];
+const KEEP_ALIVE = WORKSPACES.filter(workspace => workspace.keepAlive).map(workspace => workspace.id);
 
 function AdminApp() {
   const { lang, setLang, t } = useI18n();
   const toast = useToasts();
   const [galleryResult, setGalleryResult] = useState<string>();
-  const [tab, setTab] = useState<Tab>("paint");
+  const { preferences, update } = useInterface();
+  const [requestedTab, setRequestedTab] = useState<Tab>("start");
+  const [tabSettingsOpen, setTabSettingsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [visited, setVisited] = useState<Set<Tab>>(() => new Set<Tab>(["paint"]));
+  const [visited, setVisited] = useState<Set<Tab>>(() => new Set<Tab>(["start"]));
   const [status, setStatus] = useState<PrinterStatus | null>(null);
   const [aiStatus, setAiStatus] = useState<AiImageStatus | null>(null);
   const [aiInitialFile, setAiInitialFile] = useState<File | null>(null);
   const [desktop, setDesktop] = useState(false);
+  const tab = usableWorkspace(requestedTab, preferences.workspaceOrder, preferences.visibleWorkspaces, aiStatus?.enabled ?? false);
+  const workspaces = visibleWorkspaces(preferences.workspaceOrder, preferences.visibleWorkspaces, aiStatus?.enabled ?? false);
+  const interactive = !settingsOpen && !tabSettingsOpen;
+  const setTab = (id: Tab) => {
+    if (id === "ai" && !aiStatus?.enabled) return;
+    update(prefs => prefs.visibleWorkspaces.includes(id) ? prefs : { ...prefs, visibleWorkspaces: [...prefs.visibleWorkspaces, id] });
+    setRequestedTab(id);
+  };
+  useEffect(() => { if (tab !== requestedTab) setRequestedTab(tab); }, [tab, requestedTab]);
   const notifications = usePlotNotifications(status);
   const notificationPermission = notifications.permission;
 
@@ -111,32 +128,22 @@ function AdminApp() {
       .catch(() => {});
   };
 
-  const tabs: { value: Tab; label: string }[] = [
-    { value: "paint", label: t("tabs.paint") },
-    ...(aiStatus?.enabled ? [{ value: "ai" as Tab, label: t("tabs.ai") }] : []),
-    { value: "games", label: t("tabs.games") },
-    { value: "font", label: t("tabs.fontEditor") },
-    { value: "gallery", label: t("tabs.gallery") },
-    { value: "convert", label: t("tabs.jobs") },
-    { value: "calibrate", label: t("tabs.calibrate") },
-    { value: "paper", label: t("tabs.paper") },
-    { value: "control", label: t("tabs.control") },
-  ];
-
   return (
-    <ProjectCalibrationProvider active={tab === "paint" || tab === "paper"}>
+    <ProjectCalibrationProvider active={tab === "start" || tab === "paint" || tab === "paper"}>
     <div className={`app tab-${tab}`}>
-      <header>
-        <h1>
-          <span className="pen">✎</span> GCodeScribe
-        </h1>
+      <header className="app-titlebar">
+        <h1 className="app-brand"><EditorIcon name="draw" size={20} />GCodeScribe</h1>
+        <div className="app-main-menu">
+          <button type="button" className="app-menu-button" onClick={() => setTab("start")}><EditorIcon name="home" size={16} />{t("workspace.start")}</button>
+          <InterfaceMenu onCustomize={() => setTabSettingsOpen(true)} />
+        </div>
         <div className="header-actions">
-          <button className="notify-enable" disabled={notificationPermission === "unsupported"}
+          <button className="notify-enable" aria-label={t(notificationPermission === "granted" ? "notify.test" : "notify.enable")} disabled={notificationPermission === "unsupported"}
             onClick={notificationPermission === "granted" ? notifications.test : notifications.request}
             title={t(notificationPermission === "unsupported"
               ? window.isSecureContext === false ? "notify.secureRequired" : "notify.unsupported"
               : notificationPermission === "granted" ? "notify.testHint" : "notify.enableHint")}>
-            {t(notificationPermission === "granted" ? "notify.test" : "notify.enable")}
+            <EditorIcon name="bell" size={16} /><span className="notify-label">{t(notificationPermission === "granted" ? "notify.test" : "notify.enable")}</span>
           </button>
           <select className="lang-select" value={lang} onChange={(e) => setLang(e.target.value as "de" | "ba" | "en" | "fr" | "es")}>
             <option value="de">{t("lang.de")}</option>
@@ -145,15 +152,13 @@ function AdminApp() {
             <option value="fr">{t("lang.fr")}</option>
             <option value="es">{t("lang.es")}</option>
           </select>
-          <button className="settings-btn" onClick={() => setSettingsOpen(true)} title={t("settings.headerButton")}>⚙</button>
+          <button className="settings-btn" onClick={() => setSettingsOpen(true)} title={t("settings.headerButton")} aria-label={t("settings.headerButton")}><EditorIcon name="settings" size={18} /></button>
           <StatusPill status={status} />
           {canStopPlot(status) && <QuickStopPlot status={status} onAction={refreshStatus} />}
         </div>
       </header>
-
-      <nav className="tabs-nav">
-        <Segmented<Tab> className="nav" value={tab} onChange={setTab} options={tabs} />
-      </nav>
+      <WorkspaceTabs workspaces={workspaces} active={tab} onChange={setTab} onCustomize={() => setTabSettingsOpen(true)} />
+      {tabSettingsOpen && <TabSettings aiEnabled={aiStatus?.enabled ?? false} onClose={() => setTabSettingsOpen(false)} onOpen={setTab} />}
 
       <Suspense fallback={<DelayedLoading />}>
       {settingsOpen && (
@@ -181,28 +186,30 @@ function AdminApp() {
             `display: contents` keeps the layout/height chain identical to before. */}
         {KEEP_ALIVE.map((value) =>
           visited.has(value) ? (
-            <div key={value} style={{ display: tab === value ? "contents" : "none" }}>
+            <div key={value} role="tabpanel" id={`workspace-panel-${value}`} aria-labelledby={`workspace-tab-${value}`} hidden={tab !== value} style={{ display: tab === value ? "contents" : "none" }}>
               <Suspense fallback={<DelayedLoading />}>
-              {value === "paint" && <Paint visible={tab === "paint"} status={status} onAction={refreshStatus} desktop={desktop} />}
-              {value === "games" && <Games visible={tab === "games"} onOpenPaint={() => setTab("paint")} desktop={desktop} />}
-              {value === "gallery" && <Gallery initialItemId={galleryResult} visible={tab === "gallery"} onOpenPaint={() => setTab("paint")} onOpenAiDesigner={aiStatus?.enabled ? openInAiDesigner : undefined} aiEnabled={aiStatus?.enabled ?? false} desktop={desktop} />}
+              {value === "start" && <StartOverview status={status} onNavigate={setTab} onSettings={() => setSettingsOpen(true)} />}
+              {value === "paint" && <Paint visible={tab === "paint" && interactive} status={status} onAction={refreshStatus} desktop={desktop} />}
+              {value === "games" && <Games visible={tab === "games" && interactive} onOpenPaint={() => setTab("paint")} desktop={desktop} />}
+              {value === "gallery" && <Gallery initialItemId={galleryResult} visible={tab === "gallery" && interactive} onOpenPaint={() => setTab("paint")} onOpenAiDesigner={aiStatus?.enabled ? openInAiDesigner : undefined} aiEnabled={aiStatus?.enabled ?? false} desktop={desktop} />}
               {value === "ai" && (
-                <AiImageDesigner status={aiStatus} visible={tab === "ai"} onOpenPaint={() => setTab("paint")} initialFile={aiInitialFile} />
+                <AiImageDesigner status={aiStatus} visible={tab === "ai" && interactive} onOpenPaint={() => setTab("paint")} initialFile={aiInitialFile} />
               )}
               {value === "paper" && (
-                <Paper status={status} onAction={refreshStatus} visible={tab === "paper"} />
+                <Paper status={status} onAction={refreshStatus} visible={tab === "paper" && interactive} />
               )}
               {value === "convert" && (
-                <Convert status={status} onAction={refreshStatus} visible={tab === "convert"} />
+                <Convert status={status} onAction={refreshStatus} visible={tab === "convert" && interactive} />
               )}
               {value === "calibrate" && <Calibrate />}
-              {value === "font" && <FontEditor visible={tab === "font"} />}
+              {value === "font" && <FontEditor visible={tab === "font" && interactive} />}
               </Suspense>
             </div>
           ) : null
         )}
-        {tab === "control" && <Suspense fallback={<DelayedLoading />}><Control status={status} onAction={refreshStatus} /></Suspense>}
+        {tab === "control" && <div role="tabpanel" id="workspace-panel-control" aria-labelledby="workspace-tab-control"><Suspense fallback={<DelayedLoading />}><Control status={status} onAction={refreshStatus} /></Suspense></div>}
       </main>
+      <footer className="app-statusbar"><span>{t(workspaceById(tab).label)}</span><span>{t(preferences.experience === "guided" ? "interface.guided" : "interface.full")} · {t(preferences.density === "compact" ? "interface.compact" : "interface.comfortable")}</span></footer>
     </div>
     </ProjectCalibrationProvider>
   );

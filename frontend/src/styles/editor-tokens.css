@@ -1,0 +1,66 @@
+/* Semantic editor palette: paper and ink do not change with the UI theme. */
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f4f5f7;
+  --panel: #ffffff;
+  --panel-2: #f2f4f7;
+  --panel-3: #e5e9ef;
+  --border: #cbd1d9;
+  --text: #20252c;
+  --muted: #606b78;
+  --accent: #155db8;
+  --accent-hover: #104b96;
+  --ok: #16713d;
+  --warn: #8d5a00;
+  --err: #b42323;
+  --busy: #455b8a;
+  --workspace: #e6e9ed;
+  --paper: #ffffff;
+  --ink: #171a20;
+  --active-bg: #e4efff;
+  --focus: #155db8;
+  --control-height: 32px;
+  --control-pad: 10px;
+  --panel-pad: 12px;
+  --control-radius: 4px;
+  --toolbar-height: 40px;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #1d2229;
+  --panel: #262d36;
+  --panel-2: #303945;
+  --panel-3: #3b4755;
+  --border: #4c5968;
+  --text: #edf1f7;
+  --muted: #b7c1ce;
+  --accent: #8bb9ff;
+  --accent-hover: #a9cbff;
+  --ok: #7dd8a1;
+  --warn: #f0cb79;
+  --err: #ff9b99;
+  --busy: #bccceb;
+  --workspace: #151a20;
+  --active-bg: #34465e;
+  --focus: #8bb9ff;
+}
+:root[data-density="compact"] { --control-height: 28px; --control-pad: 8px; --panel-pad: 8px; --toolbar-height: 34px; }
+@media (pointer: coarse) { :root { --control-height: 42px; --control-pad: 12px; } }
+body { background: var(--bg); }
+button, .button, input, textarea, select { border-radius: var(--control-radius); }
+button, .button { min-height: var(--control-height); padding: 5px var(--control-pad); box-shadow: none; }
+button:active:not(:disabled), .button:active { transform: none; }
+button.primary { color: #fff; background: #155db8; border-color: #155db8; }
+button.primary:hover:not(:disabled) { background: #104b96; }
+input, textarea, select { background-color: var(--panel); color: var(--text); border-color: var(--border); }
+input:focus, textarea:focus, select:focus { border-color: var(--focus); }
+button:focus-visible, a:focus-visible, [tabindex]:focus-visible, select:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+input[aria-invalid="true"] { border-color: var(--err); }
+.field-error { color: var(--err); }
+.card { border-radius: 4px; box-shadow: none; }
+.pill, .lang-select, .notify-enable { border-radius: 4px; }
+.seg, .seg button, .seg .seg-indicator { border-radius: 4px; }
+.modal { border-radius: 7px; background: var(--panel); color: var(--text); }
+.modal-backdrop { background: #17202d66; backdrop-filter: none; }
+code { background: var(--panel-2); color: var(--text); border-radius: 3px; }
