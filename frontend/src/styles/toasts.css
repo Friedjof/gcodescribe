@@ -10,6 +10,7 @@
   max-width: min(360px, calc(100vw - 32px));
   pointer-events: none;
 }
+body:has(.quick-stop-plot) .toast-stack { top: 72px; }
 .toast {
   pointer-events: auto;
   display: flex;

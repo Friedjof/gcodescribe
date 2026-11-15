@@ -27,6 +27,32 @@ header {
   -webkit-backdrop-filter: blur(20px) saturate(1.4);
 }
 
+.quick-stop-plot,
+.quick-stop-plot:disabled {
+  flex: 0 0 auto;
+  gap: 7px;
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid #e9544e;
+  border-radius: 999px;
+  background: #c82422;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+  opacity: 1;
+}
+.quick-stop-plot-icon {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+  border-radius: 2px;
+  background: currentColor;
+}
+.quick-stop-plot:hover:not(:disabled) { background: #e3332e; }
+.quick-stop-plot:disabled { background: #732927; border-color: #ad5d59; }
+.quick-stop-plot:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+
 header h1 {
   font-size: 19px;
   font-weight: 650;

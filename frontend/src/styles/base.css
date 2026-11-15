@@ -16,7 +16,15 @@
 
 * {
   box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: var(--panel-3) transparent;
 }
+
+/* Fallback for Chromium builds that ignore scrollbar-width/color. */
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: var(--panel-3); border-radius: 4px; }
+*::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+*::-webkit-scrollbar-track { background: transparent; }
 
 body {
   margin: 0;
@@ -29,3 +37,30 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+
+/* Conversion progress stays outside the editing surface and never captures it. */
+.background-tasks { position: fixed; z-index: 150; right: 16px; bottom: 12px; max-width: min(360px, calc(100vw - 32px)); border: 1px solid var(--border, #38404c); border-radius: 10px; background: var(--card, #20242d); box-shadow: 0 4px 20px #0003; }
+.tasks-toggle { display: flex; gap: 8px; align-items: center; width: 100%; border: 0; background: transparent; font-size: 12px; padding: 8px 12px; }
+.tasks-list { max-height: 45vh; overflow: auto; padding: 0 12px 10px; }
+.task-row { display: grid; gap: 4px; padding: 10px 0; border-top: 1px solid var(--border, #38404c); font-size: 12px; }
+.task-row strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-row small { opacity: .75; }
+.task-actions { display: flex; gap: 8px; }
+.loading-placeholder { min-height: 100px; display: grid; place-items: center; opacity: .6; }
+.save-status { display: flex; gap: 8px; align-items: center; }
+.task-spinner { animation: task-spin 1.2s linear infinite; }
+@keyframes task-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .task-spinner { animation: none; } }
+
+.gallery-thumbnail-view { height: 100%; width: 100%; display: grid; place-items: center; }
+.thumbnail-placeholder { display: block; width: 70%; height: 65%; border-radius: 6px; background: currentColor; opacity: .035; }
+.gallery-item { content-visibility: auto; contain-intrinsic-size: auto 190px; }
+
+.gallery-grid-cell { min-width: 0; height: 100%; }
+.gallery-grid-cell > .gallery-item, .gallery-grid-cell > .gallery-pop-card { width: 100%; height: 100%; }
+.gallery-grid-cell .gallery-thumb { flex-shrink: 0; }
+.gallery-grid-cell .gallery-item-meta strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.geometry-status { font-size: 12px; opacity: .65; animation: show-processing .15s step-end; }
+@keyframes show-processing { from { opacity: 0; } to { opacity: .65; } }
+.gallery-grid-cell .gallery-thumb, .gallery-grid-cell .gallery-item-meta { width: 100%; }
+.gallery-grid-cell .gallery-thumbnail-view { position: absolute; inset: 0; }
