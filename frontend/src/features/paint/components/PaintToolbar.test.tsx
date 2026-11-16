@@ -51,3 +51,9 @@ describe("calibration position shortcut", () => {
     expect(onMoveToCalibration).not.toHaveBeenCalled();
   });
 });
+
+it("keeps offline export available while disabling direct plot", () => {
+  renderToolbar({ printerOnline: false, page: { id:"page",name:"Page",objects:[{id:"object",type:"line"}],grid:{step:10,snap:false},created:0,modified:0 } });
+  expect(screen.getByRole("button",{name:"paint.directPlot"})).toBeDisabled();
+  expect(screen.getByRole("button",{name:"paint.generateGcode"})).toBeEnabled();
+});

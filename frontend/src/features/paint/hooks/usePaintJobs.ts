@@ -24,6 +24,8 @@ export function usePaintJobs({ page, profile, projectId, visible, status, printe
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [plotError, setPlotError] = useState<string | null>(null);
   const pending = useRef(false);
+  const readiness = useRef({ online: !!status?.online, backend: status?.backend, busy: printerBusy, calibrating });
+  readiness.current = { online: !!status?.online, backend: status?.backend, busy: printerBusy, calibrating };
   const previewSequence = useRef(0);
   const scopeKey = JSON.stringify([page?.id, projectId, profile?.id, profile?.fingerprint, visible]);
   const scope = useRef({ key: scopeKey });
@@ -60,18 +62,21 @@ export function usePaintJobs({ page, profile, projectId, visible, status, printe
     } finally { setBusy(false); }
   };
   const runJob = async (send: boolean, selection = false) => {
-    if (!visible || pending.current || (send && (printerBusy || calibrating || !profile))) return;
+    if (!visible || pending.current || (send && (!status?.online || printerBusy || calibrating || !profile))) return;
     if (selection && (!page || !selectedIds.length)) return;
     const ids = [...selectedIds];
     const objects = selection ? page!.objects.filter((object) => ids.includes(object.id)) : undefined;
     if (selection && !objects?.length) return;
     const session = scope.current;
+    const backend = status?.backend;
     pending.current = true; setPlotError(null);
     const release = page ? retainPage(page) : () => { };
     try {
       const filename = await generateJob(session, objects);
       if (!send) return;
       requireCurrent(session);
+      if (!readiness.current.online || readiness.current.backend !== backend || readiness.current.busy || readiness.current.calibrating)
+        throw new Error(t("paint.printerUnavailable"));
       setSending(true);
       await api.send(filename, true);
       // Accepted jobs belong to their original document, even after navigation.

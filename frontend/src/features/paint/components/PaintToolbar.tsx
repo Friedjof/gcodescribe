@@ -105,6 +105,7 @@ export default function PaintToolbar({
           busy={busy}
           sending={sending}
           printerBusy={printerBusy}
+          printerOnline={printerOnline}
           pageBlocked={pageBlocked}
           hasSelection={hasSelection}
           hasObjects={page.objects.length > 0}

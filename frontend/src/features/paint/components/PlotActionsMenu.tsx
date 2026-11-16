@@ -7,6 +7,7 @@ export default function PlotActionsMenu({
   busy,
   sending,
   printerBusy,
+  printerOnline,
   pageBlocked,
   hasSelection,
   hasObjects,
@@ -17,6 +18,7 @@ export default function PlotActionsMenu({
   busy: boolean;
   sending: boolean;
   printerBusy: boolean;
+  printerOnline: boolean;
   pageBlocked: boolean;
   hasSelection: boolean;
   hasObjects: boolean;
@@ -45,12 +47,13 @@ export default function PlotActionsMenu({
   }, [open]);
 
   const disabled = busy || sending || printerBusy || pageBlocked;
+  const plotDisabled = disabled || printerBusy || !printerOnline;
   return (
     <div className="split-button" ref={menuRef}>
       <button
         className="primary split-main"
-        disabled={disabled}
-        title={pageBlocked ? t("paint.gcodeBlocked") : ""}
+        disabled={plotDisabled || !hasObjects}
+        title={!printerOnline ? t("paint.printerUnavailable") : pageBlocked ? t("paint.gcodeBlocked") : ""}
         onClick={onDirectPlot}
       >
         {busy ? t("paint.generating") : sending ? t("paint.starting") : t("paint.directPlot")}
@@ -69,7 +72,7 @@ export default function PlotActionsMenu({
         <div className="split-menu" role="menu">
           <button
             role="menuitem"
-            disabled={disabled || !hasSelection}
+            disabled={plotDisabled || !hasSelection}
             title={!hasSelection ? t("paint.noSelection") : pageBlocked ? t("paint.gcodeBlocked") : t("paint.plotSelectionHint")}
             onClick={() => { setOpen(false); onPlotSelection(); }}
           >

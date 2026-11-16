@@ -75,7 +75,7 @@ describe("manual motion during a print", () => {
 
   it("blocks starting another plot from the editor during a print", async () => {
     const start = vi.fn();
-    render(<PlotActionsMenu busy={false} sending={false} printerBusy={true}
+    render(<PlotActionsMenu busy={false} sending={false} printerBusy={true} printerOnline={true}
       pageBlocked={false} hasSelection={true} hasObjects={true}
       onDirectPlot={start} onPlotSelection={start} onOpenColoring={vi.fn()} />);
     const button = screen.getByRole("button", { name: "paint.directPlot" });

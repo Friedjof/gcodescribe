@@ -1,4 +1,6 @@
 const de: Record<string, string> = {
+  "paint.printerUnavailable": "Der Drucker ist nicht verfügbar oder die Verbindung wurde geändert. Prüfe Verbindung und Auftragsstatus vor dem Start.",
+
   "setup.firstPageName": "Meine erste Seite",
 
   "paper.nav.home": "Referenz",
