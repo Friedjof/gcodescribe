@@ -16,6 +16,7 @@ export default function PaintDocumentStatus({
 }) {
   const { t } = useI18n(),
     label = t(error ? "save.failed" : pending ? "save.saving" : "save.saved");
+  const codes = [...new Set(page.objects.filter(object => object.type.startsWith("game-") && typeof object.data?.seed === "string").map(object => object.data.seed as string))];
   return (
     <div className="paint-document-status">
       <span
@@ -39,6 +40,7 @@ export default function PaintDocumentStatus({
           {profile.name}
         </span>
       )}
+      {codes.length > 0 && <span className="document-seed-label" title={t("seed.hint")}>{t("seed.label")}: {codes.join(", ")}</span>}
       {selection > 0 && (
         <span>{t("paint.selectionCount", { count: selection })}</span>
       )}

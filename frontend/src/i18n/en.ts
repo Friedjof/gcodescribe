@@ -1,4 +1,17 @@
 const en: Record<string, string> = {
+  "seed.label": "Random code (seed)",
+  "seed.hint": "Same code + same settings = same pattern. Keep these five digits to repeat it. The dice creates a new code.",
+  "seed.new": "Roll a new random code",
+  "seed.fontHint": "The same code and text select the same letter variants. Roll the dice to shuffle them.",
+  "seed.fontInvalid": "Enter a whole number between 0 and 2147483647.",
+  "games.osm.tab.place": "Place",
+  "games.osm.tab.layers": "Content",
+  "games.osm.tab.drawing": "Drawing",
+  "games.osm.inlineHint": "Search for a place and select a result. Then adjust content and drawing details directly.",
+  "games.osm.updating": "Updating map …",
+  "games.osm.ready": "Map ready",
+  "games.osm.autoUpdate": "Changes update the map automatically. Toolpath analysis runs only when requested.",
+
   "paging.previous": "Previous page",
   "paging.next": "Next page",
   "games.allCategories": "All categories",

@@ -1,4 +1,17 @@
 const de: Record<string, string> = {
+  "seed.label": "Zufallscode (Seed)",
+  "seed.hint": "Gleicher Code + gleiche Einstellungen = gleiches Muster. Notiere die fünf Ziffern zum Wiederholen. Der Würfel erzeugt einen neuen Code.",
+  "seed.new": "Neuen Zufallscode würfeln",
+  "seed.fontHint": "Gleicher Code und gleicher Text wählen dieselben Buchstabenvarianten. Der Würfel mischt sie neu.",
+  "seed.fontInvalid": "Gib eine ganze Zahl zwischen 0 und 2147483647 ein.",
+  "games.osm.tab.place": "Ort",
+  "games.osm.tab.layers": "Inhalt",
+  "games.osm.tab.drawing": "Zeichnen",
+  "games.osm.inlineHint": "Suche einen Ort und wähle einen Treffer. Inhalt und Zeichendetails kannst du danach direkt anpassen.",
+  "games.osm.updating": "Karte wird aktualisiert …",
+  "games.osm.ready": "Karte bereit",
+  "games.osm.autoUpdate": "Änderungen aktualisieren die Karte automatisch. Die Zeichenwegprüfung startet nur auf Wunsch.",
+
   "paging.previous": "Vorherige Seite",
   "paging.next": "Nächste Seite",
   "games.allCategories": "Alle Kategorien",

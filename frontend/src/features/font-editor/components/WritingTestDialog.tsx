@@ -1,3 +1,4 @@
+import SeedControl from "../../../components/SeedControl";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Stroke, StrokeFontDocument, StrokeGlyph, StrokePoint, StrokeVariant } from "../../../api";
 import { useI18n } from "../../../i18n";
@@ -372,6 +373,7 @@ export default function WritingTestDialog({
   const [speed, setSpeed] = useState(1);
   const [maxLineChars, setMaxLineChars] = useState(PREVIEW_LINE_CHARS);
   // Stable seed for the weighted-random variant picks; reshuffled on demand.
+  const [seedInput, setSeedInput] = useState<string | null>(null);
   const [variantSeed, setVariantSeed] = useState(() => Math.floor(Math.random() * 0x7fffffff));
   const [showTravels, setShowTravels] = useState(false);
   const [showInspector, setShowInspector] = useState(false);
@@ -793,14 +795,12 @@ export default function WritingTestDialog({
               <button onClick={showAll} title={t("fontEditor.writingTestShowAll")} aria-label={t("fontEditor.writingTestShowAll")}>
                 ◉
               </button>
-              <button
-                onClick={() => setVariantSeed(Math.floor(Math.random() * 0x7fffffff))}
-                title={t("fontEditor.writingTestShuffle")}
-                aria-label={t("fontEditor.writingTestShuffle")}
-              >
-                ⇄
-              </button>
+
             </div>
+            <SeedControl font value={seedInput ?? String(variantSeed)} onChange={(value) => {
+              setSeedInput(value);
+              if (/^\d{1,10}$/.test(value) && Number(value) <= 0x7fffffff) setVariantSeed(Number(value));
+            }} onRandomize={() => { setSeedInput(null); setVariantSeed(Math.floor(Math.random() * 0x7fffffff)); }} />
             <div className="fe-writing-toggle-row">
               <label className="fe-writing-check">
                 <input type="checkbox" checked={showTravels} onChange={(e) => setShowTravels(e.target.checked)} />

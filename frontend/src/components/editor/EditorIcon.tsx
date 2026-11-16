@@ -1,4 +1,6 @@
 const PATHS = {
+  search: "M21 21l-6-6M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0",
+  dice: "M3 3h18v18H3V3ZM7 7h.01M17 7h.01M12 12h.01M7 17h.01M17 17h.01",
   previous: "m15 5-7 7 7 7", next: "m9 5 7 7-7 7", map: "m3 5 6-2 6 2 6-2v16l-6 2-6-2-6 2V5ZM9 3v16M15 5v16",
   open: "M14 3h7v7M21 3 10 14M10 3H3v18h18v-7",
   grip: "M8 5h.01M16 5h.01M8 12h.01M16 12h.01M8 19h.01M16 19h.01",

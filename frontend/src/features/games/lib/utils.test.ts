@@ -26,3 +26,9 @@ describe("mergeAxisAlignedSegments", () => {
     ]);
   });
 });
+
+it("keeps a template's random code when it is inserted on the canvas", async () => {
+  const { templateObject } = await import("./utils");
+  expect(templateObject("maze", [[[0, 0], [1, 1]]], 1234).data).toEqual({ template: "maze", seed: "01234" });
+  expect(templateObject("osmMap", [[[0, 0], [1, 1]]]).data).toEqual({ template: "osmMap" });
+});

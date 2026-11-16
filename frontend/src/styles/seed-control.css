@@ -1,0 +1,10 @@
+.seed-control { flex: 0 0 auto; padding: 10px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 5px; font-size: 11px; }
+.seed-control > label { font-weight: 600; }
+.seed-control-row { display: flex; align-items: center; gap: 6px; }
+.seed-control-row input { width: 100%; min-width: 0; flex: 1; font-size: 17px; font-family: monospace; letter-spacing: 2px; padding: 5px 8px; }
+.seed-control-row button { min-height: 31px; padding: 5px 9px; display: flex; align-items: center; }
+.seed-control p { margin: 0; line-height: 1.4; color: var(--muted); }
+.seed-control p[role="alert"] { color: #b42318; }
+.seed-control input[aria-invalid="true"] { border-color: #b42318; }
+
+.document-seed-label { font-variant-numeric: tabular-nums; white-space: nowrap; }

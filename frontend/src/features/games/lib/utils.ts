@@ -147,12 +147,12 @@ export function centeredOrigin(
   return [(cal.plot_width - width) / 2, (cal.plot_height - height) / 2];
 }
 
-export function templateObject(gameId: GameId, lines: Pt[][]): SceneObject {
+export function templateObject(gameId: GameId, lines: Pt[][], seed?: number): SceneObject {
   const { local, cx, cy } = localize(lines);
   return {
     id: crypto.randomUUID(),
     type: `game-${gameId}`,
-    data: { template: gameId },
+    data: { template: gameId, ...(seed !== undefined ? { seed: String(seed).padStart(5, "0") } : {}) },
     cachedPolylines: local,
     transform: { x: cx, y: cy, rotation: 0, scale: 1 },
     plotted: false,
