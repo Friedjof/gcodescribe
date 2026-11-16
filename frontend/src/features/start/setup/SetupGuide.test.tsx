@@ -12,13 +12,6 @@ vi.mock("../../../i18n", () => ({
   useI18n: () => ({ t: (key: string) => key }),
 }));
 vi.mock("./SetupProjectSelect", () => ({ default: () => <div>Project selector</div> }));
-vi.mock("../../control/Paper", () => ({
-  default: ({ visible }: { visible: boolean }) => (
-    <div data-testid="calibration" data-active={visible}>
-      Calibration
-    </div>
-  ),
-}));
 vi.mock("./SetupDrawingStep", () => ({
   default: ({ onNext }: { onNext: () => void }) => (
     <button onClick={onNext}>Drawing ready</button>
@@ -95,9 +88,8 @@ it("guides a connected user through explicit confirmation and invalidates a chan
   fireEvent.click(
     screen.getByRole("button", { name: "setup.continueCalibration" }),
   );
-  expect(screen.getByTestId("calibration").getAttribute("data-active")).toBe(
-    "true",
-  );
+  fireEvent.click(screen.getByRole("button", { name: "profiles.openVisual" }));
+  expect(props.onNavigate).toHaveBeenCalledWith("calibrate");
   fireEvent.click(
     screen.getByRole("checkbox", { name: "setup.confirmCalibration" }),
   );
@@ -135,9 +127,7 @@ it("keeps incomplete calibration visible after offline page preparation and disa
   );
   fireEvent.click(screen.getByRole("button", { name: "setup.useExisting" }));
   fireEvent.click(screen.getByRole("button", { name: "setup.prepareOffline" }));
-  expect(screen.getByTestId("calibration").getAttribute("data-active")).toBe(
-    "false",
-  );
+  expect(screen.getByRole("button", { name: "profiles.openVisual" }).hasAttribute("disabled")).toBe(true);
   expect(
     screen
       .getByRole("button", { name: "setup.continueDrawing" })

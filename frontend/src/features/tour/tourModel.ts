@@ -39,7 +39,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
   },
   {
     id: "home",
-    workspace: "paper",
+    workspace: "calibrate",
     setup: "calibration",
     calibration: "home",
     target: "calibration-home",
@@ -49,7 +49,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
   },
   {
     id: "pen",
-    workspace: "paper",
+    workspace: "calibrate",
     setup: "calibration",
     calibration: "pen",
     target: "calibration-pen",
@@ -59,7 +59,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
   },
   {
     id: "paper",
-    workspace: "paper",
+    workspace: "calibrate",
     setup: "calibration",
     calibration: "corners",
     target: "calibration-corners",
@@ -69,7 +69,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
   },
   {
     id: "review",
-    workspace: "paper",
+    workspace: "calibrate",
     setup: "calibration",
     calibration: "apply",
     target: "calibration-apply",

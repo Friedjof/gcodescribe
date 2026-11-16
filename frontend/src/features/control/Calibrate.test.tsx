@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render as renderComponent, screen, waitFor } from "
 import { ProjectCalibrationProvider, useProjectCalibration } from "../../state/ProjectCalibrationContext";
 import type { ReactElement } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import "@testing-library/jest-dom/vitest";
 import Calibrate from "./Calibrate";
 
 const render = (ui: ReactElement) => renderComponent(ui, { wrapper: ({ children }) =>
@@ -16,6 +17,8 @@ vi.mock("../../i18n", () => ({ useI18n: () => ({ t: (key: string) => key }) }));
 vi.mock("../../components/Toasts", () => ({ useToasts: () => ({ success: mocks.success, error: mocks.error }) }));
 vi.mock("../../components/dialogs", () => ({ useConfirm: () => ({ confirm: mocks.confirm, ConfirmNode: null }) }));
 
+vi.mock("./ProfileVisualEditor", () => ({ default: ({ profileId, visible }: { profileId: string; visible: boolean }) => <div data-testid="visual-profile" data-visible={visible}>{profileId}</div> }));
+async function showDetails() { fireEvent.click(await screen.findByRole("button", { name: "profiles.details" })); }
 afterEach(cleanup);
 
 beforeEach(() => {
@@ -37,6 +40,7 @@ beforeEach(() => {
 
 it("starts the pen-up movement test only with saved active settings", async () => {
   render(<Calibrate />);
+  await showDetails();
   await screen.findByRole("spinbutton", { name: "calibrate.drawFeed" });
   const button = screen.getByRole("button", { name: "calibrate.speedTestButton" });
   expect((button as HTMLButtonElement).disabled).toBe(false);
@@ -53,6 +57,7 @@ it("starts the pen-up movement test only with saved active settings", async () =
 it("respects cancelling the unsaved-changes dialog before creating or duplicating profiles", async () => {
   mocks.confirm.mockResolvedValue(false);
   render(<Calibrate />);
+  await showDetails();
   const name = await screen.findByRole("textbox", { name: "profiles.name" });
   fireEvent.change(name, { target: { value: "Unsaved" } });
   fireEvent.click(screen.getByRole("button", { name: "profiles.new" }));
@@ -66,6 +71,7 @@ it("respects cancelling the unsaved-changes dialog before creating or duplicatin
 
 it("keeps invalid numeric edits out of saves and physical movement tests", async () => {
   render(<Calibrate />);
+  await showDetails();
   const input = await screen.findByRole("spinbutton", { name: "calibrate.bedWidth" });
   fireEvent.focus(input);
   fireEvent.change(input, { target: { value: "" } });
@@ -84,6 +90,7 @@ function ExternalChange() {
 
 it("preserves an unsaved profile draft when another view reports calibration changes", async () => {
   render(<><Calibrate /><ExternalChange /></>);
+  await showDetails();
   const name = await screen.findByRole("textbox", { name: "profiles.name" });
   fireEvent.change(name, { target: { value: "My unsaved draft" } });
   const calls = mocks.getProfile.mock.calls.length;
@@ -94,6 +101,7 @@ it("preserves an unsaved profile draft when another view reports calibration cha
 
 it("refreshes a clean editor after another view reports calibration changes", async () => {
   render(<><Calibrate /><ExternalChange /></>);
+  await showDetails();
   const name = await screen.findByRole("textbox", { name: "profiles.name" });
   const original = await mocks.getProfile.mock.results[0].value;
   mocks.getProfile.mockResolvedValue({ ...original, name: "Updated elsewhere" });
@@ -103,6 +111,7 @@ it("refreshes a clean editor after another view reports calibration changes", as
 
 it("does not replace edits made while an earlier save is still pending", async () => {
   render(<Calibrate />);
+  await showDetails();
   const name = await screen.findByRole("textbox", { name: "profiles.name" });
   const original = await mocks.getProfile.mock.results[0].value;
   let resolve!: (profile: unknown) => void;
@@ -120,6 +129,7 @@ it("does not replace edits made while an earlier save is still pending", async (
 
 it("keeps all groups visible and rejects invalid drafts before saving", async () => {
   render(<Calibrate />);
+  await showDetails();
   const input = await screen.findByRole("spinbutton", { name: "calibrate.bedWidth" });
   fireEvent.change(input, { target: { value: "" } }); fireEvent.blur(input);
   expect(screen.getByRole("spinbutton", { name: "calibrate.penDownZ" })).toBeDefined();
@@ -130,4 +140,49 @@ it("keeps all groups visible and rejects invalid drafts before saving", async ()
   expect(mocks.saveProfile).not.toHaveBeenCalled();
   expect(screen.getByRole("spinbutton", { name: "calibrate.bedWidth" })).toBe(input);
   expect((input as HTMLInputElement).value).toBe("");
+});
+
+it("opens the visual editor by default and switches to details of the same profile", async () => {
+  render(<Calibrate />);
+  expect(await screen.findByTestId("visual-profile")).toHaveTextContent("active");
+  expect(screen.getByRole("button", { name: "profiles.visual" })).toHaveAttribute("aria-pressed", "true");
+  await showDetails();
+  expect(await screen.findByRole("textbox", { name: "profiles.name" })).toHaveValue("Standard");
+  fireEvent.click(screen.getByRole("button", { name: "profiles.visual" }));
+  expect(await screen.findByTestId("visual-profile")).toHaveTextContent("active");
+});
+it("keeps unsaved details until the user agrees to save before switching views", async () => {
+  render(<Calibrate />); await showDetails();
+  const input = await screen.findByRole("textbox", { name: "profiles.name" });
+  fireEvent.change(input, { target: { value: "Edited" } });
+  mocks.confirm.mockResolvedValueOnce(false);
+  fireEvent.click(screen.getByRole("button", { name: "profiles.visual" }));
+  await waitFor(() => expect(mocks.confirm).toHaveBeenCalledWith("profiles.saveBeforeVisual"));
+  expect(input).toHaveValue("Edited"); expect(mocks.saveProfile).not.toHaveBeenCalled();
+  const original = await mocks.getProfile.mock.results[0].value;
+  mocks.saveProfile.mockImplementation(async () => { const saved = { ...original, name: "Edited" }; mocks.getProfile.mockResolvedValue(saved); return saved; });
+  fireEvent.click(screen.getByRole("button", { name: "profiles.visual" }));
+  expect(await screen.findByTestId("visual-profile")).toHaveTextContent("active");
+  expect(mocks.saveProfile).toHaveBeenCalledWith("active", expect.objectContaining({ name: "Edited" }));
+});
+it("opens a requested setup profile in the visual view even after visiting Details", async () => {
+  const base = (await mocks.listProfiles())[0];
+  const original = await mocks.getProfile();
+  mocks.listProfiles.mockResolvedValue([base, { ...base, id: "project-profile", name: "Project profile", active: false }]);
+  mocks.getProfile.mockImplementation(async id => ({ ...original, id, name: id === "active" ? "Standard" : "Project profile" }));
+  const view = render(<Calibrate />); await showDetails();
+  await screen.findByRole("textbox", { name: "profiles.name" });
+  view.rerender(<Calibrate request={{ id: "project-profile", nonce: 1 }} />);
+  await waitFor(() => expect(screen.getByTestId("visual-profile")).toHaveTextContent("project-profile"));
+  expect(screen.getByRole("button", { name: "profiles.visual" })).toHaveAttribute("aria-pressed", "true");
+});
+it("does not switch to manual control while a movement test is pending", async () => {
+  let finish!: () => void;
+  mocks.speedTest.mockReturnValue(new Promise<void>(resolve => { finish = resolve; }));
+  render(<Calibrate />); await showDetails();
+  fireEvent.click(await screen.findByRole("button", { name: "calibrate.speedTestButton" }));
+  expect(screen.getByRole("button", { name: "profiles.visual" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "profiles.new" })).toBeDisabled();
+  finish();
+  await waitFor(() => expect(screen.getByRole("button", { name: "profiles.visual" })).toBeEnabled());
 });

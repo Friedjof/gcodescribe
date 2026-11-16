@@ -11,9 +11,11 @@ export default function SetupWorkspace({
   onSettings,
   visible,
   onAction,
+  onCalibrate,
 }: {
   visible: boolean;
   onAction: () => void;
+  onCalibrate: (profileId: string) => void;
   status: PrinterStatus | null;
   onNavigate: (workspace: WorkspaceId) => void;
   onSettings: () => void;
@@ -41,6 +43,7 @@ export default function SetupWorkspace({
       onSettings={onSettings}
       onNavigate={onNavigate}
       onAction={onAction}
+      onCalibrate={onCalibrate}
     />
   );
 }

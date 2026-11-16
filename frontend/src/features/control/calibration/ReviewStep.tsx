@@ -1,14 +1,15 @@
 import { useI18n } from "../../../i18n";
 import type { CalibrationController } from "./useCalibrationController";
+import { targetQuery } from "../../../api/calibrationTarget";
 import { CORNERS } from "./steps";
 
 type Controls = Pick<CalibrationController,
   "homed" | "heightSaved" | "currentBase" | "margin" | "setMargin" | "marginValid" | "apply" |
-  "canMove" | "canEdit" | "plotFrame" | "projectId" | "rect" | "adoptPaperArea" | "driveToCorner">;
+  "canMove" | "canEdit" | "plotFrame" | "target" | "rect" | "adoptPaperArea" | "driveToCorner">;
 
 export default function ReviewStep({ controls }: { controls: Controls }) {
   const { t } = useI18n();
-  const { homed, heightSaved, currentBase, margin, setMargin, marginValid, apply, canMove, canEdit, plotFrame, projectId, rect, adoptPaperArea, driveToCorner } = controls;
+  const { homed, heightSaved, currentBase, margin, setMargin, marginValid, apply, canMove, canEdit, plotFrame, target, rect, adoptPaperArea, driveToCorner } = controls;
   return (
     <>
       <p className="muted">{t("paper.reviewHint")}</p>
@@ -35,7 +36,7 @@ export default function ReviewStep({ controls }: { controls: Controls }) {
         >
           {t("paper.testFrame")}
         </button>
-        <a className="btn-link" href={`/api/calibration/export${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ""}`} download>
+        <a className="btn-link" href={`/api/calibration/export${targetQuery(target)}`} download>
           {t("common.exportXml")}
         </a>
       </div>

@@ -59,3 +59,24 @@
 .profile-detail > .field-group { display: flex; align-items: flex-end; gap: 12px; }
 .profile-detail > .field-group > .field { flex: 1; min-width: 0; }
 .profile-detail > .field-group > p { flex: 1; margin: 0 0 4px; font-size: 11px; line-height: 16px; }
+
+.profile-editor-heading { display: flex; align-items: center; gap: 12px; min-height: 32px; margin-bottom: 7px; flex: 0 0 auto; }
+.profile-editor-heading h2 { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.profile-view-toggle { display: flex; flex-shrink: 0; margin-left: auto; padding: 2px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 5px; gap: 2px; }
+.profile-view-toggle button { display: flex; align-items: center; gap: 6px; font-size: 11px; padding: 4px 10px; min-height: 27px; background: transparent; border-color: transparent; }
+.profile-view-toggle button[aria-pressed="true"] { background: var(--panel); color: var(--accent); border-color: var(--border); box-shadow: 0 1px 3px #0001; }
+.profile-setup-return { font-size: 11px; min-height: 27px; padding: 4px 6px; }
+.profile-detail-visual { padding: 0; }
+.profile-detail-visual > .profile-editor-heading { padding: 8px 10px; margin: 0; border-bottom: 1px solid var(--border); }
+.profile-visual-editor { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.profile-visual-notice { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; font-size: 11px; background: var(--panel-2); border-bottom: 1px solid var(--border); }
+.profile-visual-notice button { font-size: 11px; min-height: 25px; padding: 3px 8px; }
+.profile-visual-editor > .paper-guided { flex: 1; height: auto; min-height: 0; padding: 0 !important; gap: 0 !important; grid-template-columns: minmax(300px,.85fr) minmax(0,1.15fr); }
+.profile-visual-editor .paper-guided > .card { border: 0; border-radius: 0; box-shadow: none; }
+.profile-visual-editor .paper-guided > .paper-wizard-panel { border-right: 1px solid var(--border); }
+.setup-calibration-entry .setup-existing button { display: flex; align-items: center; gap: 6px; }
+
+.profile-visual-notice > div { display: flex; gap: 6px; flex-shrink: 0; }
+
+.profile-compat-notice { display: flex; align-items: center; gap: 8px; padding: 6px 10px; flex-shrink: 0; font-size: 11px; line-height: 1.4; background: var(--panel-2); border-bottom: 1px solid var(--border); }
+.profile-compat-notice button { flex-shrink: 0; font-size: 11px; padding: 3px 6px; }

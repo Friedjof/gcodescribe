@@ -60,6 +60,7 @@ function AdminApp() {
   const [requestedTab, setRequestedTab] = useState<Tab>("paper");
   const [tabSettingsOpen, setTabSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [profileRequest, setProfileRequest] = useState<{ id: string; nonce: number }>();
   const [paintCommand, setPaintCommand] = useState<PaintWorkspaceCommand | null>(null);
   const commandId = useRef(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -205,12 +206,12 @@ function AdminApp() {
                 <AiImageDesigner status={aiStatus} visible={tab === "ai" && interactive} onOpenPaint={openPaint} initialFile={aiInitialFile} />
               )}
               {value === "paper" && (
-                <SetupWorkspace visible={tab === "paper" && interactive} onAction={refreshStatus} status={status} onNavigate={setTab} onSettings={() => setSettingsOpen(true)} />
+                <SetupWorkspace onCalibrate={id => { setProfileRequest({ id, nonce: Date.now() }); setTab("calibrate"); }} visible={tab === "paper" && interactive} onAction={refreshStatus} status={status} onNavigate={setTab} onSettings={() => setSettingsOpen(true)} />
               )}
               {value === "convert" && (
                 <Convert status={status} onAction={refreshStatus} visible={tab === "convert" && interactive} />
               )}
-              {value === "calibrate" && <Calibrate />}
+              {value === "calibrate" && <Calibrate status={status} visible={tab === "calibrate" && interactive} onAction={refreshStatus} onSettings={() => setSettingsOpen(true)} request={profileRequest} onSetup={() => setTab("paper")} />}
               {value === "font" && <FontEditor visible={tab === "font" && interactive} />}
               </Suspense>
             </div>

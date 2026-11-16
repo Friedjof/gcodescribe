@@ -1,17 +1,30 @@
 import ProfileLibrary from "./ProfileLibrary";
+import ProfileVisualEditor from "./ProfileVisualEditor";
+import EditorIcon from "../../components/editor/EditorIcon";
+import { useAppTour } from "../tour/TourProvider";
 import ProfileSettings from "./ProfileSettings";
 import { useEffect, useRef, useState } from "react";
-import { api, type Calibration, type CalibrationProfileSummary } from "../../api";
+import { api, type Calibration, type PrinterStatus, type CalibrationProfileSummary } from "../../api";
 import { useI18n } from "../../i18n";
 import { useConfirm } from "../../components/dialogs";
 import { useToasts } from "../../components/Toasts";
 import { useProjectCalibration } from "../../state/ProjectCalibrationContext";
 import { errorMessage, isAbortError } from "../../api/errors";
 
-export default function Calibrate() {
+const noop = () => {};
+export default function Calibrate({ status = null, visible = true, onAction = noop, onSettings = noop, request, onSetup }: {
+  status?: PrinterStatus | null; visible?: boolean; onAction?: () => void; onSettings?: () => void;
+  request?: { id: string; nonce: number }; onSetup?: () => void;
+} = {}) {
   const { t } = useI18n();
   const toast = useToasts();
-  const { profileRevision, profileChanged } = useProjectCalibration();
+  const { profileRevision, profileChanged, index } = useProjectCalibration();
+  const tour = useAppTour();
+  const [mode, setMode] = useState<"visual" | "details">("visual");
+  const [motionBusy, setMotionBusy] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const handledRequest = useRef("");
   const read = useRef<AbortController | null>(null);
   const draftRevision = useRef(0);
   const detailRef = useRef<HTMLElement>(null);
@@ -47,7 +60,7 @@ export default function Calibrate() {
     let cancelled = false;
     loadProfiles().then(list => {
       if (cancelled) return;
-      const active = list.find(p => p.active) ?? list[0];
+      const active = list.find(p => p.id === index?.project?.profileId) ?? list.find(p => p.active) ?? list[0];
       if (active) return openProfile(active.id);
     }).catch(fail);
     return () => { cancelled = true; read.current?.abort(); };
@@ -66,6 +79,20 @@ export default function Calibrate() {
     }).catch(fail);
     return () => { cancelled = true; controller.abort(); };
   }, [profileRevision, selectedId, dirty]);
+
+  useEffect(() => {
+    const tourProfile = tour?.step?.calibration ? index?.project?.profileId : undefined;
+    const id = tourProfile ?? request?.id;
+    const token = tourProfile ? `tour:${tour?.request}:${id}` : `request:${request?.nonce}:${id}`;
+    if (!id || !cal || !visible || motionBusy || speedTesting || saving || handledRequest.current === token) return;
+    handledRequest.current = token;
+    void (async () => {
+      if (dirty && (!await confirm(t("profiles.saveBeforeVisual")) || !await save())) return;
+      if (focusInvalidInput()) return;
+      await openProfile(id);
+      setMode("visual");
+    })().catch(fail);
+  }, [request?.nonce, tour?.request, tour?.step?.calibration, index?.project?.profileId, visible, !!cal, motionBusy, speedTesting, saving]);
 
   if (!cal) return <div className="card">{t("calibrate.loading")}</div>;
 
@@ -95,7 +122,7 @@ export default function Calibrate() {
   const confirmDiscard = async () => !dirty || await confirm(t("profiles.unsaved"));
 
   const select = async (id: string) => {
-    if (id === selectedId || !await confirmDiscard()) return;
+    if (motionBusy || speedTesting || saving || id === selectedId || !await confirmDiscard()) return;
     openProfile(id).catch(fail);
   };
 
@@ -106,20 +133,24 @@ export default function Calibrate() {
     setDirty(true);
   };
 
-  const save = () => {
-    if (!selectedId || focusInvalidInput()) return;
+  const save = async (): Promise<boolean> => {
+    if (!selectedId || savingRef.current || focusInvalidInput()) return false;
     const revision = draftRevision.current;
-    api
-      .saveProfile(selectedId, { name, calibration: cal })
-      .then((p) => {
-        if (draftRevision.current === revision) {
-          setName(p.name); setCal(p.calibration); setDirty(false);
-        }
-        profileChanged(p.id);
-        toast.success(t("profiles.saved"));
-        return loadProfiles();
-      })
-      .catch(fail);
+    savingRef.current = true; setSaving(true);
+    try {
+      const p = await api.saveProfile(selectedId, { name, calibration: cal });
+      if (draftRevision.current === revision) { setName(p.name); setCal(p.calibration); setDirty(false); }
+      profileChanged(p.id); toast.success(t("profiles.saved"));
+      await loadProfiles();
+      return draftRevision.current === revision;
+    } catch (error) { fail(error); return false; }
+    finally { savingRef.current = false; setSaving(false); }
+  };
+  const changeMode = async (next: "visual" | "details") => {
+    if (mode === next || motionBusy || speedTesting || saving || focusInvalidInput()) return;
+    if (dirty && (!await confirm(t("profiles.saveBeforeVisual")) || !await save())) return;
+    if (selectedId) await openProfile(selectedId);
+    setMode(next);
   };
 
   const activate = (id: string) =>
@@ -133,7 +164,7 @@ export default function Calibrate() {
       .catch(fail);
 
   const createProfile = async () => {
-    if (!await confirmDiscard()) return;
+    if (motionBusy || speedTesting || saving || !await confirmDiscard()) return;
     api
       .createProfile()
       .then((p) => { profileChanged(p.id); return loadProfiles().then(() => openProfile(p.id)); })
@@ -141,7 +172,7 @@ export default function Calibrate() {
   };
 
   const duplicate = async () => {
-    if (!selectedId || !await confirmDiscard()) return;
+    if (motionBusy || speedTesting || saving || !selectedId || !await confirmDiscard()) return;
     api
       .duplicateProfile(selectedId)
       .then((p) => { profileChanged(p.id); return loadProfiles().then(() => openProfile(p.id)); })
@@ -179,15 +210,11 @@ export default function Calibrate() {
 
   const importCalibrationXml = (file: File) =>
     api
-      .importCalibration(file)
+      .importCalibration(file, selectedId ? { profileId: selectedId } : undefined)
       .then(() => {
         profileChanged();
         toast.success(t("calibrate.imported", { name: file.name }));
-        // The XML import updates the *active* profile's calibration.
-        return loadProfiles().then((list) => {
-          const active = list.find((p) => p.active);
-          if (active && active.id === selectedId) return openProfile(active.id);
-        });
+        return loadProfiles().then(() => { if (selectedId) return openProfile(selectedId); });
       })
       .catch(fail);
 
@@ -196,6 +223,7 @@ export default function Calibrate() {
       {label}
       <input
         type="file"
+        disabled={motionBusy || speedTesting || saving}
         accept={accept}
         style={{ display: "none" }}
         onChange={(e) => {
@@ -216,10 +244,10 @@ export default function Calibrate() {
       <div className="profile-layout">
         <aside className="card profile-panel">
           <h2>{t("profiles.title")}</h2>
-          <ProfileLibrary profiles={visibleProfiles} selectedId={selectedId} onSelect={select} onActivate={activate}/>
+          <ProfileLibrary profiles={visibleProfiles} selectedId={selectedId} onSelect={select} onActivate={activate} disabled={motionBusy || speedTesting || saving}/>
           {archivedCount > 0 && <button className="link-button" onClick={() => setShowArchived(!showArchived)}>{showArchived ? t("profiles.hideArchived") : t("profiles.showArchived", { count: String(archivedCount) })}</button>}
           <div className="profile-list-actions">
-            <button onClick={createProfile}>{t("profiles.new")}</button>
+            <button disabled={motionBusy || speedTesting || saving} onClick={createProfile}>{t("profiles.new")}</button>
             {filePicker(t("profiles.importProfile"), ".json,application/json", importProfileFile)}
             {filePicker(t("profiles.importAll"), ".json,application/json", importAllFile)}
             <a className="btn-link" href="/api/profiles/export-all" download>
@@ -228,9 +256,18 @@ export default function Calibrate() {
           </div>
         </aside>
 
-        <section ref={detailRef} className="card profile-detail">
-          <h2>{t("calibrate.title")}</h2>
-          <p className="calibration-intro">{t("profiles.purpose")}</p>
+        <section ref={detailRef} className={`card profile-detail${mode === "visual" ? " profile-detail-visual" : ""}`}>
+          <header className="profile-editor-heading">
+            <h2 title={name}>{name}</h2>
+            <div className="profile-view-toggle" role="group" aria-label={t("profiles.viewMode")}>
+              <button aria-pressed={mode === "visual"} disabled={motionBusy || speedTesting || saving} onClick={() => void changeMode("visual").catch(fail)}><EditorIcon name="preview" size={15}/>{t("profiles.visual")}</button>
+              <button aria-pressed={mode === "details"} disabled={motionBusy || speedTesting || saving} onClick={() => void changeMode("details").catch(fail)}><EditorIcon name="settings" size={15}/>{t("profiles.details")}</button>
+            </div>
+            {onSetup && request && <button className="ghost profile-setup-return" onClick={onSetup}>{t("profiles.backToSetup")}</button>}
+          </header>
+          {mode === "visual" && selectedId && selected ? <ProfileVisualEditor profileId={selectedId} active={selected.active} archived={selected.archived}
+            visible={visible} status={status} onAction={onAction} onSettings={onSettings} onActivate={() => void activate(selectedId)} onBusyChange={setMotionBusy}/> : <>
+          <p className="calibration-intro">{t("profiles.detailsHint")}</p>
             <div className="field-group">
               <label className="field">
                 <span>{t("profiles.name")}</span>
@@ -253,7 +290,7 @@ export default function Calibrate() {
               speedTesting={speedTesting} onSpeedTest={runSpeedTest}/>
             <div className="profile-actions">
               <div className="profile-actions-main">
-                <button className="primary" onClick={save}>
+                <button className="primary" disabled={saving} onClick={() => void save()}>
                   {t("common.save")}
                   {dirty ? " *" : ""}
                 </button>
@@ -274,12 +311,13 @@ export default function Calibrate() {
                 )}
               </div>
               <div className="profile-actions-secondary">
-                <a className="btn-link" href="/api/calibration/export" download>
+                <a className="btn-link" href={`/api/calibration/export?profile_id=${encodeURIComponent(selectedId ?? "")}`} download>
                   {t("common.exportXml")}
                 </a>
                 {filePicker(t("common.importXml"), ".xml,application/xml,text/xml", importCalibrationXml)}
               </div>
             </div>
+          </>}
         </section>
       </div>
     </div>

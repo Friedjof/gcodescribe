@@ -11,7 +11,6 @@ import EditorIcon, {
 import { useI18n } from "../../../i18n";
 import { isPrinterBusy } from "../../../lib/printerState";
 import { useProjectCalibration } from "../../../state/ProjectCalibrationContext";
-import Paper from "../../control/Paper";
 import SetupProjectSelect from "./SetupProjectSelect";
 import SetupProfileStep from "./SetupProfileStep";
 import SetupConnectionStep from "./SetupConnectionStep";
@@ -42,7 +41,7 @@ export default function SetupGuide({
   visible,
   onSettings,
   onNavigate,
-  onAction,
+  onCalibrate,
 }: {
   index: PageIndex;
   profile: CalibrationProfile;
@@ -51,6 +50,7 @@ export default function SetupGuide({
   onSettings: () => void;
   onNavigate: (id: WorkspaceId) => void;
   onAction: () => void;
+  onCalibrate?: (profileId: string) => void;
 }) {
   const tour = useAppTour();
   const { t } = useI18n(),
@@ -186,13 +186,13 @@ export default function SetupGuide({
           )}
           {step === "calibration" && (
             <>
-              <Paper
-                guided
-                onConnection={onSettings}
-                status={status}
-                onAction={onAction}
-                visible={visible && step === "calibration"}
-              />
+              <section className="setup-step-content setup-calibration-entry">
+                <h2>{t("profiles.setupCalibrationTitle")}</h2>
+                <p className="setup-lead">{t("profiles.setupCalibrationHint")}</p>
+                <div className="setup-existing"><div><strong>{profile.name}</strong><span>{profile.calibration.bed_width} × {profile.calibration.bed_height} mm · {t(calibrationReady(profile) ? "profiles.penOk" : "profiles.penMissing")}</span></div>
+                  <button className="primary" disabled={!visible} onClick={() => onCalibrate ? onCalibrate(profile.id) : onNavigate("calibrate")}><EditorIcon name="preview" size={16}/>{t("profiles.openVisual")}</button>
+                </div>
+              </section>
               <div className="setup-calibration-finish">
                 <label className="setup-check" title={!calibrationReady(profile) ? t("setup.calibrationRequired") : t("setup.confirmCalibration")}>
                   <input

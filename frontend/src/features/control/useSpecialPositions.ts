@@ -1,20 +1,23 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type Calibration, type Position, type PositionKind } from "../../api";
+import type { CalibrationTarget } from "../../api/calibrationTarget";
 import { useI18n } from "../../i18n";
 import { positionDefinition, type PositionTarget } from "./specialPositions";
 
-export function useSpecialPositions({ active, cal, pos, profileId, projectId, canMove, onPosition, onCalibration, execute }: {
+export function useSpecialPositions({ active, cal, pos, profileId, projectId, target: scopeTarget, canMove, onPosition, onCalibration, execute }: {
   active: boolean;
   cal: Calibration | null;
   pos: Position | null;
   profileId: string | null;
   projectId?: string;
+  target?: CalibrationTarget;
   canMove: boolean;
   onPosition: (position: Position) => void;
   onCalibration: (calibration: Calibration) => void;
   execute: (action: () => Promise<void>, homesFirst: boolean) => Promise<boolean>;
 }) {
   const { t } = useI18n();
+  const requestTarget = scopeTarget ?? projectId;
   const [kind, setKind] = useState<PositionKind>("park");
   const [target, setTarget] = useState<PositionTarget | null>(null);
   const [busy, setBusy] = useState(false);
@@ -49,7 +52,7 @@ export function useSpecialPositions({ active, cal, pos, profileId, projectId, ca
   const move = (xy: { x: number; y: number }) => run(async () => {
     const token = generation.current;
     setTarget({ kind, ...xy });
-    const result = await (projectId ? api.moveToPosition(kind, xy, projectId) : api.moveToPosition(kind, xy));
+    const result = await (requestTarget ? api.moveToPosition(kind, xy, requestTarget) : api.moveToPosition(kind, xy));
     if (token === generation.current) {
       onPosition(result.position);
       setTarget({ kind, x: result.position.x, y: result.position.y });
@@ -59,7 +62,7 @@ export function useSpecialPositions({ active, cal, pos, profileId, projectId, ca
 
   const capture = () => run(async () => {
     const token = generation.current;
-    const updated = await (projectId ? api.positionFromHead(kind, projectId) : api.positionFromHead(kind));
+    const updated = await (requestTarget ? api.positionFromHead(kind, requestTarget) : api.positionFromHead(kind));
     if (token !== generation.current) return;
     onCalibration(updated);
     setTarget(null);
@@ -69,7 +72,7 @@ export function useSpecialPositions({ active, cal, pos, profileId, projectId, ca
   const homeAndVisit = () => run(async () => {
     const token = generation.current;
     setTarget(null);
-    const result = await (projectId ? api.homeAndMoveToPosition(kind, projectId) : api.homeAndMoveToPosition(kind));
+    const result = await (requestTarget ? api.homeAndMoveToPosition(kind, requestTarget) : api.homeAndMoveToPosition(kind));
     if (token === generation.current) {
       onPosition(result.position);
       setMessage(t("paper.positions.commandSent"));

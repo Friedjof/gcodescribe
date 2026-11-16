@@ -7,13 +7,14 @@ import { act, cleanup, fireEvent, render as renderComponent, screen, waitFor } f
 import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import Paper from "./Paper";
+import { ApiError } from "../../api/errors";
 import type { Calibration, Position, PositionKind } from "../../api";
 
 const render = (ui: ReactElement) => renderComponent(ui, { wrapper: ({ children }) =>
   <ProjectCalibrationProvider active={true}>{children}</ProjectCalibrationProvider> });
 
 const mocks = vi.hoisted(() => ({
-  paper: vi.fn(), position: vi.fn(), activeProfile: vi.fn(), listJobs: vi.fn(),
+  paper: vi.fn(), profileCalibration: vi.fn(), position: vi.fn(), activeProfile: vi.fn(), listJobs: vi.fn(),
   listPages: vi.fn(), activateProfile: vi.fn(), saveProfile: vi.fn(), getProfile: vi.fn(),
   move: vi.fn(), moveToPosition: vi.fn(), positionFromHead: vi.fn(), pen: vi.fn(),
   saveCalibration: vi.fn(), jog: vi.fn(), error: vi.fn(),
@@ -53,6 +54,11 @@ beforeEach(() => {
     activeProfile: { id: "project-profile", name: "Project profile", fingerprint: "project",
       plot_width: 200, plot_height: 200, origin_x: 5, origin_y: 5 } });
   mocks.activateProfile.mockImplementation(async (id) => ({ id, name: "Project", calibration: profileCalibration }));
+  mocks.profileCalibration.mockImplementation(async (id, signal) => {
+    const profile = await mocks.getProfile(id, signal);
+    const paper = await mocks.paper({ profileId: id }, signal);
+    return { profile, paper };
+  });
   mocks.position.mockImplementation(async () => ({ ...head }));
   mocks.listJobs.mockResolvedValue([]);
   mocks.home.mockResolvedValue({ ok: true, position: head });
@@ -588,4 +594,63 @@ it.each([
     expect(button).toBeDisabled(); fireEvent.click(button);
   }
   expect(mocks.jog).not.toHaveBeenCalled();
+});
+
+it("edits and moves the explicit visual profile instead of the current project's profile", async () => {
+  mocks.getProfile.mockImplementation(async id => ({ id, name: id, active: true, archived: false, fingerprint: id, calibration: profileCalibration }));
+  render(<Paper profileId="visual-profile" status={{ configured: true, online: true }} onAction={vi.fn()} guided />);
+  const width = await screen.findByRole("spinbutton", { name: "paper.bedWidth" });
+  await waitFor(() => expect(width).toBeEnabled());
+  fireEvent.change(width, { target: { value: "240" } }); fireEvent.blur(width);
+  await waitFor(() => expect(mocks.saveCalibration).toHaveBeenCalledWith({ bed_width: 240 }, { profileId: "visual-profile" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "paper.homeXYZ" })).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", { name: /paper.nav.corners/ }));
+  fireEvent.click(screen.getByRole("button", { name: "X+" }));
+  await waitFor(() => expect(mocks.jog).toHaveBeenCalledWith(10, 0, 0, { profileId: "visual-profile" }));
+  expect(mocks.activateProfile).not.toHaveBeenCalled();
+});
+it("keeps an inactive profile editable while refusing motion", async () => {
+  mocks.getProfile.mockImplementation(async id => ({ id, name: id, active: false, archived: false, fingerprint: id, calibration: profileCalibration }));
+  render(<Paper profileId="inactive-profile" status={{ configured: true, online: true }} onAction={vi.fn()} guided />);
+  const width = await screen.findByRole("spinbutton", { name: "paper.bedWidth" });
+  await waitFor(() => expect(width).toBeEnabled());
+  expect(screen.getByRole("button", { name: "paper.homeXYZ" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: /paper.nav.corners/ }));
+  expect(screen.getByRole("button", { name: "X+" })).toBeDisabled();
+  expect(mocks.home).not.toHaveBeenCalled(); expect(mocks.jog).not.toHaveBeenCalled();
+});
+
+it("discards a late visual-profile read after selecting another profile", async () => {
+  let finish!: (profile: unknown) => void;
+  const old = new Promise(resolve => { finish = resolve; });
+  const newCal = { ...profileCalibration, bed_width: 270 };
+  mocks.getProfile.mockImplementation(async id => id === "old-profile" ? old : ({ id, name: id, active: true, fingerprint: id === "project-profile" ? "project" : id, calibration: id === "new-profile" ? newCal : profileCalibration }));
+  mocks.paper.mockImplementation(async target => ({ calibration: target?.profileId === "new-profile" ? newCal : profileCalibration, rect: [10, 10, 190, 190] }));
+  const props = { status: { configured: true, online: true }, onAction: vi.fn(), guided: true };
+  const view = render(<Paper {...props} profileId="old-profile" />);
+  await waitFor(() => expect(mocks.getProfile).toHaveBeenCalledWith("old-profile", expect.any(AbortSignal)));
+  view.rerender(<Paper {...props} profileId="new-profile" />);
+  const width = await screen.findByRole("spinbutton", { name: "paper.bedWidth" });
+  expect(width).toHaveValue(270);
+  await act(async () => finish({ id: "old-profile", calibration: profileCalibration }));
+  expect(width).toHaveValue(270);
+  fireEvent.change(width, { target: { value: "280" } }); fireEvent.blur(width);
+  await waitFor(() => expect(mocks.saveCalibration).toHaveBeenCalledWith({ bed_width: 280 }, { profileId: "new-profile" }));
+});
+
+it("previews an inactive profile on an old backend without using global paper data or sending commands", async () => {
+  mocks.profileCalibration.mockRejectedValue(new ApiError("Not found", 404));
+  mocks.getProfile.mockImplementation(async id => ({ id, name: id, active: false, fingerprint: id, calibration: { ...profileCalibration, bed_width: 321 } }));
+  render(<Paper profileId="inactive-on-old-server" status={{ configured: true, online: true }} onAction={vi.fn()} guided />);
+  const width = await screen.findByRole("spinbutton", { name: "paper.bedWidth" });
+  expect(width).toHaveValue(321);
+  expect(width).toBeDisabled();
+  expect(screen.getByText("profiles.previewOnly")).toBeInTheDocument();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  expect(mocks.paper.mock.calls.some(([target]) => typeof target === "object")).toBe(false);
+  fireEvent.click(screen.getByRole("button", { name: "paper.homeXYZ" }));
+  fireEvent.click(screen.getByRole("button", { name: /paper.nav.corners/ }));
+  fireEvent.click(screen.getByRole("button", { name: "X+" }));
+  expect(mocks.home).not.toHaveBeenCalled(); expect(mocks.jog).not.toHaveBeenCalled();
+  expect(mocks.saveCalibration).not.toHaveBeenCalled(); expect(mocks.activateProfile).not.toHaveBeenCalled();
 });
