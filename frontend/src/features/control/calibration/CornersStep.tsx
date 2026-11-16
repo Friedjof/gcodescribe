@@ -2,6 +2,7 @@ import { useI18n } from "../../../i18n";
 import type { CalibrationController } from "./useCalibrationController";
 import type { Calibration } from "../../../api";
 import Segmented from "../../../components/Segmented";
+import XYJogPad from "./XYJogPad";
 import { CORNERS, XY_STEPS } from "./steps";
 
 type Controls = Pick<CalibrationController,
@@ -11,7 +12,7 @@ type Controls = Pick<CalibrationController,
 
 export default function CornersStep({ cal, controls }: { cal: Calibration; controls: Controls }) {
   const { t } = useI18n();
-  const { clearCorner, xyStep, setXyStep, canMove, canEdit, jogXY, kbd, testPen, homed, capture, driveToCorner, capturedCount, resetCorners, rect, adoptPaperArea, setActive } = controls;
+  const { clearCorner, xyStep, setXyStep, canMove, canEdit, testPen, homed, capture, driveToCorner, capturedCount, resetCorners, rect, adoptPaperArea, setActive } = controls;
   return (
     <>
       <p className="muted">{t("paper.step3Hint")}</p>
@@ -45,10 +46,7 @@ export default function CornersStep({ cal, controls }: { cal: Calibration; contr
         {t("paper.dragCornerHint")}
       </p>
 
-      {/* Manual jog + capture — collapsed */}
-      <details className="collapsible">
-        <summary className="muted">{t("paper.manualCapture")}</summary>
-        <div style={{ marginTop: 8 }}>
+      <div className="paper-manual-controls">
           <Segmented
             value={xyStep}
             onChange={setXyStep}
@@ -56,13 +54,7 @@ export default function CornersStep({ cal, controls }: { cal: Calibration; contr
             suffix={<em className="muted">mm</em>}
           />
           <div className="jog compact">
-            <div className="xy">
-              <button disabled={!canMove} onClick={() => jogXY(0, 1)} className={"up" + kbd("up")}>↑</button>
-              <button disabled={!canMove} onClick={() => jogXY(-1, 0)} className={"left" + kbd("left")}>←</button>
-              <span className="pad-center" />
-              <button disabled={!canMove} onClick={() => jogXY(1, 0)} className={"right" + kbd("right")}>→</button>
-              <button disabled={!canMove} onClick={() => jogXY(0, -1)} className={"down" + kbd("down")}>↓</button>
-            </div>
+            <XYJogPad controls={controls} />
             <div className="z">
               <button disabled={!canMove} onClick={() => testPen(true)}>{t("paper.penDownShort")}</button>
               <button disabled={!canMove} onClick={() => testPen(false)}>{t("paper.penUpShort")}</button>
@@ -96,8 +88,7 @@ export default function CornersStep({ cal, controls }: { cal: Calibration; contr
               );
             })}
           </div>
-        </div>
-      </details>
+      </div>
 
       <div className="save-row" style={{ marginTop: 12 }}>
         {capturedCount > 0 && (

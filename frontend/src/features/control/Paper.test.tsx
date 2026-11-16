@@ -361,7 +361,6 @@ it("homes, jogs, and captures and tests pen heights using the displayed project"
 it("captures, visits and applies project paper corners, and creates its frame test", async () => {
   await setup();
   fireEvent.click(screen.getByRole("button", { name: /paper.step3/ }));
-  fireEvent.click(screen.getByText("paper.manualCapture"));
   const capture = screen.getByRole("button", { name: "paper.cornerBL" });
   fireEvent.click(capture);
   await waitFor(() => expect(mocks.setCorner).toHaveBeenCalledWith("bl", "project"));
@@ -466,7 +465,6 @@ it("lets paper layout be edited before homing while keeping machine controls dis
   const corners = await screen.findByRole("button", { name: /paper.step3/ });
   expect(corners).toBeEnabled();
   fireEvent.click(corners);
-  fireEvent.click(screen.getByText("paper.manualCapture"));
   expect(screen.getByRole("button", { name: "paper.cornerBL" })).toBeDisabled();
   expect(screen.getByRole("button", { name: "paper.useCurrentArea" })).toBeEnabled();
   expect(mocks.home).not.toHaveBeenCalled();
@@ -555,5 +553,39 @@ it("uses a focused beginner flow without executing motion when changing steps", 
   fireEvent.keyDown(document.activeElement!,{key:"ArrowDown"});
   expect(mocks.jog).not.toHaveBeenCalled();expect(mocks.home).not.toHaveBeenCalled();
   fireEvent.keyDown(document.activeElement!,{key:"Escape"});
+  expect(mocks.jog).not.toHaveBeenCalled();
+});
+
+it("shows paper arrows immediately, uses the selected step and captures the selected corner", async () => {
+  render(<Paper status={{ configured: true, online: true }} onAction={vi.fn()} guided />);
+  fireEvent.click(await screen.findByRole("button", { name: /paper.nav.corners/ }));
+  const up = screen.getByRole("button", { name: "Y+" });
+  await waitFor(() => expect(up).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", { name: "1" }));
+  for (const [label, x, y] of [["Y+", 0, 1], ["X−", -1, 0], ["X+", 1, 0], ["Y−", 0, -1]] as const) {
+    const button = screen.getByRole("button", { name: label });
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
+    await waitFor(() => expect(mocks.jog).toHaveBeenLastCalledWith(x, y, 0, { projectId: "project" }));
+  }
+  const capture = screen.getByRole("button", { name: "calibration.captureCorner" });
+  await waitFor(() => expect(capture).toBeEnabled());
+  fireEvent.change(screen.getByRole("combobox", { name: "calibration.corner" }), { target: { value: "br" } });
+  fireEvent.click(capture);
+  await waitFor(() => expect(mocks.setCorner).toHaveBeenCalledWith("br", "project"));
+  expect(mocks.home).not.toHaveBeenCalled();
+});
+it.each([
+  { online: false, homed: true },
+  { online: true, homed: false },
+  { online: true, homed: true, job: { state: "Printing" } },
+])("keeps visible paper arrows disabled when movement is unavailable: %j", async ({ homed, ...status }) => {
+  head.homed = homed;
+  render(<Paper status={{ configured: true, ...status }} onAction={vi.fn()} guided />);
+  fireEvent.click(await screen.findByRole("button", { name: /paper.nav.corners/ }));
+  for (const name of ["Y+", "X−", "X+", "Y−"]) {
+    const button = screen.getByRole("button", { name });
+    expect(button).toBeDisabled(); fireEvent.click(button);
+  }
   expect(mocks.jog).not.toHaveBeenCalled();
 });
