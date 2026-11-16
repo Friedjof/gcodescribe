@@ -255,3 +255,36 @@ right-drag actions on 2,400 strokes and a 52,000-point/2,600-stroke drawing. Acr
 uncaught JavaScript error and no write/motion request. Saved geometry stayed
 identical. Dense drawings are still constrained by available display pixels at
 fit-to-page scale; zoom reveals their full detail without deliberate omission.
+
+### Unified profile editor
+
+Profiles now opens in Visual mode: the same calibration wizard, arrow pad and
+live preview operate on the selected profile. Details keeps the numeric overview.
+Switching from unsaved details requires an explicit save; pending movement tests
+block switching into manual control. Setup and the tour open the project profile
+in this editor rather than hosting a second calibration workspace.
+
+Profile requests carry an explicit target. Inactive profiles can be viewed and
+edited without changing the project or the global active profile. Direct printer
+commands require the selected profile to be active; backend guards also enforce
+this if activation changes after the UI loaded. XML import/export and frame
+patterns use the selected profile too.
+
+The visual snapshot is read atomically from
+`GET /api/profiles/{id}/calibration-state`. A running older backend on port 8010
+was observed ignoring `profile_id` on the old paper endpoint, producing a false
+conflict for inactive profiles. Older servers now fall back to the selected
+profile's read-only preview, with commands disabled instead of accidentally
+writing global calibration. Details remains available. Python dev reload uses
+polling by default on the next `make dev` start.
+
+Validation: full frontend run (547 tests), followed by focused tests for the
+pending movement-test guard and old-server preview (55 tests). Production build,
+Ruff and shell syntax passed. Full backend run covered 1,029 tests; four vpype
+conversion failures were caused by PATH selecting an incomplete user install and
+passed when rerun with `.venv/bin` first (12 conversion tests). The final atomic
+snapshot addition passed the 101-test profile/context subset. Browser checks
+covered both themes at 1024×768, 1280×720 and 1366×768, all four calibration steps,
+view switching, isolated profile writes and all 11 tour steps. An inactive profile
+was also opened on the actual old dev backend: preview and wizard visible, no
+conflict, no write request. No physical printer movement was performed.

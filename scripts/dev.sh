@@ -134,6 +134,9 @@ cleanup() {
 trap cleanup INT TERM EXIT
 
 if [ "$DEV_START_BACKEND" = 1 ]; then
+  # Keep Python reloads working when inotify is exhausted or filesystem events
+  # do not reach watchfiles. Opt out with WATCHFILES_FORCE_POLLING=false.
+  export WATCHFILES_FORCE_POLLING="${WATCHFILES_FORCE_POLLING:-true}"
   setsid uv run uvicorn plotter.web.app:app \
     --host 0.0.0.0 \
     --port "$BACKEND_PORT" \
