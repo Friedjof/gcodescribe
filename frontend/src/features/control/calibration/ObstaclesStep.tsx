@@ -1,3 +1,5 @@
+import { useState } from "react";
+import PaginationBar from "../../../components/paging/PaginationBar";
 import { useI18n } from "../../../i18n";
 import type { CalibrationController } from "./useCalibrationController";
 import Segmented from "../../../components/Segmented";
@@ -10,7 +12,10 @@ type Controls = Pick<CalibrationController,
 
 export default function ObstaclesStep({ controls }: { controls: Controls }) {
   const { t } = useI18n();
+  const [requested, setPage] = useState(0);
   const { obsCaptureActive, obsCaptureCorner1, obstacles, deleteObstacle, xyStep, setXyStep, canMove, canEdit, jogXY, kbd, homed, pos, startObstacleCapture, captureObstacleCorner, cancelObstacleCapture, setActive } = controls;
+  const pages = Math.max(1, Math.ceil(obstacles.length / 4));
+  const page = Math.min(requested, pages - 1);
   return (
     <>
       <p className="muted">{t("paper.step4ObstaclesHint")}</p>
@@ -31,9 +36,9 @@ export default function ObstaclesStep({ controls }: { controls: Controls }) {
           )}
           {obstacles.length > 0 && (
             <div className="obstacle-list">
-              {obstacles.map((obs, i) => (
+              {obstacles.slice(page * 4, page * 4 + 4).map((obs, i) => (
                 <div key={obs.id} className="obstacle-item">
-                  <span className="obstacle-idx">{i + 1}</span>
+                  <span className="obstacle-idx">{page * 4 + i + 1}</span>
                   <span className="obs-coords muted">
                     X{obs.x.toFixed(0)} Y{obs.y.toFixed(0)} · {obs.w.toFixed(0)}×{obs.h.toFixed(0)} mm
                   </span>
@@ -46,6 +51,7 @@ export default function ObstaclesStep({ controls }: { controls: Controls }) {
               ))}
             </div>
           )}
+          {pages > 1 && <PaginationBar page={page} pages={pages} onChange={setPage} label={t("paper.step4Obstacles")}/>}
         </>
       ) : (
         <div className="obs-capture-panel">
@@ -78,6 +84,7 @@ export default function ObstaclesStep({ controls }: { controls: Controls }) {
               })}
             </div>
           )}
+          {pages > 1 && <PaginationBar page={page} pages={pages} onChange={setPage} label={t("paper.step4Obstacles")}/>}
           <div className="save-row" style={{ marginTop: 12 }}>
             {!obsCaptureCorner1 ? (
               <button
