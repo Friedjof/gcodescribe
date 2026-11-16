@@ -451,30 +451,11 @@
 }
 
 .games-generate-btn {
-  width: 74px;
-  height: 74px;
-  padding: 0;
-  border-radius: 50%;
-  border: none;
-  background: linear-gradient(150deg, var(--accent-hover), var(--accent));
-  color: #fff;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 10px 30px rgba(10, 132, 255, 0.24), 0 0 18px rgba(10, 132, 255, 0.24);
-}
-
-.games-generate-btn span {
-  font-size: 28px;
-  line-height: 1;
-}
-
-.games-generate-btn:hover:not(:disabled) {
-  background: linear-gradient(150deg, #49a6ff, var(--accent-hover));
-}
-
-.games-generate-label {
-  font-size: 12px;
+  min-height: 34px;
+  padding: 6px 16px;
+  border-radius: 4px;
+  gap: 8px;
+  box-shadow: none;
 }
 
 .games-secondary-action {

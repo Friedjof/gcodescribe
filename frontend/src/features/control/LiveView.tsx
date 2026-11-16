@@ -227,8 +227,8 @@ export default function LiveView({
           <g>
             <polygon
               points={polyPoints}
-              fill="rgba(255,255,255,0.08)"
-              stroke="#e5e5ea"
+              fill="var(--paper)"
+              stroke="var(--paper-border)"
               strokeWidth={0.8}
             />
             {capturedCorners.length === 4 && (() => {

@@ -155,7 +155,7 @@ function AdminApp() {
             <option value="es">{t("lang.es")}</option>
           </select>
           <button className="settings-btn" onClick={() => setSettingsOpen(true)} title={t("settings.headerButton")} aria-label={t("settings.headerButton")}><EditorIcon name="settings" size={18} /></button>
-          <StatusPill status={status} />
+          <button className="app-connection-button" title={t("start.configureConnection")} aria-label={t("start.configureConnection")} onClick={() => setSettingsOpen(true)}><StatusPill status={status} /></button>
           {canStopPlot(status) && <QuickStopPlot status={status} onAction={refreshStatus} />}
         </div>
       </header>
@@ -210,7 +210,7 @@ function AdminApp() {
             </div>
           ) : null
         )}
-        {tab === "control" && <div role="tabpanel" id="workspace-panel-control" aria-labelledby="workspace-tab-control"><Suspense fallback={<DelayedLoading />}><Control status={status} onAction={refreshStatus} /></Suspense></div>}
+        {tab === "control" && <div role="tabpanel" id="workspace-panel-control" aria-labelledby="workspace-tab-control"><Suspense fallback={<DelayedLoading />}><Control status={status} onAction={refreshStatus} onSettings={() => setSettingsOpen(true)} /></Suspense></div>}
       </main>
       <footer className="app-statusbar"><span>{t(workspaceById(tab).label)}</span><span>{t(preferences.experience === "guided" ? "interface.guided" : "interface.full")} · {t(preferences.density === "compact" ? "interface.compact" : "interface.comfortable")}</span></footer>
     </div>

@@ -192,15 +192,6 @@
 
 /* ---- Paper calibration + live view ------------------------------------ */
 
-.app.tab-paper {
-  display: flex;
-  flex-direction: column;
-  height: 100dvh;
-  overflow: hidden;
-  padding-bottom: 10px;
-}
-.app.tab-paper > header, .app.tab-paper > .tabs-nav { flex-shrink: 0; }
-.app.tab-paper > main { flex: 1; min-height: 0; }
 .paper-grid {
   grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.2fr);
   grid-template-rows: minmax(0, 1fr);
@@ -259,9 +250,9 @@
   width: 100%;
   height: auto;
   display: block;
-  background: #111113;
+  background: var(--workspace);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 3px;
 }
 
 .legend {
@@ -484,8 +475,9 @@
 
 /* ---- Calibration profiles ------------------------------------------------- */
 .calibrate-profiles {
-  max-width: 1120px;
-  margin: 0 auto;
+  width: 100%;
+  padding: var(--panel-pad);
+  margin: 0;
 }
 .profile-layout {
   display: grid;

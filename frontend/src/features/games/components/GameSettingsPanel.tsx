@@ -1,3 +1,4 @@
+import EditorIcon from "../../../components/editor/EditorIcon";
 import type { Calibration } from "../../../api";
 import Segmented from "../../../components/Segmented";
 import {
@@ -370,15 +371,14 @@ export function GameSettingsPanel({
       <div className="games-generate-wrap">
         <button
           type="button"
-          className="games-generate-btn"
+          className="primary games-generate-btn"
           title={t("games.generate")}
           aria-label={t("games.generate")}
           onClick={onGenerate}
           disabled={busy}
         >
-          <span aria-hidden="true">✦</span>
+          <EditorIcon name="preview" size={17} /> {t("games.generate")}
         </button>
-        <span className="muted games-generate-label">{t("games.generate")}</span>
       </div>
     </>
   );

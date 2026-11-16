@@ -82,3 +82,23 @@ html, body, #root { height: 100%; min-height: 0; }
 .start-safety-note { color: var(--muted); font-size: 11px; line-height: 1.5; margin-top: 16px; }
 @media (max-width: 1000px) { .start-workspace { padding: 18px; } .start-layout { grid-template-columns: 1fr; gap: 24px; } .start-actions { padding-left: 0; border-left: 0; } .workspace-heading { align-items: flex-start; flex-direction: column; gap: 12px; } }
 @media (max-width: 550px) { .start-checklist > li { flex-wrap: wrap; } .start-checklist > li > button { margin-left: 38px; } }
+/* Other workspaces share the program's page spacing and neutral surfaces. */
+.app.tab-games > main, .app.tab-gallery > main, .app.tab-convert > main, .app.tab-control > main { padding: var(--panel-pad); }
+.app .games { gap: 12px; }
+.app .games-hero { background: var(--panel); border: 0; border-bottom: 1px solid var(--border); border-radius: 0; padding: 8px 4px 16px; }
+.app .games-hero .games-kicker { display: none; }
+.app .games-stat { min-width: 95px; border-radius: 3px; padding: 8px 12px; background: var(--panel-2); }
+.app .games-stat strong { font-size: 22px; }
+.app .games-layout { gap: 12px; }
+.app .games-card { min-height: 106px; border-radius: 4px; padding: 12px; }
+.app .games-card:hover:not(:disabled) { transform: none; }
+.app .games-card.active { background: var(--active-bg); border-color: var(--accent); box-shadow: none; }
+.app .games-card-state, .app .games-badge { border-radius: 3px; }
+.app .games-generate-wrap { align-items: stretch; }
+.app .font-editor { gap: 0; }
+.app .fe-header { border: 0; border-bottom: 1px solid var(--border); border-radius: 0; }
+.app .fe-empty { border-radius: 0; border: 0; }
+.app .ai-controls { border-right: 1px solid var(--border); border-radius: 0; padding: var(--panel-pad); }
+.app .ai-stage { border-radius: 0; box-shadow: none; }
+.app-titlebar .app-connection-button { border: 0; background: transparent; padding: 0; min-height: 28px; }
+.app-titlebar .app-connection-button .pill { display: inline-flex; align-items: center; min-height: 28px; }

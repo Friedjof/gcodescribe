@@ -121,9 +121,11 @@ function SerialPortHint() {
 export default function Control({
   status,
   onAction,
+  onSettings,
 }: {
   status: PrinterStatus | null;
   onAction: () => void;
+  onSettings?: () => void;
 }) {
   const { t } = useI18n();
   const toast = useToasts();
@@ -187,18 +189,17 @@ export default function Control({
           </button>
         </div>
         <PrinterOverview status={status} onAction={onAction} />
+        {onSettings && <button onClick={onSettings}>{t("start.configureConnection")}</button>}
         {status?.backend === "serial" ? (
           <>
             <p className="muted">
               {t("control.offlineHintSerial")}
-              <code> PRINTER_SERIAL_PORT</code>.
             </p>
             <SerialPortHint />
           </>
         ) : (
           <p className="muted">
             {t("control.offlineHint")}
-            <code> OCTOPRINT_URL</code> {t("common.and")} <code>OCTOPRINT_API_KEY</code>.
           </p>
         )}
       </div>
