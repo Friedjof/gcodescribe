@@ -1,3 +1,5 @@
+import PaginationBar from "../../components/paging/PaginationBar";
+import { useFitListPage } from "../../components/paging/useFitListPage";
 import { useEffect, useState } from "react";
 import { useProjectCalibration } from "../../state/ProjectCalibrationContext";
 import { api, type Calibration, type CalibrationProfile, type CalibrationProfileSummary, type PageIndex, type PaintProject } from "../../api";
@@ -38,6 +40,7 @@ export default function ProjectOverviewPopup({ activeId, movePageId, onClose, on
   confirm: (message: string) => Promise<boolean>;
 }) {
   const { profileChanged } = useProjectCalibration();
+  const [settingsGroup, setSettingsGroup] = useState("general");
   const [projects, setProjects] = useState<PaintProject[]>([]);
   const [profiles, setProfiles] = useState<CalibrationProfileSummary[]>([]);
   const [mode, setMode] = useState<"list" | "create" | "settings">("list");
@@ -73,7 +76,7 @@ export default function ProjectOverviewPopup({ activeId, movePageId, onClose, on
   };
   const openSettings = (p: PaintProject) => run(async () => {
     setSelected(p); setName(p.name); setProfile(null); setTemplateId("");
-    setMode("settings");
+    setMode("settings"); setSettingsGroup("general");
     applyProfileDraft(await api.getProfile(p.profileId));
   });
   const selectProfile = (id: string) => run(async () => applyProfileDraft(await api.getProfile(id)));
@@ -156,6 +159,7 @@ export default function ProjectOverviewPopup({ activeId, movePageId, onClose, on
   };
   const visible = projects.filter((p) => p.archived === archived && p.name.toLowerCase().includes(query.toLowerCase()))
     .sort((a, b) => b.modified - a.modified);
+  const paging = useFitListPage(visible, 100, 4, mode === "list");
   const activeCount = projects.filter((p) => !p.archived).length;
   const archivedCount = projects.length - activeCount;
   const numberFields = (keys: (keyof Calibration)[]) => NUMBERS.filter(({ key }) => keys.includes(key)).map(({ key, label }) =>
@@ -183,7 +187,7 @@ export default function ProjectOverviewPopup({ activeId, movePageId, onClose, on
   </> : undefined;
 
   return <Modal title={mode === "list" ? movePageId ? "Slide verschieben" : "Projekte" : mode === "create" ? "Neues Projekt" : `Projekt: ${selected?.name ?? ""}`}
-    onClose={onClose} footer={footer} className="project-overview-popup" bodyClassName="project-overview-body">
+    onClose={() => !busy && onClose()} footer={footer} className="project-overview-popup" bodyClassName="project-overview-body">
     {error && <p className="banner err" role="alert">{error}</p>}
     {mode === "list" ? <>
       <div className="project-overview-intro">
@@ -192,16 +196,16 @@ export default function ProjectOverviewPopup({ activeId, movePageId, onClose, on
         {!movePageId && <button className="primary" onClick={() => { setName(""); setTemplateId(""); setMode("create"); }}>＋ Neues Projekt</button>}
       </div>
       {!movePageId && <div className="project-popup-tabs" role="tablist" aria-label="Projektstatus">
-        <button role="tab" aria-selected={!archived} className={!archived ? "active" : ""} onClick={() => setArchived(false)}>Aktiv <span>{activeCount}</span></button>
-        <button role="tab" aria-selected={archived} className={archived ? "active" : ""} onClick={() => setArchived(true)}>Archiv <span>{archivedCount}</span></button>
+        <button role="tab" aria-selected={!archived} className={!archived ? "active" : ""} onClick={() => { setArchived(false); paging.setPage(0); }}>Aktiv <span>{activeCount}</span></button>
+        <button role="tab" aria-selected={archived} className={archived ? "active" : ""} onClick={() => { setArchived(true); paging.setPage(0); }}>Archiv <span>{archivedCount}</span></button>
       </div>}
       <div className="project-popup-toolbar">
-        <input type="search" value={query} onChange={(event) => setQuery(event.target.value)}
+        <input type="search" value={query} onChange={(event) => { setQuery(event.target.value); paging.setPage(0); }}
           placeholder="Projekt suchen…" aria-label="Projekte suchen" />
         <span>{visible.length} {visible.length === 1 ? "Projekt" : "Projekte"}</span>
       </div>
-      <div className="project-popup-list">
-        {visible.map((p) => <article className={`project-popup-card${p.id === activeId ? " current" : ""}`} key={p.id}>
+      <div className="project-popup-list" ref={paging.viewport}>
+        {paging.items.map((p) => <article className={`project-popup-card${p.id === activeId ? " current" : ""}`} key={p.id}>
           <div className="project-popup-cover" aria-hidden="true">
             {p.coverPageId ? <PageThumbnail page={{ id: p.coverPageId, modified: p.coverModified ?? p.modified }} /> : <span>▤</span>}
           </div>
@@ -223,6 +227,7 @@ export default function ProjectOverviewPopup({ activeId, movePageId, onClose, on
           {!query && !archived && !movePageId && <button onClick={() => { setName(""); setTemplateId(""); setMode("create"); }}>Erstes Projekt erstellen</button>}
         </div>}
       </div>
+      <PaginationBar page={paging.page} pages={paging.pages} onChange={paging.setPage} label="Projekte"/>
     </> : mode === "create" ? <div className="project-popup-form project-create-form">
       <div className="project-form-intro"><span aria-hidden="true">▤</span><div><strong>Neues Projekt einrichten</strong>
         <p>Wähle ein vorhandenes Profil oder lege ein eigenes für das Projekt an.</p></div></div>
@@ -232,9 +237,10 @@ export default function ProjectOverviewPopup({ activeId, movePageId, onClose, on
         <option value="">Eigenes Profil erstellen</option>
         {profiles.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
       </select></label>
-    </div> : <div className="project-popup-form project-settings-form">
+    </div> : <fieldset disabled={busy} className="project-popup-form project-settings-form">
       <div className="project-settings-note">Papieransicht, Vorschau und Plot verwenden dieses Profil. Gespeicherte Änderungen gelten für den nächsten Plot.</div>
-      <section className="project-settings-section"><h3>Allgemein</h3>
+      <nav className="project-settings-tabs" aria-label="Projekteinstellungen">{[["general", "Allgemein"], ["area", "Plotfläche"], ["pen", "Stift & Bewegung"], ["positions", "Positionen"], ["geometry", "Geometrie"]].map(([id, label]) => <button type="button" key={id} aria-pressed={settingsGroup === id} onClick={() => setSettingsGroup(id)}>{label}</button>)}</nav>
+      <section className="project-settings-section" hidden={settingsGroup !== "general"}><h3>Allgemein</h3>
         <label>Projektname<input value={name} onChange={(event) => setName(event.target.value)} /></label>
         <label>Profil<select value={profile?.id ?? selected?.profileId ?? ""} disabled={busy}
           onChange={(event) => selectProfile(event.target.value)}>
@@ -245,16 +251,16 @@ export default function ProjectOverviewPopup({ activeId, movePageId, onClose, on
       </section>
       {profile && <>
         {projects.some((project) => project.id !== selected?.id && project.profileId === profile.id) &&
-          <p className="muted">Dieses Profil wird auch von anderen Projekten verwendet. Änderungen an seinen Werten gelten dort ebenfalls.</p>}
-        <details className="project-settings-section"><summary>Profil umbenennen</summary>
+          <p className="muted" hidden={settingsGroup !== "general"}>Dieses Profil wird auch von anderen Projekten verwendet. Änderungen an seinen Werten gelten dort ebenfalls.</p>}
+        <section className="project-settings-section" hidden={settingsGroup !== "general"}><h3>Profil umbenennen</h3>
           <div className="project-profile-fields"><label>Profilname<input value={profileName} onChange={(event) => setProfileName(event.target.value)} /></label></div>
-        </details>
-        <details className="project-settings-section"><summary>Plotfläche <small>Bett, Papier und Ursprung</small></summary>
-          <div className="project-profile-fields">{numberFields(areaKeys)}{flagFields(["flip_y", "fit_to_area"])}</div></details>
-        <details className="project-settings-section"><summary>Stift und Bewegung <small>Höhen und Geschwindigkeiten</small></summary>
+        </section>
+        <section className="project-settings-section" hidden={settingsGroup !== "area"}><h3>Plotfläche <small>Bett, Papier und Ursprung</small></h3>
+          <div className="project-profile-fields">{numberFields(areaKeys)}{flagFields(["flip_y", "fit_to_area"])}</div></section>
+        <section className="project-settings-section" hidden={settingsGroup !== "pen"}><h3>Stift und Bewegung <small>Höhen und Geschwindigkeiten</small></h3>
           <div className="project-profile-fields">{numberFields(penKeys)}{flagFields(["pen_calibrated", "trust_axis_home"])}</div>
-          <p className="muted">Xournal-Druckvariation senkt den Stift ab der kalibrierten Stifthöhe zusätzlich ab. 0 mm deaktiviert die Absenkung. Am Xournal-Objekt lässt sie sich einzeln aktivieren.</p></details>
-        <details className="project-settings-section"><summary>Parken und Kalibrieren <small>Gespeicherte Positionen</small></summary>
+          <p className="muted">Xournal-Druckvariation senkt den Stift ab der kalibrierten Stifthöhe zusätzlich ab. 0 mm deaktiviert die Absenkung. Am Xournal-Objekt lässt sie sich einzeln aktivieren.</p></section>
+        <section className="project-settings-section" hidden={settingsGroup !== "positions"}><h3>Parken und Kalibrieren <small>Gespeicherte Positionen</small></h3>
           <div className="project-profile-fields">{numberFields(positionKeys)}{flagFields(["park_after_plot"])}
             {(["park", "calibration"] as const).map((kind) => <label className="project-profile-checkbox" key={kind}>
               <input type="checkbox" checked={profile.calibration.defined_positions?.includes(kind) ?? false}
@@ -264,13 +270,13 @@ export default function ProjectOverviewPopup({ activeId, movePageId, onClose, on
                     : (profile.calibration.defined_positions ?? []).filter((value) => value !== kind) } })} />
               {kind === "park" ? "Parkposition festlegen" : "Kalibrierposition festlegen"}
             </label>)}
-          </div></details>
-        <details className="project-settings-section"><summary>Weitere Einstellungen <small>Papier, Hindernisse und Vorlagen</small></summary>
+          </div></section>
+        <section className="project-settings-section" hidden={settingsGroup !== "geometry"}><h3>Weitere Einstellungen <small>Papier, Hindernisse und Vorlagen</small></h3>
           <div className="project-advanced-fields">
             <label>Papier-Ecken (JSON)<textarea rows={4} value={corners} onChange={(event) => setCorners(event.target.value)} /></label>
             <label>Hindernisse (JSON)<textarea rows={4} value={obstacles} onChange={(event) => setObstacles(event.target.value)} /></label>
-          </div></details>
+          </div></section>
       </>}
-    </div>}
+    </fieldset>}
   </Modal>;
 }

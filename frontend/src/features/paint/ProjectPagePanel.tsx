@@ -1,3 +1,5 @@
+import PaginationBar from "../../components/paging/PaginationBar";
+import { useFitListPage } from "../../components/paging/useFitListPage";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { PageGroup, PageIndex, PageMeta } from "../../api";
@@ -37,12 +39,10 @@ export default function ProjectPagePanel({ index, activePageId, onOpenProjects, 
   const [menu, setMenu] = useState<{ id: string; anchor: HTMLElement } | null>(null);
   const [menuPosition, setMenuPosition] = useState<CSSProperties | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const activeRef = useRef<HTMLLIElement>(null);
 
   useEffect(() => {
     setSelectedFolder(null); setClosed({}); setQuery(""); setMenu(null);
   }, [index.project?.id]);
-  useEffect(() => { activeRef.current?.scrollIntoView?.({ block: "nearest" }); }, [activePageId]);
   useEffect(() => {
     if (!menu) return;
     const dismiss = (event: PointerEvent) => {
@@ -140,7 +140,7 @@ export default function ProjectPagePanel({ index, activePageId, onOpenProjects, 
   const renderPage = (page: PageMeta) => {
     const active = page.id === activePageId;
     const menuId = `slide:${page.id}`;
-    return <li key={page.id} ref={active ? activeRef : undefined}
+    return <li key={page.id}
       className={`project-slide${active ? " active" : ""}${dropTarget === page.id ? " drop-before" : ""}`}
       draggable={canDrag} onDragStart={canDrag ? () => setDrag({ kind: "slide", id: page.id }) : undefined}
       onDragEnd={() => { setDrag(null); setDropTarget(null); }}
@@ -175,7 +175,6 @@ export default function ProjectPagePanel({ index, activePageId, onOpenProjects, 
     const folderId = folder.id;
     const menuId = `folder:${folderId}`;
     const isClosed = !search && closed[folderId];
-    const showAll = !!search && folder.name.toLocaleLowerCase().includes(search);
     return <section key={folderId} className="project-folder" style={{ "--folder-depth": depth } as CSSProperties}>
       <div className={`project-folder-head${selectedFolder === folderId ? " selected" : ""}${dropTarget === folderId ? " drop-into" : ""}`}
         draggable={canDrag} onDragStart={canDrag ? () => setDrag({ kind: "folder", id: folderId }) : undefined}
@@ -201,12 +200,30 @@ export default function ProjectPagePanel({ index, activePageId, onOpenProjects, 
           </>)}
         </div>
       </div>
-      {!isClosed && <div className="project-folder-contents">
-        {children(folderId).map((child) => renderFolder(child, depth + 1))}
-        <ul className="project-slide-list">{directPages(folderId, showAll).map(renderPage)}</ul>
-      </div>}
+
     </section>;
   };
+
+  type TreeRow = { kind: "folder"; folder: PageGroup; depth: number } | { kind: "page"; page: PageMeta; depth: number };
+  const rows: TreeRow[] = [];
+  const visited = new Set<string>();
+  const visit = (parentId: string | null, depth: number, inheritedMatch = false) => {
+    children(parentId).forEach((folder) => {
+      if (visited.has(folder.id) || (!inheritedMatch && !folderHasMatch(folder))) return;
+      visited.add(folder.id);
+      rows.push({ kind: "folder", folder, depth });
+      if (search || !closed[folder.id]) visit(folder.id, depth + 1, inheritedMatch || (!!search && folder.name.toLocaleLowerCase().includes(search)));
+    });
+    directPages(parentId, inheritedMatch).forEach((page) => rows.push({ kind: "page", page, depth }));
+  };
+  if (sidebarCollapsed) pages.forEach((page) => rows.push({ kind: "page", page, depth: 0 }));
+  else visit(null, 0);
+  const paging = useFitListPage(rows, 54, 6);
+  useEffect(() => {
+    const active = rows.findIndex((row) => row.kind === "page" && row.page.id === activePageId);
+    if (active >= 0) paging.setPage(Math.floor(active / paging.size));
+  }, [activePageId, paging.size, index.project?.id]);
+  useEffect(() => { setMenu(null); }, [paging.page]);
 
   return <aside className={`paint-pages project-pages${sidebarCollapsed ? " collapsed" : ""}`}>
     <div className="project-sidebar-head">
@@ -235,27 +252,24 @@ export default function ProjectPagePanel({ index, activePageId, onOpenProjects, 
       </form>}
       <div className="paint-pages-controls project-pages-controls">
         <input className="paint-pages-search" type="search" placeholder="Slides suchen…" aria-label="Slides suchen"
-          value={query} onChange={(event) => setQuery(event.target.value)} />
+          value={query} onChange={(event) => { setQuery(event.target.value); paging.setPage(0); }} />
         <select className="paint-pages-sort" value={sort} onChange={(event) => setSort(event.target.value as typeof sort)} aria-label="Slides sortieren">
           <option value="manual">Manuell</option><option value="name">Name</option><option value="modified">Zuletzt geändert</option>
         </select>
       </div>
       <p className="project-slide-count">{pages.length} {pages.length === 1 ? "Slide" : "Slides"}</p>
     </>}
-    <div className="paint-pages-scroll project-pages-tree">
-      {sidebarCollapsed ? <ul className="project-slide-list">{pages.map(renderPage)}</ul> : <>
-        <div className={`project-root-row${selectedFolder === null ? " selected" : ""}${dropTarget === "root" ? " drop-into" : ""}`}
-          onDragOver={(event) => { if (canDrag && drag) { event.preventDefault(); setDropTarget("root"); } }}
-          onDrop={(event) => { event.preventDefault(); dropInto(null); }}>
-          <button onClick={() => setSelectedFolder(null)}><span aria-hidden="true">▤</span> Projekt
-            <small>{pages.filter((page) => !page.groupId).length}</small></button>
-        </div>
-        {children(null).map((folder) => renderFolder(folder, 0))}
-        <ul className="project-slide-list project-root-slides">{directPages(null).map(renderPage)}</ul>
-        {search && !pages.some((page) => page.name.toLocaleLowerCase().includes(search)) &&
-          !groups.some((group) => group.name.toLocaleLowerCase().includes(search)) &&
-          <p className="paint-pages-empty muted">Keine Slides gefunden.</p>}
-      </>}
+    {!sidebarCollapsed && <div className={`project-root-row${selectedFolder === null ? " selected" : ""}${dropTarget === "root" ? " drop-into" : ""}`}
+      onDragOver={(event) => { if (canDrag && drag) { event.preventDefault(); setDropTarget("root"); } }}
+      onDrop={(event) => { event.preventDefault(); dropInto(null); }}>
+      <button onClick={() => setSelectedFolder(null)}><span aria-hidden="true">▤</span> Projekt<small>{pages.filter((page) => !page.groupId).length}</small></button>
+    </div>}
+    <div className="paint-pages-scroll project-pages-tree" ref={paging.viewport}>
+      {paging.items.map((row) => <div className="project-tree-row" key={row.kind === "folder" ? `folder:${row.folder.id}` : row.page.id} style={{ paddingLeft: sidebarCollapsed ? 0 : Math.min(40, row.depth * 10) }}>
+        {row.kind === "folder" ? renderFolder(row.folder, row.depth) : <ul className="project-slide-list">{renderPage(row.page)}</ul>}
+      </div>)}
+      {search && rows.length === 0 && <p className="paint-pages-empty muted">Keine Slides gefunden.</p>}
     </div>
+    <PaginationBar page={paging.page} pages={paging.pages} onChange={paging.setPage} label="Slides" dragPaging={!!drag}/>
   </aside>;
 }

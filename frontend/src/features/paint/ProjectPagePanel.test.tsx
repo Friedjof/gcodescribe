@@ -4,6 +4,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import type { PageIndex } from "../../api";
 import ProjectPagePanel from "./ProjectPagePanel";
 
+vi.mock("../../i18n", () => ({ useI18n: () => ({ t: (key: string) => key }) }));
 afterEach(cleanup);
 
 it("shows the active project's folder tree and opens the project popup", () => {
@@ -54,4 +55,16 @@ it("opens slide and folder actions outside the clipped sidebar", () => {
   fireEvent.change(screen.getByRole("textbox", { name: "Ordnername" }), { target: { value: "Neu" } });
   fireEvent.click(screen.getByRole("button", { name: "Anlegen" }));
   expect(onCreateGroup).toHaveBeenCalledWith("Neu", "folder");
+});
+
+it("allows dragging a slide onto another page of the collection without losing the full order", () => {
+ const onReorder = vi.fn();
+ const index: PageIndex = { activeId: "s0", groups: [], order: Array.from({ length: 20 }, (_, n) => ({ id: `s${n}`, name: `Slide ${n}`, created: 0, modified: 0, objectCount: 0, plottedCount: 0 })) };
+ render(<ProjectPagePanel index={index} activePageId="s0" onOpenProjects={vi.fn()} onOpen={vi.fn()} onNew={vi.fn()} onRename={vi.fn()} onDuplicate={vi.fn()} onRemove={vi.fn()} onReorder={onReorder} onCreateGroup={vi.fn()} onRenameGroup={vi.fn()} onDeleteGroup={vi.fn()} onSetPageGroup={vi.fn()} onSetGroupParent={vi.fn()} onMove={vi.fn()} onToggleSidebar={vi.fn()}/>);
+ const source = screen.getByRole("button", { name: "Slide 0" }).closest("li")!;
+ fireEvent.dragStart(source);
+ fireEvent.dragEnter(screen.getByRole("button", { name: "paging.next" }));
+ const target = screen.getByRole("button", { name: "Slide 6" }).closest("li")!;
+ fireEvent.dragOver(target); fireEvent.drop(target);
+ expect(onReorder).toHaveBeenCalledWith(["s1", "s2", "s3", "s4", "s5", "s0", ...Array.from({ length: 14 }, (_, n) => `s${n + 6}`)]);
 });
