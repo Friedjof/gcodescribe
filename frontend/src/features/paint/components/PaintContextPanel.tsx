@@ -1,3 +1,5 @@
+import { useState } from "react";
+import EditorIcon from "../../../components/editor/EditorIcon";
 import type { SceneObject } from "../../../api";
 import Segmented from "../../../components/Segmented";
 import { useI18n } from "../../../i18n";
@@ -48,6 +50,7 @@ export default function PaintContextPanel({
   onFillStyleChange: (patch: Partial<FillStyle>) => void;
 }) {
   const { t } = useI18n();
+  const [panel, setPanel] = useState("content");
   const isFillTool = tool === "bucketFill" || tool === "areaFill";
   const selectedImage = selectedObjects.length === 1 && selectedObjects[0].type === "image"
     ? selectedObjects[0] : null;
@@ -60,6 +63,9 @@ export default function PaintContextPanel({
   ];
   const canTrim = !!blankMargins && Object.values(blankMargins).some((margin) => margin >= 0.05);
 
+  const hasContent = !!selectedText || !!selectedImage || !!pressureObject;
+  const showContent = tool !== "select" || panel === "content";
+  const showStyle = tool === "select" && (!hasContent || panel === "style");
   return (
     <aside className="paint-context-panel">
       <div className="ctx-header">
@@ -69,6 +75,7 @@ export default function PaintContextPanel({
         </div>
       </div>
 
+      {tool === "select" && hasSelection && hasContent && <nav className="ctx-property-tabs"><button type="button" aria-pressed={panel === "content"} onClick={() => setPanel("content")}><EditorIcon name={selectedText ? "text" : "image"} size={15}/>{t("paint.properties.content")}</button><button type="button" aria-pressed={panel === "style"} onClick={() => setPanel("style")}><EditorIcon name="draw" size={15}/>{t("paint.properties.style")}</button></nav>}
       <div className="ctx-body" key={tool}>
         {!["select", "erase", "eraseLine", "bucketFill", "areaFill"].includes(tool) && !selectedText && <div className="inspector-empty">
           <h4>{activeToolLabel}</h4><p>{t(tool === "text" ? "paint.hint.text" : "paint.hint.draw")}</p>
@@ -78,7 +85,7 @@ export default function PaintContextPanel({
           <h4>{t("interface.selectObject")}</h4><p>{t("interface.selectObjectHint")}</p>
           <p>{t("interface.insertHint")}</p>
         </div>}
-        {tool === "select" && pressureObject && (
+        {tool === "select" && showContent && pressureObject && (
           <div className="paint-tool-section paint-pressure">
             <h4>{t("paint.pressure.title")}</h4>
             <label className="paint-pressure-switch">
@@ -95,7 +102,7 @@ export default function PaintContextPanel({
           </div>
         )}
 
-        {tool === "select" && selectedImage && (
+        {tool === "select" && showContent && selectedImage && (
           <div className="paint-tool-section paint-image-trim">
             <h4>{t("paint.image.trimTitle")}</h4>
             <p>{t("paint.image.trimHint")}</p>
@@ -122,7 +129,7 @@ export default function PaintContextPanel({
           </div>
         )}
 
-        {(tool === "select" || tool === "text") && selectedText && (
+        {(tool === "select" || tool === "text") && showContent && selectedText && (
           <div className="paint-tool-section">
             <h4>{t("paint.section.text")}</h4>
             <PaintTextPanel key={selectedText.id}
@@ -136,7 +143,7 @@ export default function PaintContextPanel({
           </div>
         )}
 
-        {tool === "select" && hasSelection && (
+        {showStyle && hasSelection && (
           <PaintStylePanel key={selectedObjects.map(object => object.id).join(":")}
             hasSelection={hasSelection}
             selectedStyle={selectedStyle}

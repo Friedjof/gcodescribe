@@ -1,0 +1,7 @@
+.paint .paint-context-panel, .paint .ctx-body { overflow: hidden; }
+.paint .ctx-body { animation: none; }
+.ctx-property-tabs { flex: 0 0 auto; display: flex; gap: 4px; padding-bottom: 9px; margin-bottom: 8px; border-bottom: 1px solid var(--border); }
+.ctx-property-tabs button { flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 11px; min-height: 29px; border: 0; background: transparent; border-radius: 3px; padding: 5px; }
+.ctx-property-tabs button[aria-pressed="true"] { background: var(--active-bg); color: var(--accent); }
+.paint .paint-text-section .field { gap: 5px; }
+.paint .paint-text-section textarea { resize: none; }
