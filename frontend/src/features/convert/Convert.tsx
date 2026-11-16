@@ -1,7 +1,8 @@
+import { useJobPreview } from "./hooks/useJobPreview";
 import JobThumbnail from "./components/JobThumbnail";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { PrinterStatus } from "../../api/types/printer";
-import { api, type GcodePreview3D, type Job } from "../../api";
+import { api, type Job } from "../../api";
 import { useI18n } from "../../i18n";
 import Modal from "../../components/Modal";
 import Gcode3D from "../../components/Gcode3D";
@@ -86,7 +87,7 @@ export default function Convert({
 }) {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [err, setErr] = useState<string | null>(null);
-  const [preview, setPreview] = useState<{ name: string; data: GcodePreview3D | null }>();
+  const { preview, open: loadPreview, close: closePreview } = useJobPreview(visible, setErr);
   const [fullscreen, setFullscreen] = useState(false);
   const [onlyActiveProfile, setOnlyActiveProfile] = useState(false);
   const [query, setQuery] = useState("");
@@ -144,14 +145,7 @@ export default function Convert({
 
   const fail = (e: any) => setErr(String(e.message ?? e));
 
-  const openPreview = (name: string) => {
-    setErr(null);
-    setPreview({ name, data: null });
-    api.jobPreview3D(name).then((data) => setPreview({ name, data })).catch((e) => {
-      setErr(String(e.message ?? e));
-      setPreview(undefined);
-    });
-  };
+  const openPreview = (name: string) => { setErr(null); setFullscreen(false); loadPreview(name); };
 
   const send = async (name: string, start: boolean) => {
     try {
@@ -596,7 +590,7 @@ export default function Convert({
                       {t("convert.preview3d")} · <span className="muted">{preview.name}</span>
                     </>
                   }
-                  onClose={() => setPreview(undefined)}
+                  onClose={() => closePreview()}
                   footer={
                     <>
                       {(unfit || blocked) && (
@@ -614,7 +608,7 @@ export default function Convert({
                         title={blockTitle}
                         onClick={() => {
                           send(preview.name, false);
-                          setPreview(undefined);
+                          closePreview();
                         }}
                       >
                         {t("common.sendOcto")}

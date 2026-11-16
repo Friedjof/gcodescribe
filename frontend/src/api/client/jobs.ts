@@ -20,6 +20,6 @@ export const jobsClient = {
     req<Job>(`/api/testpattern/${name}${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ""}`, { method: "POST" }),
   jobPreview: (filename: string, signal?: AbortSignal) =>
     req<GcodePreview>(`/api/jobs/${encodeURIComponent(filename)}/preview`, { signal }),
-  jobPreview3D: (filename: string) =>
-    req<GcodePreview3D>(`/api/jobs/${encodeURIComponent(filename)}/preview3d`),
+  jobPreview3D: (filename: string, signal?: AbortSignal) =>
+    req<GcodePreview3D>(`/api/jobs/${encodeURIComponent(filename)}/preview3d`, { signal }),
 };
