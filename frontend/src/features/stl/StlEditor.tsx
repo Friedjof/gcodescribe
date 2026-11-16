@@ -1,3 +1,4 @@
+import PagedControls from "../../components/paging/PagedControls";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Calibration, PageColoring } from "../../api";
 import { useI18n } from "../../i18n";
@@ -190,11 +191,11 @@ export default function StlEditor({
             {t("common.cancel")}
           </button>
           {onSaveGallery && (
-            <button type="button" className="ghost" disabled={!result || saving} onClick={save}>
+            <button type="button" className="ghost" disabled={!result || saving || computing || busy} onClick={save}>
               {saving ? t("stl.saving") : t("stl.saveGallery")}
             </button>
           )}
-          <button type="button" className="primary" disabled={!template || busy} onClick={insert}>
+          <button type="button" className="primary" disabled={!template || busy || computing || saving} onClick={insert}>
             {busy ? t("games.creatingPage") : t("stl.insert")}
           </button>
         </>
@@ -225,6 +226,7 @@ export default function StlEditor({
                 <input ref={fileInputRef} type="file" accept=".stl" hidden onChange={(e) => pickFile(e.target.files?.[0])} />
               </div>
 
+              <PagedControls size={5}>
               <div className="stl-presets">
                 {(["front", "back", "left", "right", "top", "iso"] as const).map((p) => (
                   <button key={p} type="button" className="ghost" onClick={() => applyPreset(p)}>
@@ -329,6 +331,7 @@ export default function StlEditor({
                   <ColorPicker value={params.colorHidden} onChange={(c) => set({ colorHidden: c })} />
                 </label>
               )}
+              </PagedControls>
             </div>
           )}
         </section>

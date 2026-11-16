@@ -1,0 +1,6 @@
+.stl-side-pane { overflow: hidden; }
+.stl-controls { height: 100%; min-height: 0; }
+.stl-controls .paged-controls { min-height: 0; }
+.stl-controls .paged-controls-fields { gap: 12px; }
+.stl-controls .stl-field, .stl-controls .stl-toggle, .stl-controls .stl-range { font-size: 11px; }
+.stl-controls .stl-field select, .stl-controls button { font-size: 11px; min-height: 27px; padding: 4px 6px; border-radius: 3px; }
