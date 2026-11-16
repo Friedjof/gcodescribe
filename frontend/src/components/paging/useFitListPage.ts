@@ -4,11 +4,13 @@ export function useFitListPage<T>(
   items: readonly T[],
   rowHeight: number,
   initialSize = 8,
+  active = true,
 ) {
   const viewport = useRef<HTMLDivElement>(null),
     [size, setSize] = useState(initialSize),
     [requested, setPage] = useState(0);
   useLayoutEffect(() => {
+    if (!active) return;
     const element = viewport.current;
     if (!element) return;
     const measure = () => {
@@ -22,7 +24,7 @@ export function useFitListPage<T>(
         : new ResizeObserver(measure);
     observer?.observe(element);
     return () => observer?.disconnect();
-  }, [rowHeight]);
+  }, [rowHeight, active]);
   const pages = Math.max(1, Math.ceil(items.length / size)),
     page = Math.min(requested, pages - 1);
   return {

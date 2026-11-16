@@ -81,6 +81,7 @@ export default function Segmented<T extends string | number>({
           key={String(o.value)}
           type="button"
           data-active={value === o.value}
+          aria-pressed={value === o.value}
           className={value === o.value ? "active" : ""}
           title={o.title}
           aria-label={o.title}

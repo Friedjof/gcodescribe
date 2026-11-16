@@ -1,4 +1,5 @@
 const PATHS = {
+  list: "M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01",
   search: "M21 21l-6-6M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0",
   dice: "M3 3h18v18H3V3ZM7 7h.01M17 7h.01M12 12h.01M7 17h.01M17 17h.01",
   previous: "m15 5-7 7 7 7", next: "m9 5 7 7-7 7", map: "m3 5 6-2 6 2 6-2v16l-6 2-6-2-6 2V5ZM9 3v16M15 5v16",

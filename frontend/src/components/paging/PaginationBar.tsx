@@ -5,11 +5,13 @@ export default function PaginationBar({
   pages,
   onChange,
   label,
+  dragPaging = false,
 }: {
   page: number;
   pages: number;
   onChange: (page: number) => void;
   label: string;
+  dragPaging?: boolean;
 }) {
   const { t } = useI18n();
   return (
@@ -20,6 +22,8 @@ export default function PaginationBar({
         title={t("paging.previous")}
         disabled={page <= 0}
         onClick={() => onChange(page - 1)}
+        onDragEnter={(event) => { if (dragPaging && page > 0) { event.preventDefault(); onChange(page - 1); } }}
+        onDragOver={(event) => { if (dragPaging) event.preventDefault(); }}
       >
         <EditorIcon name="previous" size={15} />
       </button>
@@ -32,6 +36,8 @@ export default function PaginationBar({
         title={t("paging.next")}
         disabled={page >= pages - 1}
         onClick={() => onChange(page + 1)}
+        onDragEnter={(event) => { if (dragPaging && page < pages - 1) { event.preventDefault(); onChange(page + 1); } }}
+        onDragOver={(event) => { if (dragPaging) event.preventDefault(); }}
       >
         <EditorIcon name="next" size={15} />
       </button>

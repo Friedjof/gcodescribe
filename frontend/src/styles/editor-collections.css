@@ -1,0 +1,4 @@
+.paged-grid { flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.paged-grid-viewport { flex: 1; min-height: 0; overflow: hidden; }
+.paged-grid-items { display: grid; gap: 10px; }
+.paged-grid-cell { min-height: 0; min-width: 0; display: flex; }

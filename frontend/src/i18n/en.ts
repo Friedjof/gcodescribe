@@ -1,4 +1,10 @@
 const en: Record<string, string> = {
+  "jobs.viewList": "List view",
+  "jobs.viewTiles": "Tile view",
+
+  "ai.tab.source": "Subject",
+  "ai.tab.style": "Appearance",
+
   "paint.properties.content": "Content",
   "paint.properties.style": "Appearance",
 
