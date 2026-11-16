@@ -69,7 +69,7 @@ export function preparePath(lines: Pt[][]): Promise<string> {
   return job;
 }
 
-/** Display-only sample, bounded even when an image contains thousands of short strokes. */
+/** Initial loading sample. Navigation must reuse the complete cached path instead. */
 export function previewPath(lines: Pt[][]): string {
   let result = previews.get(lines);
   if (result !== undefined) return result;

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { cachedGeometryPath, toMultiPath, type Pt } from "../lib/geometry";
 import { preparePath, previewPath } from "../lib/geometryTasks";
-export function useGeometryPath(lines: Pt[][], interactive = false, active = true, sampled = false) {
+export function useGeometryPath(lines: Pt[][], interactive = false, active = true) {
   const [, invalidate] = useState(0);
   const [failed, setFailed] = useState<Pt[][]>();
   useEffect(() => {
@@ -11,6 +11,11 @@ export function useGeometryPath(lines: Pt[][], interactive = false, active = tru
     }
     return () => { alive = false; };
   }, [lines, active]);
-  if (failed === lines && !interactive && !sampled && active) return toMultiPath(lines);
-  return (interactive || sampled ? undefined : cachedGeometryPath(lines)) ?? previewPath(lines);
+  // Navigation must never replace a prepared drawing with a subset of its lines.
+  const prepared = cachedGeometryPath(lines);
+  if (prepared !== undefined) return prepared;
+  // If a gesture starts before the worker finishes, prepare the complete path
+  // once. toMultiPath caches it, so subsequent wheel/pan frames only reuse it.
+  if (active && (interactive || failed === lines)) return toMultiPath(lines);
+  return previewPath(lines);
 }

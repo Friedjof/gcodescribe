@@ -8,7 +8,7 @@ import { cloneObjects } from "./sceneObjects";
 import { trimHistory } from "./history";
 import type { SceneObject } from "../../../api";
 
-it.each([20000, 100000, 400000])("keeps %i source points exact while displaying a bounded interaction path", (count) => {
+it.each([20000, 100000, 400000])("keeps %i source points exact while displaying a bounded initial loading path", (count) => {
   const lines: Pt[][] = Array.from({ length: 100 }, (_, row) => Array.from({ length: count / 100 }, (_, i) => [i * .123456789, row + Math.sin(i)]));
   const packed = packLines(lines);
   expect(unpackLines(packed)).toEqual(lines);

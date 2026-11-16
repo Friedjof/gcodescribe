@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { Calibration, Page } from "../../api";
-import { objectWorldBounds, type Transform } from "./lib/geometry";
+import { objectWorldBounds, toMultiPath, type Pt, type Transform } from "./lib/geometry";
 import PaintCanvas from "./PaintCanvas";
 vi.mock("../../i18n", () => ({ useI18n: () => ({ lang: "en", t: (key: string) => key }) }));
 const lines: [number, number][][] = [[[-10, -5], [10, -5], [10, 5], [-10, 5], [-10, -5]]];
@@ -120,6 +120,31 @@ it("keeps handle targets in screen pixels through zoom and window resize", () =>
   vi.mocked(view.svg.getBoundingClientRect).mockReturnValue({ x: 0, y: 0, width: 400, height: 300, top: 0, left: 0, right: 400, bottom: 300, toJSON: () => ({}) });
   fireEvent.resize(window);
   expect(targetWidth() / viewWidth() * 400).toBeCloseTo(before * 800);
+});
+it.each(["many strokes", "detailed curves"])("retains every path during continuous wheel zoom and panning with %s", kind => {
+  const geometry: Pt[][] = kind === "many strokes"
+    ? Array.from({ length: 2400 }, (_, row) => [[10, row / 40], [90, row / 40]])
+    : Array.from({ length: 120 }, (_, row) => Array.from({ length: 500 }, (_, i) => [i / 6, row / 2 + Math.sin(i / 8) / 8]));
+  const current = page(); current.objects[0].cachedPolylines = geometry;
+  const source = JSON.stringify(current);
+  const complete = toMultiPath(geometry);
+  const view = setup(current);
+  const ink = () => view.svg.querySelector('path[stroke="var(--ink)"]')?.getAttribute("d");
+  expect(ink()).toBe(complete);
+  for (const deltaY of [-120, -120, -120, 120, 120]) {
+    fireEvent.wheel(view.svg, { deltaY, clientX: 400, clientY: 300 });
+    act(() => { vi.advanceTimersByTime(30); });
+    expect(ink()).toBe(complete);
+  }
+  act(() => { vi.advanceTimersByTime(150); });
+  expect(ink()).toBe(complete);
+  fireEvent.pointerDown(view.svg, { clientX: 400, clientY: 300, button: 2, buttons: 2, pointerId: 1 });
+  view.move(430, 320);
+  expect(ink()).toBe(complete);
+  fireEvent.pointerUp(view.svg, { pointerId: 1 });
+  expect(JSON.stringify(current)).toBe(source);
+  expect(view.props.onUpdateMany).not.toHaveBeenCalled();
+  expect(view.props.onEditStart).not.toHaveBeenCalled();
 });
 it("does not steal Space from focused toolbar buttons", () => {
   const view = setup();

@@ -23,8 +23,9 @@ const ObjectView = memo(function ObjectView({ obj, selected, stroke, interactive
   const pressurePaths = useMemo(() => obj.data?.pressureEnabled && !large && active && !interactive
     ? pressurePreviewPaths(lines, obj.data?.cachedSegmentPressures ?? obj.data?.baseSegmentPressures) : undefined,
   [obj.data?.pressureEnabled, obj.data?.cachedSegmentPressures, obj.data?.baseSegmentPressures, lines, large, active, interactive]);
-  const { image: raster, failed } = useGeometryRaster(lines, stroke / scale, rasterEligible && active && !interactive);
-  const d = useGeometryPath(lines, interactive, active, rasterEligible && !failed);
+  const { image: raster } = useGeometryRaster(lines, stroke / scale, rasterEligible && active && !interactive);
+  // Bitmap refreshes and navigation share the complete vector fallback.
+  const d = useGeometryPath(lines, interactive, active);
   const maskId = useId();
   return <g transform={objTransform(t)} opacity={obj.plotted ? 0.25 : 1} pointerEvents="none">
     {selected && pageBounds &&
