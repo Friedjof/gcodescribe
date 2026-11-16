@@ -1,3 +1,5 @@
+import { targetBody, targetQuery, type CalibrationTarget } from "../calibrationTarget";
+import type { PaperState } from "../types/jobs";
 import { req } from "./req";
 import type {
   Calibration,
@@ -7,37 +9,38 @@ import type {
   PositionKind,
 } from "../types/calibration";
 
-const projectQuery = (projectId?: string) => projectId ? `?project_id=${encodeURIComponent(projectId)}` : "";
 
 export const calibrationClient = {
-  getCalibration: (projectId?: string) => req<Calibration>(`/api/calibration${projectQuery(projectId)}`),
-  saveCalibration: (c: Partial<Calibration>, projectId?: string) =>
-    req<Calibration>(`/api/calibration${projectQuery(projectId)}`, {
+  getCalibration: (projectId?: CalibrationTarget) => req<Calibration>(`/api/calibration${targetQuery(projectId)}`),
+  saveCalibration: (c: Partial<Calibration>, projectId?: CalibrationTarget) =>
+    req<Calibration>(`/api/calibration${targetQuery(projectId)}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(c),
     }),
-  importCalibration: (file: File) => {
+  importCalibration: (file: File, target?: CalibrationTarget) => {
     const fd = new FormData();
     fd.append("file", file);
-    return req<Calibration>("/api/calibration/import", { method: "POST", body: fd });
+    return req<Calibration>(`/api/calibration/import${targetQuery(target)}`, { method: "POST", body: fd });
   },
-  penFromPosition: (which: "up" | "down", projectId?: string) =>
+  penFromPosition: (which: "up" | "down", projectId?: CalibrationTarget) =>
     req<Calibration>("/api/calibration/pen-from-position", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ which, projectId }),
+      body: JSON.stringify({ which, ...targetBody(projectId) }),
     }),
-  positionFromHead: (kind: PositionKind, projectId?: string) =>
+  positionFromHead: (kind: PositionKind, projectId?: CalibrationTarget) =>
     req<Calibration>("/api/calibration/position-from-head", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ kind, projectId }),
+      body: JSON.stringify({ kind, ...targetBody(projectId) }),
     }),
 
   listProfiles: (includeArchived = true) =>
     req<CalibrationProfileSummary[]>(`/api/profiles?include_archived=${includeArchived}`),
   getProfile: (id: string, signal?: AbortSignal) => req<CalibrationProfile>(`/api/profiles/${id}`, { signal }),
+  profileCalibration: (id: string, signal?: AbortSignal) =>
+    req<{ profile: CalibrationProfile; paper: PaperState }>(`/api/profiles/${encodeURIComponent(id)}/calibration-state`, { signal }),
   activeProfile: (signal?: AbortSignal) => req<CalibrationProfile>("/api/profiles/active", { signal }),
   createProfile: (name?: string, calibration?: Partial<Calibration>) =>
     req<CalibrationProfile>("/api/profiles", {

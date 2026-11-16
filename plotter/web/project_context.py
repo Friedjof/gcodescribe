@@ -20,7 +20,19 @@ def active_project_profile(project_id: str, profile_id: str | None = None) -> di
 def project_calibration(
     project_id: str | None, profile_id: str | None = None
 ) -> Calibration | None:
-    if project_id is None:
+    if project_id is None and profile_id is None:
         return None
-    profile = active_project_profile(project_id, profile_id)
+    profile = calibration_profile(project_id, profile_id, motion=True)
     return profile_service().calibration(profile["id"])
+
+
+def calibration_profile(
+    project_id: str | None, profile_id: str | None = None, *, motion: bool = False
+) -> dict:
+    """Resolve editor requests without activating a profile or rebinding a project."""
+    if project_id is not None:
+        return active_project_profile(project_id, profile_id)
+    profile = profile_service().get(profile_id) if profile_id else profile_service().active()
+    if motion and (profile["archived"] or profile_service().active()["id"] != profile["id"]):
+        raise HTTPException(409, "Zum Bewegen bitte zuerst dieses Profil aktivieren.")
+    return profile

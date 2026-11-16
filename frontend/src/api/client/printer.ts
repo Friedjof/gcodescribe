@@ -1,3 +1,4 @@
+import { targetBody, type CalibrationTarget } from "../calibrationTarget";
 import { req } from "./req";
 import type { Position, SerialPortCandidate } from "../types/jobs";
 import type { PositionKind } from "../types/calibration";
@@ -41,23 +42,23 @@ export const printerClient = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ command }),
     }),
-  jog: (x: number, y: number, z: number, opts?: { speed?: number; limit?: "bed" | "plot"; projectId?: string }) =>
+  jog: (x: number, y: number, z: number, opts?: { speed?: number; limit?: "bed" | "plot"; projectId?: string; profileId?: string }) =>
     req("/api/printer/jog", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ x, y, z, speed: opts?.speed, limit: opts?.limit ?? "bed", projectId: opts?.projectId }),
+      body: JSON.stringify({ x, y, z, speed: opts?.speed, limit: opts?.limit ?? "bed", projectId: opts?.projectId, profileId: opts?.profileId }),
     }),
-  home: (axes?: string[], projectId?: string) =>
+  home: (axes?: string[], projectId?: CalibrationTarget) =>
     req("/api/printer/home", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ axes, projectId }),
+      body: JSON.stringify({ axes, ...targetBody(projectId) }),
     }),
-  pen: (down: boolean, projectId?: string) =>
+  pen: (down: boolean, projectId?: CalibrationTarget) =>
     req<{ ok: boolean; z: number; position: Position }>("/api/printer/pen", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ down, projectId }),
+      body: JSON.stringify({ down, ...targetBody(projectId) }),
     }),
   speedTest: (profileId: string) =>
     req<{ ok: boolean; size: number; travelFeed: number; position: Position }>("/api/printer/speed-test", {
@@ -66,21 +67,21 @@ export const printerClient = {
       body: JSON.stringify({ profile_id: profileId }),
     }),
   position: (signal?: AbortSignal) => req<Position>("/api/position", { signal }),
-  move: (x: number, y: number, projectId?: string) =>
+  move: (x: number, y: number, projectId?: CalibrationTarget) =>
     req<{ ok: boolean; position: Position }>("/api/printer/move", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ x, y, projectId }),
+      body: JSON.stringify({ x, y, ...targetBody(projectId) }),
     }),
   moveToCalibration: () =>
     req<{ ok: boolean; position: Position }>("/api/printer/move-to-calibration", {
       method: "POST",
     }),
-  homeAndMoveToPosition: (kind: PositionKind, projectId?: string) =>
+  homeAndMoveToPosition: (kind: PositionKind, projectId?: CalibrationTarget) =>
     req<{ ok: boolean; position: Position }>("/api/printer/home-and-move-to-position", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ kind, projectId }),
+      body: JSON.stringify({ kind, ...targetBody(projectId) }),
     }),
   calibrationHeight: (profileId: string, offset: number, projectId?: string) =>
     req<{ ok: boolean; position: Position }>("/api/printer/calibration-height", {
@@ -88,16 +89,16 @@ export const printerClient = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ profile_id: profileId, offset, project_id: projectId }),
     }),
-  moveToPosition: (kind: PositionKind, target?: { x: number; y: number }, projectId?: string) =>
+  moveToPosition: (kind: PositionKind, target?: { x: number; y: number }, projectId?: CalibrationTarget) =>
     req<{ ok: boolean; position: Position }>("/api/printer/move-to-position", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ kind, ...target, projectId }),
+      body: JSON.stringify({ kind, ...target, ...targetBody(projectId) }),
     }),
-  moveToCorner: (corner: string, target: "paper" | "plot" = "paper", projectId?: string) =>
+  moveToCorner: (corner: string, target: "paper" | "plot" = "paper", projectId?: CalibrationTarget) =>
     req<{ ok: boolean; position: Position }>("/api/printer/move-to-corner", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ corner, target, projectId }),
+      body: JSON.stringify({ corner, target, ...targetBody(projectId) }),
     }),
 };

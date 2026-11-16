@@ -177,7 +177,9 @@ def _validated_job_calibration(path: Path) -> Calibration:
         _refuse_print(path.name, "corrupt-meta", f"Drucken verweigert: {meta_issue}")
     source = (meta or {}).get("source") or {}
     if source.get("project_id") and source.get("kind") in (
-        "paint_page", "paint_coloring", "testpattern",
+        "paint_page",
+        "paint_coloring",
+        "testpattern",
     ):
         try:
             cal = _project_job_calibration(meta)
@@ -190,7 +192,8 @@ def _validated_job_calibration(path: Path) -> Calibration:
         cal = Calibration.from_dict(active["calibration"])
     try:
         GcodeSafetyChecker(cal, allow_pressure=job_uses_pressure(meta)).check(
-            path.read_text(), name=path.name,
+            path.read_text(),
+            name=path.name,
         )
     except SafetyViolation as exc:
         log.warning("Print blocked (safety): %s — %s", path.name, exc)
@@ -222,14 +225,16 @@ def octo_job(req: JobCommand) -> dict:
         filename = selected.get("name") or selected.get("path")
         if not isinstance(filename, str) or not filename.strip():
             _refuse_print(
-                "unbekannt", "unknown-selected-job",
+                "unbekannt",
+                "unknown-selected-job",
                 "Der ausgewählte Druckjob kann nicht geprüft werden. "
                 "Bitte im Designer erneut auf Plot klicken und den Job neu senden.",
             )
         path = jobs_dir() / Path(filename).name
         if not path.is_file():
             _refuse_print(
-                path.name, "missing-local-job",
+                path.name,
+                "missing-local-job",
                 "Die lokale G-Code-Datei des ausgewählten Druckjobs fehlt. "
                 "Bitte im Designer erneut auf Plot klicken und den Job neu senden.",
             )
@@ -246,6 +251,7 @@ class JogRequest(BaseModel):
     speed: int | None = None
     limit: str = "bed"  # bed | plot
     projectId: str | None = None
+    profileId: str | None = None
 
 
 @router.post("/printer/jog")
@@ -253,8 +259,12 @@ def octo_jog(req: JogRequest) -> dict:
     return {
         "ok": True,
         "position": controller().jog(
-            req.x, req.y, req.z, req.speed, limit=req.limit,
-            cal=project_calibration(req.projectId),
+            req.x,
+            req.y,
+            req.z,
+            req.speed,
+            limit=req.limit,
+            cal=project_calibration(req.projectId, req.profileId),
         ),
     }
 
@@ -275,13 +285,16 @@ def speed_test(req: SpeedTestRequest) -> dict:
 class HomeRequest(BaseModel):
     axes: list[str] | None = None
     projectId: str | None = None
+    profileId: str | None = None
 
 
 @router.post("/printer/home")
 def octo_home(req: HomeRequest) -> dict:
     return {
         "ok": True,
-        "position": controller().home(req.axes, cal=project_calibration(req.projectId)),
+        "position": controller().home(
+            req.axes, cal=project_calibration(req.projectId, req.profileId)
+        ),
     }
 
 
@@ -291,14 +304,18 @@ class MoveRequest(BaseModel):
     pen_up_first: bool = True  # lift the pen before travelling
     limit: str = "bed"  # bed | plot
     projectId: str | None = None
+    profileId: str | None = None
 
 
 @router.post("/printer/move")
 def octo_move(req: MoveRequest) -> dict:
     """Absolute XY move (used by click-to-move in the live view)."""
     position = controller().move_to(
-        req.x, req.y, pen_up_first=req.pen_up_first, limit=req.limit,
-        cal=project_calibration(req.projectId),
+        req.x,
+        req.y,
+        pen_up_first=req.pen_up_first,
+        limit=req.limit,
+        cal=project_calibration(req.projectId, req.profileId),
     )
     return {"ok": True, "position": position}
 
@@ -317,6 +334,7 @@ class PositionMoveRequest(BaseModel):
     x: float | None = None
     y: float | None = None
     projectId: str | None = None
+    profileId: str | None = None
 
 
 @router.post("/printer/move-to-position")
@@ -324,7 +342,7 @@ def move_to_position(req: PositionMoveRequest) -> dict:
     return {
         "ok": True,
         "position": controller().move_to_position(
-            req.kind, req.x, req.y, cal=project_calibration(req.projectId)
+            req.kind, req.x, req.y, cal=project_calibration(req.projectId, req.profileId)
         ),
     }
 
@@ -332,6 +350,7 @@ def move_to_position(req: PositionMoveRequest) -> dict:
 class PositionVisitRequest(BaseModel):
     kind: PositionKind
     projectId: str | None = None
+    profileId: str | None = None
 
 
 def _active_project_calibration(project_id: str, profile_id: str | None = None) -> Calibration:
@@ -340,7 +359,7 @@ def _active_project_calibration(project_id: str, profile_id: str | None = None) 
 
 @router.post("/printer/home-and-move-to-position")
 def home_and_move_to_position(req: PositionVisitRequest) -> dict:
-    cal = _active_project_calibration(req.projectId) if req.projectId else None
+    cal = project_calibration(req.projectId, req.profileId)
     return {"ok": True, "position": controller().home_and_move_to_position(req.kind, cal=cal)}
 
 
@@ -366,13 +385,14 @@ class CornerMoveRequest(BaseModel):
     corner: str  # bl | br | tr | tl
     target: str = "paper"  # paper | plot
     projectId: str | None = None
+    profileId: str | None = None
 
 
 @router.post("/printer/move-to-corner")
 def octo_move_to_corner(req: CornerMoveRequest) -> dict:
     """Drive to a corner; the pen is always lifted before the XY travel."""
     position = controller().move_to_corner(
-        req.corner, target=req.target, cal=project_calibration(req.projectId)
+        req.corner, target=req.target, cal=project_calibration(req.projectId, req.profileId)
     )
     return {"ok": True, "position": position}
 
@@ -380,12 +400,13 @@ def octo_move_to_corner(req: CornerMoveRequest) -> dict:
 class PenRequest(BaseModel):
     down: bool
     projectId: str | None = None
+    profileId: str | None = None
 
 
 @router.post("/printer/pen")
 def octo_pen(req: PenRequest) -> dict:
     """Raise or lower the pen using the calibrated Z heights."""
-    result = controller().pen(req.down, cal=project_calibration(req.projectId))
+    result = controller().pen(req.down, cal=project_calibration(req.projectId, req.profileId))
     return {"ok": True, **result}
 
 

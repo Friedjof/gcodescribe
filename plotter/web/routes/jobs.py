@@ -26,7 +26,7 @@ from plotter.gcode.preview import parse_gcode, parse_gcode_3d
 from plotter.gcode.profile import TEST_PATTERNS, test_pattern
 from plotter.gcode.safety import GcodeSafetyChecker, SafetyViolation
 from plotter.web.deps import profile_service
-from plotter.web.project_context import active_project_profile
+from plotter.web.project_context import calibration_profile
 
 from ...services.profiles import profile_meta
 
@@ -78,7 +78,9 @@ def _job_info(
             info.issue = meta_issue
         source = info.source or {}
         if source.get("project_id") and source.get("kind") in (
-            "paint_page", "paint_coloring", "testpattern",
+            "paint_page",
+            "paint_coloring",
+            "testpattern",
         ):
             from .printer import ProjectJobError, _project_job_calibration
 
@@ -86,26 +88,29 @@ def _job_info(
             try:
                 effective_cal = _project_job_calibration(meta)
                 info.profile = JobProfileStatus(
-                    id=ref.get("id"), name=ref.get("name"),
-                    fingerprint=ref.get("fingerprint"), matchesActive=True,
+                    id=ref.get("id"),
+                    name=ref.get("name"),
+                    fingerprint=ref.get("fingerprint"),
+                    matchesActive=True,
                 )
             except ProjectJobError as exc:
                 info.profile = JobProfileStatus(
-                    id=ref.get("id"), name=ref.get("name"),
-                    fingerprint=ref.get("fingerprint"), matchesActive=False,
+                    id=ref.get("id"),
+                    name=ref.get("name"),
+                    fingerprint=ref.get("fingerprint"),
+                    matchesActive=False,
                 )
                 info.fits = False
                 info.issue = str(exc)
         else:
-            info.profile = JobProfileStatus(
-                **job_profile_status(meta, active_profile, profiles)
-            )
+            info.profile = JobProfileStatus(**job_profile_status(meta, active_profile, profiles))
     if effective_cal is not None and info.fits is not False:
         try:
             if meta is None:
                 meta, _ = read_job_meta_checked(path)
             GcodeSafetyChecker(effective_cal, allow_pressure=job_uses_pressure(meta)).check(
-                path.read_text(), name=path.name,
+                path.read_text(),
+                name=path.name,
             )
             info.fits = True
         except SafetyViolation as exc:
@@ -235,19 +240,23 @@ def job_preview_3d(filename: str) -> dict:
 
 
 @router.post("/testpattern/{name}")
-def make_test_pattern(name: str, project_id: str | None = None) -> dict:
+def make_test_pattern(
+    name: str, project_id: str | None = None, profile_id: str | None = None
+) -> dict:
     if name not in TEST_PATTERNS:
         raise HTTPException(404, f"Unbekanntes Test-Pattern: {name}")
     snapshot = None
-    if project_id is None:
+    if project_id is None and profile_id is None:
         cal, active = _active()
     else:
-        profile = active_project_profile(project_id)
+        profile = calibration_profile(project_id, profile_id)
         cal = Calibration.from_dict(profile["calibration"])
         active = profile_meta(profile)
         snapshot = {
-            "profileId": profile["id"], "profileName": profile["name"],
-            "fingerprint": profile["fingerprint"], "calibration": profile["calibration"],
+            "profileId": profile["id"],
+            "profileName": profile["name"],
+            "fingerprint": profile["fingerprint"],
+            "calibration": profile["calibration"],
             "capturedAt": time.time(),
         }
     gcode = test_pattern(name, cal)

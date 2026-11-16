@@ -23,16 +23,34 @@ def project_context(workspace, cal, monkeypatch):
 
     profiles = ProfileService()
     project = get_document_store().create_project("Paper project")["project"]
-    profiles.update(project["profileId"], calibration={
-        "origin_x": 80, "origin_y": 90, "plot_width": 100, "plot_height": 80,
-        "paper_corners": {"bl": [80, 90], "tr": [180, 170]}, "paper_margin": 0,
-        "pen_down_z": 2, "pen_up_z": 10, "z_feed": 6,
-        "calibration_x": 120, "calibration_y": 130,
-    })
-    global_profile = profiles.create("Unrelated global profile", calibration={
-        "origin_x": 10, "origin_y": 20, "plot_width": 40, "plot_height": 50,
-        "pen_down_z": 1, "pen_up_z": 4, "z_feed": 12,
-    })
+    profiles.update(
+        project["profileId"],
+        calibration={
+            "origin_x": 80,
+            "origin_y": 90,
+            "plot_width": 100,
+            "plot_height": 80,
+            "paper_corners": {"bl": [80, 90], "tr": [180, 170]},
+            "paper_margin": 0,
+            "pen_down_z": 2,
+            "pen_up_z": 10,
+            "z_feed": 6,
+            "calibration_x": 120,
+            "calibration_y": 130,
+        },
+    )
+    global_profile = profiles.create(
+        "Unrelated global profile",
+        calibration={
+            "origin_x": 10,
+            "origin_y": 20,
+            "plot_width": 40,
+            "plot_height": 50,
+            "pen_down_z": 1,
+            "pen_up_z": 4,
+            "z_feed": 12,
+        },
+    )
     profiles.activate(global_profile["id"])
     tracker = PositionTracker(FileStateStore(workspace / "test-position"))
     tracker.home(None)
@@ -41,9 +59,14 @@ def project_context(workspace, cal, monkeypatch):
     controller = PrinterController(client=backend, tracker=tracker)
     monkeypatch.setattr(printer, "controller", lambda: controller)
     monkeypatch.setattr(calibration, "printer_controller", lambda: controller)
-    monkeypatch.setattr(paper, "paper_service", lambda profile_id=None: PaperService(
-        tracker=tracker, profile_id=profile_id,
-    ))
+    monkeypatch.setattr(
+        paper,
+        "paper_service",
+        lambda profile_id=None: PaperService(
+            tracker=tracker,
+            profile_id=profile_id,
+        ),
+    )
     yield TestClient(app), project, profiles, controller
     assert profiles.active_id() == global_profile["id"]
     assert profiles.get(global_profile["id"])["calibration"] == global_profile["calibration"]
@@ -72,15 +95,20 @@ def test_project_paper_edits_preserve_automatic_and_partial_position_defaults(
     client, project, profiles, _ = project_context
     profiles.update(project["profileId"], calibration={"park_x": park_x})
     params = {"project_id": project["id"]}
-    assert client.put(
-        "/api/paper/corner/bl", params=params, json={"x": 82, "y": 91}
-    ).status_code == 200
+    assert (
+        client.put("/api/paper/corner/bl", params=params, json={"x": 82, "y": 91}).status_code
+        == 200
+    )
     saved = profiles.get(project["profileId"])["calibration"]
     assert saved["defined_positions"] == ["calibration"]
-    assert client.put(
-        "/api/calibration", params=params,
-        json={"bed_width": 300, "bed_height": 310, "pen_up_z": 12},
-    ).status_code == 200
+    assert (
+        client.put(
+            "/api/calibration",
+            params=params,
+            json={"bed_width": 300, "bed_height": 310, "pen_up_z": 12},
+        ).status_code
+        == 200
+    )
     saved = profiles.get(project["profileId"])["calibration"]
     assert saved["defined_positions"] == ["calibration"]
     assert saved["park_x"] == (150 if park_x is None else park_x)
@@ -94,21 +122,28 @@ def test_project_paper_edits_only_persist_its_profile(project_context):
     profile_id = project["profileId"]
     assert client.put("/api/calibration", params=params, json={"origin_x": 82}).status_code == 200
     assert profiles.get(profile_id)["calibration"]["origin_x"] == 82
-    assert client.put(
-        "/api/paper/corner/bl", params=params, json={"x": 84, "y": 92}
-    ).status_code == 200
+    assert (
+        client.put("/api/paper/corner/bl", params=params, json={"x": 84, "y": 92}).status_code
+        == 200
+    )
     controller.tracker.set_axes(x=182, y=174)
     assert client.post("/api/paper/corner", params=params, json={"corner": "tr"}).status_code == 200
     result = client.post("/api/paper/apply", params=params, json={"margin": 2, "from_paper": True})
     assert result.status_code == 200
     saved = profiles.get(profile_id)["calibration"]
     assert (saved["origin_x"], saved["origin_y"], saved["plot_width"], saved["plot_height"]) == (
-        86, 94, 94, 78,
+        86,
+        94,
+        94,
+        78,
     )
     obstacle = {"x": 140, "y": 140, "w": 4, "h": 4}
-    assert client.put(
-        "/api/paper/obstacles", params=params, json={"obstacles": [obstacle]}
-    ).status_code == 200
+    assert (
+        client.put(
+            "/api/paper/obstacles", params=params, json={"obstacles": [obstacle]}
+        ).status_code
+        == 200
+    )
     assert profiles.get(profile_id)["calibration"]["obstacles"] == [obstacle]
     assert client.delete("/api/paper/corner/bl", params=params).status_code == 200
     assert "bl" not in profiles.get(profile_id)["calibration"]["paper_corners"]
@@ -120,15 +155,23 @@ def test_project_paper_edits_only_persist_its_profile(project_context):
 def test_project_pen_and_special_position_captures_only_update_its_profile(project_context):
     client, project, profiles, controller = project_context
     controller.tracker.set_axes(x=123, y=134, z=3)
-    captured = client.post("/api/calibration/position-from-head", json={
-        "kind": "calibration", "projectId": project["id"],
-    })
+    captured = client.post(
+        "/api/calibration/position-from-head",
+        json={
+            "kind": "calibration",
+            "projectId": project["id"],
+        },
+    )
     assert captured.status_code == 200
     assert captured.json()["calibration_x"] == 123
     assert captured.json()["calibration_y"] == 134
-    captured = client.post("/api/calibration/pen-from-position", json={
-        "which": "down", "projectId": project["id"],
-    })
+    captured = client.post(
+        "/api/calibration/pen-from-position",
+        json={
+            "which": "down",
+            "projectId": project["id"],
+        },
+    )
     assert captured.status_code == 200
     saved = profiles.get(project["profileId"])["calibration"]
     assert saved["pen_down_z"] == 3
@@ -137,16 +180,23 @@ def test_project_pen_and_special_position_captures_only_update_its_profile(proje
     controller.client.gcode.assert_not_called()
 
 
-@pytest.mark.parametrize(("endpoint", "body", "expected_xy", "expected_z"), [
-    ("move", {"x": 0, "y": 0, "limit": "plot"}, (80, 90), 10),
-    ("jog", {"x": 1000, "y": 1000, "z": 1, "limit": "plot"}, (180, 170), 2),
-    ("move-to-corner", {"corner": "tr", "target": "paper"}, (180, 170), 10),
-    ("move-to-position", {"kind": "calibration"}, (120, 130), 2),
-    ("pen", {"down": False}, (0, 0), 10),
-    ("pen", {"down": True}, (0, 0), 2),
-])
+@pytest.mark.parametrize(
+    ("endpoint", "body", "expected_xy", "expected_z"),
+    [
+        ("move", {"x": 0, "y": 0, "limit": "plot"}, (80, 90), 10),
+        ("jog", {"x": 1000, "y": 1000, "z": 1, "limit": "plot"}, (180, 170), 2),
+        ("move-to-corner", {"corner": "tr", "target": "paper"}, (180, 170), 10),
+        ("move-to-position", {"kind": "calibration"}, (120, 130), 2),
+        ("pen", {"down": False}, (0, 0), 10),
+        ("pen", {"down": True}, (0, 0), 2),
+    ],
+)
 def test_manual_motion_uses_the_project_shown_in_paper(
-    project_context, endpoint, body, expected_xy, expected_z,
+    project_context,
+    endpoint,
+    body,
+    expected_xy,
+    expected_z,
 ):
     client, project, _, controller = project_context
     response = client.post(f"/api/printer/{endpoint}", json={**body, "projectId": project["id"]})
@@ -166,9 +216,13 @@ def test_project_home_and_visit_use_its_homing_settings(project_context):
     controller.client.home.assert_called_once_with(["x"])
     assert "G0 Z5 F360" in controller.client.gcode.call_args.args[0]
     controller.client.reset_mock()
-    response = client.post("/api/printer/home-and-move-to-position", json={
-        "kind": "calibration", "projectId": project["id"],
-    })
+    response = client.post(
+        "/api/printer/home-and-move-to-position",
+        json={
+            "kind": "calibration",
+            "projectId": project["id"],
+        },
+    )
     assert response.status_code == 200
     commands = [
         command for call in controller.client.gcode.call_args_list for command in call.args[0]
@@ -177,18 +231,25 @@ def test_project_home_and_visit_use_its_homing_settings(project_context):
     assert response.json()["position"]["x"] == 120
 
 
-@pytest.mark.parametrize(("method", "endpoint", "body", "query_context"), [
-    ("GET", "paper", None, True),
-    ("PUT", "calibration", {"origin_x": 5}, True),
-    ("PUT", "paper/corner/bl", {"x": 5, "y": 5}, True),
-    ("POST", "calibration/pen-from-position", {"which": "down"}, False),
-    ("POST", "printer/move", {"x": 5, "y": 5}, False),
-    ("POST", "printer/home", {}, False),
-    ("POST", "printer/pen", {"down": True}, False),
-    ("POST", "testpattern/frame", {}, True),
-])
+@pytest.mark.parametrize(
+    ("method", "endpoint", "body", "query_context"),
+    [
+        ("GET", "paper", None, True),
+        ("PUT", "calibration", {"origin_x": 5}, True),
+        ("PUT", "paper/corner/bl", {"x": 5, "y": 5}, True),
+        ("POST", "calibration/pen-from-position", {"which": "down"}, False),
+        ("POST", "printer/move", {"x": 5, "y": 5}, False),
+        ("POST", "printer/home", {}, False),
+        ("POST", "printer/pen", {"down": True}, False),
+        ("POST", "testpattern/frame", {}, True),
+    ],
+)
 def test_stale_project_context_rejects_edits_and_motion(
-    project_context, method, endpoint, body, query_context,
+    project_context,
+    method,
+    endpoint,
+    body,
+    query_context,
 ):
     client, _, _, controller = project_context
     params = {"project_id": "proj-stale"} if query_context else None
@@ -212,4 +273,127 @@ def test_project_test_pattern_contains_its_current_profile_and_snapshot(project_
     assert meta["calibrationSnapshot"]["calibration"] == profile["calibration"]
     assert meta["calibrationSnapshot"]["fingerprint"] == profile["fingerprint"]
     assert "X80.000 Y90.000" in path.read_text()
+    controller.client.gcode.assert_not_called()
+
+
+@pytest.fixture
+def profile_editor_context(project_context):
+    client, project, profiles, controller = project_context
+    before = profiles.get(project["profileId"])
+    global_id = profiles.active_id()
+    selected = profiles.create(
+        "Independent visual profile",
+        calibration={
+            "bed_width": 260,
+            "bed_height": 250,
+            "pen_up_z": 13,
+            "pen_down_z": 3,
+            "origin_x": 40,
+            "origin_y": 50,
+            "plot_width": 100,
+            "plot_height": 100,
+            "paper_margin": 0,
+            "paper_corners": {"bl": [40, 50], "tr": [140, 150]},
+            "calibration_x": 130,
+            "calibration_y": 125,
+        },
+    )
+    try:
+        yield client, selected, profiles, controller
+    finally:
+        profiles.activate(global_id)
+        assert get_document_store().list_pages()["project"]["id"] == project["id"]
+        assert profiles.get(project["profileId"])["calibration"] == before["calibration"]
+
+
+def test_profile_visual_edits_and_details_share_the_selected_profile(profile_editor_context):
+    client, selected, profiles, controller = profile_editor_context
+    params = {"profile_id": selected["id"]}
+    assert client.get("/api/paper", params=params).json()["calibration"] == selected["calibration"]
+    assert client.put("/api/calibration", params=params, json={"bed_width": 280}).status_code == 200
+    assert (
+        client.put("/api/paper/corner/bl", params=params, json={"x": 42, "y": 52}).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            "/api/paper/apply", params=params, json={"margin": 2, "from_paper": True}
+        ).status_code
+        == 200
+    )
+    saved = profiles.get(selected["id"])["calibration"]
+    assert saved["bed_width"] == 280
+    assert saved["origin_x"] == 44
+    assert saved["origin_y"] == 54
+    assert client.get("/api/calibration", params=params).json() == saved
+    assert client.get("/api/paper", params=params).json()["calibration"] == saved
+    controller.client.gcode.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "body"),
+    [
+        ("home", {}),
+        ("jog", {"x": 1}),
+        ("pen", {"down": True}),
+        ("move", {"x": 80, "y": 90}),
+        ("move-to-corner", {"corner": "tr"}),
+        ("move-to-position", {"kind": "calibration"}),
+        ("home-and-move-to-position", {"kind": "calibration"}),
+    ],
+)
+def test_inactive_profile_cannot_move_the_machine(profile_editor_context, endpoint, body):
+    client, selected, _, controller = profile_editor_context
+    response = client.post(f"/api/printer/{endpoint}", json={**body, "profileId": selected["id"]})
+    assert response.status_code == 409
+    controller.client.gcode.assert_not_called()
+    controller.client.home.assert_not_called()
+
+
+def test_active_profile_motion_and_captures_use_explicit_profile(profile_editor_context):
+    client, selected, profiles, controller = profile_editor_context
+    profiles.activate(selected["id"])
+    response = client.post("/api/printer/pen", json={"down": False, "profileId": selected["id"]})
+    assert response.status_code == 200
+    assert response.json()["position"]["z"] == 13
+    controller.tracker.set_axes(x=83, y=94, z=2.5)
+    response = client.post(
+        "/api/calibration/pen-from-position",
+        json={
+            "which": "down",
+            "profileId": selected["id"],
+        },
+    )
+    assert response.status_code == 200
+    assert profiles.get(selected["id"])["calibration"]["pen_down_z"] == 2.5
+    assert (
+        client.post(
+            "/api/paper/corner", params={"profile_id": selected["id"]}, json={"corner": "bl"}
+        ).status_code
+        == 200
+    )
+    assert profiles.get(selected["id"])["calibration"]["paper_corners"]["bl"] == [83, 94]
+
+
+def test_profile_pattern_has_the_selected_profile_snapshot(profile_editor_context):
+    client, selected, _, controller = profile_editor_context
+    response = client.post("/api/testpattern/frame", params={"profile_id": selected["id"]})
+    assert response.status_code == 200
+    meta = read_job_meta(jobs_dir() / response.json()["filename"])
+    assert meta["profile"]["id"] == selected["id"]
+    assert meta["calibrationSnapshot"]["calibration"] == selected["calibration"]
+    assert "project_id" not in meta["source"]
+    controller.client.gcode.assert_not_called()
+
+
+def test_inactive_profile_preview_is_one_coherent_snapshot(profile_editor_context):
+    client, selected, profiles, controller = profile_editor_context
+    response = client.get(f"/api/profiles/{selected['id']}/calibration-state")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["profile"]["id"] == selected["id"]
+    assert data["profile"]["active"] is False
+    assert data["profile"]["calibration"] == data["paper"]["calibration"]
+    assert data["paper"]["rect"] == [40, 50, 100, 100]
+    assert profiles.active_id() != selected["id"]
     controller.client.gcode.assert_not_called()

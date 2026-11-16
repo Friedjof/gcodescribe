@@ -6,6 +6,7 @@ from fastapi import APIRouter, File, Form, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from plotter.core.calibration import Calibration
 from plotter.printer.base import require_profile_switch
 from plotter.web.deps import printer_controller, profile_service
 
@@ -64,6 +65,17 @@ def create_profile(req: ProfileRequest) -> dict:
 @router.get("/profiles/{profile_id}")
 def get_profile(profile_id: str) -> dict:
     return profile_service().get(profile_id)
+
+
+@router.get("/profiles/{profile_id}/calibration-state")
+def profile_calibration_state(profile_id: str) -> dict:
+    """One coherent read for the visual editor, including inactive profiles."""
+    profile = profile_service().get(profile_id)
+    cal = Calibration.from_dict(profile["calibration"])
+    return {
+        "profile": profile,
+        "paper": {"calibration": profile["calibration"], "rect": cal.paper_rect()},
+    }
 
 
 @router.put("/profiles/{profile_id}")

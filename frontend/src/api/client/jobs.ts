@@ -1,3 +1,4 @@
+import { targetQuery, type CalibrationTarget } from "../calibrationTarget";
 import { req } from "./req";
 import type { Job, GcodePreview, GcodePreview3D } from "../types/jobs";
 
@@ -16,8 +17,8 @@ export const jobsClient = {
     fd.append("file", file);
     return req<{ files: Job[] }>("/api/convert", { method: "POST", body: fd });
   },
-  testPattern: (name: string, projectId?: string) =>
-    req<Job>(`/api/testpattern/${name}${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ""}`, { method: "POST" }),
+  testPattern: (name: string, projectId?: CalibrationTarget) =>
+    req<Job>(`/api/testpattern/${name}${targetQuery(projectId)}`, { method: "POST" }),
   jobPreview: (filename: string, signal?: AbortSignal) =>
     req<GcodePreview>(`/api/jobs/${encodeURIComponent(filename)}/preview`, { signal }),
   jobPreview3D: (filename: string, signal?: AbortSignal) =>
