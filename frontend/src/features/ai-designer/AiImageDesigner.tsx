@@ -1,3 +1,5 @@
+import EditorIcon from "../../components/editor/EditorIcon";
+import TextPreviewDialog from "../../components/TextPreviewDialog";
 import { useEffect, useRef, useState } from "react";
 import { api, type AiImageResult, type AiImageStatus } from "../../api";
 import { useI18n } from "../../i18n";
@@ -93,6 +95,8 @@ export default function AiImageDesigner({
   const toast = useToasts();
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [controlTab, setControlTab] = useState("source");
+  const [promptText, setPromptText] = useState<string | null>(null);
   const [instructions, setInstructions] = useState("");
   const [editingInstructions, setEditingInstructions] = useState(false);
   const [feedback, setFeedback] = useState("");
@@ -307,6 +311,8 @@ export default function AiImageDesigner({
         <h2>{t("ai.title")}</h2>
         <p className="muted small">{t("ai.subtitle")}</p>
 
+        <nav className="ai-control-tabs"><button type="button" aria-pressed={controlTab === "source"} onClick={() => setControlTab("source")}><EditorIcon name="image" size={16}/>{t("ai.tab.source")}</button><button type="button" aria-pressed={controlTab === "style"} onClick={() => setControlTab("style")}><EditorIcon name="settings" size={16}/>{t("ai.tab.style")}</button></nav>
+        <div className="ai-control-fields" hidden={controlTab !== "source"}>
         <div
           className={`ai-dropzone ${dragging ? "drag" : ""} ${previewUrl ? "has-image" : ""}`.trim()}
           onClick={() => inputRef.current?.click()}
@@ -360,6 +366,8 @@ export default function AiImageDesigner({
           />
         </label>
 
+        </div>
+        <div className="ai-control-fields" hidden={controlTab !== "style"}>
         <label className="ai-field">
           {t("ai.renderMode")}
           <Segmented<RenderMode>
@@ -432,19 +440,18 @@ export default function AiImageDesigner({
           <div className="ai-style">
             <strong>{t("ai.styleTitle")}</strong>
             <p className="muted small">{t("ai.styleHint")}</p>
-            <details className="ai-prompt-view">
-              <summary>{t("ai.showStylePrompt")}</summary>
-              <pre>{promptPreview}</pre>
-            </details>
+            <button type="button" className="ghost" onClick={() => setPromptText(promptPreview)}>{t("ai.showStylePrompt")}</button>
           </div>
         )}
 
+        </div>
         <button className="primary" disabled={!canGenerateInitial || busy} onClick={() => generate()}>
           {busy && !selected ? t("ai.generating") : t("ai.generate")}
         </button>
         <p className="muted small ai-cost">{t("ai.costHint")}</p>
       </aside>
 
+      {promptText !== null && <TextPreviewDialog title={t("ai.showPrompt")} text={promptText} onClose={() => setPromptText(null)}/>}
       {editingInstructions && (
         <Modal
           title={t("ai.instructionsModalTitle")}
@@ -512,17 +519,8 @@ export default function AiImageDesigner({
           <h2>{t("ai.resultTitle")}</h2>
           <div className="ai-editor-actions">
             {variants.length > 1 && (
-              <div className="ai-variant-strip">
-                {variants.map((v, i) => (
-                  <button
-                    key={v.variantId}
-                    className={`ai-variant-chip ${v.variantId === selectedId ? "active" : ""}`.trim()}
-                    onClick={() => setSelectedId(v.variantId)}
-                  >
-                    {`V${i + 1}`}
-                  </button>
-                ))}
-              </div>
+              <select aria-label={t("ai.variants")} value={selectedId ?? ""} onChange={(event) => setSelectedId(event.target.value)}>{variants.map((variant, i) => <option key={variant.variantId} value={variant.variantId}>V{i + 1}</option>)}</select>
+
             )}
             {variants.length > 0 && (
               <button onClick={handleReset}>{t("ai.resetBtn")}</button>
@@ -650,10 +648,8 @@ export default function AiImageDesigner({
                 </button>
               </div>
 
-              <details className="ai-prompt-view">
-                <summary>{t("ai.showPrompt")}</summary>
-                <pre>{refinementPromptPreview ?? selected.prompt.text}</pre>
-              </details>
+              <button type="button" className="ghost" onClick={() => setPromptText(refinementPromptPreview ?? selected.prompt.text)}>{t("ai.showPrompt")}</button>
+
               {selected.saved && <span className="muted small">{t("ai.savedHint")}</span>}
             </aside>
           )}

@@ -1,0 +1,27 @@
+.ai-designer { grid-template-columns: 304px minmax(0,1fr); }
+.ai-designer .ai-controls { overflow: hidden; padding: 10px; gap: 9px; }
+.ai-controls h2 { font-size: 14px; }
+.ai-controls > p { font-size: 11px; }
+.ai-control-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); padding-bottom: 7px; flex: 0 0 auto; }
+.ai-control-tabs button { flex: 1; display: flex; gap: 5px; align-items: center; justify-content: center; min-height: 29px; padding: 5px; background: transparent; border: 0; font-size: 11px; border-radius: 3px; }
+.ai-control-tabs button[aria-pressed="true"] { background: var(--active-bg); color: var(--accent); }
+.ai-control-fields { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 13px; }
+.ai-control-fields[hidden] { display: none; }
+.ai-controls .ai-dropzone { height: 175px; min-height: 0; flex: 0 0 auto; border-radius: 3px; }
+.ai-controls .ai-field { font-size: 12px; gap: 5px; }
+.ai-controls textarea { resize: none; font-size: 12px; padding: 7px; }
+.ai-controls select, .ai-controls button { font-size: 11px; min-height: 28px; padding: 5px 7px; border-radius: 3px; }
+.ai-controls .seg button { padding: 5px 3px; }
+.ai-controls .ai-option-row { gap: 6px; }
+.ai-controls .ai-style { padding: 8px; font-size: 11px; }
+.ai-controls > button.primary { flex: 0 0 auto; margin-top: auto; }
+.ai-controls .ai-cost { margin: 0; font-size: 10px; }
+.ai-editor .ai-editor-toolbar { padding: 8px 10px; }
+.ai-editor-toolbar h2 { font-size: 14px; }
+.ai-editor-toolbar button, .ai-editor-toolbar select { font-size: 11px; min-height: 28px; padding: 5px 8px; border-radius: 3px; }
+.ai-side { overflow: hidden; gap: 10px; }
+.ai-side .ai-feedback { gap: 7px; }
+.ai-side textarea { resize: none; }
+.text-preview-dialog { width: min(900px,94vw); height: min(600px,90vh); }
+.text-preview-dialog .modal-body { overflow: hidden; }
+.text-preview-dialog pre { margin: 0; font-size: 12px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
