@@ -40,7 +40,7 @@ export default function EditorMenu({ label, children, items, active = true, clas
   };
   return <>
     <button type="button" ref={button} className={`editor-menu-trigger ${className}`} aria-label={label}
-      aria-haspopup="menu" aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => setOpen(!open)}
+      disabled={!active} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => setOpen(!open)}
       onKeyDown={event => { if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); setOpen(true); } }}>
       {children ?? label}<span aria-hidden="true" className="menu-chevron">▾</span>
     </button>

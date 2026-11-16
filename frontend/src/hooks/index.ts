@@ -36,7 +36,9 @@ export function useArrowKeys(handlers: ArrowHandlers, enabled = true): ArrowDir 
       PageDown: "lower",
     };
     const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
       const t = e.target as HTMLElement | null;
+      if (t?.closest("button, a, [role='menu'], [role='separator'], [role='tablist'], [role='dialog']")) return;
       const tag = t?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || t?.isContentEditable)
         return;
