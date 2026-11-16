@@ -1,3 +1,5 @@
+import TourProvider from "./features/tour/TourProvider";
+import { isPrinterBusy } from "./lib/printerState";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import type { PrinterStatus } from "./api/types/printer";
 import { api, onAppEvent, type AiImageStatus, type EffectiveSettings } from "./api";
@@ -54,6 +56,7 @@ function AdminApp() {
   const toast = useToasts();
   const [galleryResult, setGalleryResult] = useState<string>();
   const { preferences, update } = useInterface();
+  const [tourWorkspace, setTourWorkspace] = useState<Tab | null>(null);
   const [requestedTab, setRequestedTab] = useState<Tab>("paper");
   const [tabSettingsOpen, setTabSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -65,8 +68,9 @@ function AdminApp() {
   const [aiStatus, setAiStatus] = useState<AiImageStatus | null>(null);
   const [aiInitialFile, setAiInitialFile] = useState<File | null>(null);
   const [desktop, setDesktop] = useState(false);
-  const tab = usableWorkspace(requestedTab, preferences.workspaceOrder, preferences.visibleWorkspaces, aiStatus?.enabled ?? false);
-  const workspaces = visibleWorkspaces(preferences.workspaceOrder, preferences.visibleWorkspaces, aiStatus?.enabled ?? false);
+  const visibleTabs = tourWorkspace && !preferences.visibleWorkspaces.includes(tourWorkspace) ? [...preferences.visibleWorkspaces, tourWorkspace] : preferences.visibleWorkspaces;
+  const tab = usableWorkspace(requestedTab, preferences.workspaceOrder, visibleTabs, aiStatus?.enabled ?? false);
+  const workspaces = visibleWorkspaces(preferences.workspaceOrder, visibleTabs, aiStatus?.enabled ?? false);
   const interactive = !settingsOpen && !tabSettingsOpen && !helpOpen;
   const setTab = useCallback((id: Tab) => {
     if (id === "start") id = "paper";
@@ -74,6 +78,8 @@ function AdminApp() {
     update(prefs => prefs.visibleWorkspaces.includes(id) ? prefs : { ...prefs, visibleWorkspaces: [...prefs.visibleWorkspaces, id] });
     setRequestedTab(id);
   }, [aiStatus?.enabled, update]);
+  const navigateTour = useCallback((id: Tab) => { setTourWorkspace(id); setRequestedTab(id); }, []);
+  const endTour = useCallback(() => setTourWorkspace(null), []);
   const openPaint = useCallback(() => setTab("paint"), [setTab]);
   useEffect(() => { if (tab !== requestedTab) setRequestedTab(tab); }, [tab, requestedTab]);
   const notifications = usePlotNotifications(status);
@@ -138,6 +144,7 @@ function AdminApp() {
   return (
     <SetupProgressProvider>
     <ProjectCalibrationProvider active={tab === "paint" || tab === "paper" || tab === "games"}>
+    <TourProvider activeWorkspace={tab} onNavigate={navigateTour} onEnd={endTour} blocked={!interactive} printerBusy={isPrinterBusy(status)}>
     <div className={`app tab-${tab}`}>
       <header className="app-titlebar">
         <h1 className="app-brand"><EditorIcon name="draw" size={20} />GCodeScribe</h1>
@@ -213,6 +220,7 @@ function AdminApp() {
       </main>
       <footer className="app-statusbar"><span>{t(workspaceById(tab).label)}</span><span>{t(preferences.experience === "guided" ? "interface.guided" : "interface.full")} · {t(preferences.density === "compact" ? "interface.compact" : "interface.comfortable")}</span></footer>
     </div>
+    </TourProvider>
     </ProjectCalibrationProvider>
     </SetupProgressProvider>
   );

@@ -1,3 +1,4 @@
+import { useAppTour } from "../../features/tour/TourProvider";
 import { useI18n } from "../../i18n";
 import type { WorkspaceId } from "../../interface/workspaces";
 import EditorMenu from "./EditorMenu";
@@ -22,6 +23,7 @@ export default function ProgramMenus({
   notifications: { supported: boolean; granted: boolean; action: () => void };
 }) {
   const { t } = useI18n();
+  const tour = useAppTour();
   const extra = (id: WorkspaceId) => () => onNavigate(id);
   return (
     <>
@@ -103,6 +105,12 @@ export default function ProgramMenus({
         label={t("app.help")}
         className="program-menu"
         items={[
+          {
+            id: "tour",
+            label: t("tour.menu"),
+            icon: "help",
+            action: () => tour?.offer(),
+          },
           {
             id: "setup",
             label: t("workspace.paper"),

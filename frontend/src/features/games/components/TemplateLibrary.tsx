@@ -36,7 +36,7 @@ export default function TemplateLibrary({
   );
   const paging = useFitListPage(items, 48);
   return (
-    <aside className="template-library">
+    <aside data-tour="template-library" className="template-library">
       <div className="template-library-head">
         <strong>{t("games.title")}</strong>
         <select

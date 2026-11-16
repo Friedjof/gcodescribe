@@ -132,7 +132,7 @@ export default function WorkspaceTabs({
         </div>
       </div>
       <button
-        className="workspace-customize"
+        data-tour="workspace-settings" className="workspace-customize"
         type="button"
         onClick={onCustomize}
         title={t("interface.customizeTabs")}

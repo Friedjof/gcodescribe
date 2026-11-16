@@ -29,7 +29,7 @@ export default function PaintToolRail({ tool, onToolChange, guided = false, visi
 }) {
   const { t } = useI18n(), tools = paintTools(t);
   const displayed = guided ? tools.filter(item => BASICS.includes(item.value) || item.value === tool) : tools;
-  return <nav className="paint-tool-rail editor-tool-rail" aria-label={t("paint.activeTool")}>
+  return <nav data-tour="paint-tools" className="paint-tool-rail editor-tool-rail" aria-label={t("paint.activeTool")}>
     {displayed.map(item => <button key={item.value} type="button" aria-label={item.label} title={item.label}
       aria-pressed={tool === item.value} className={tool === item.value ? "active" : ""} onClick={() => onToolChange(item.value)}>
       <EditorIcon name={item.icon} size={19} />

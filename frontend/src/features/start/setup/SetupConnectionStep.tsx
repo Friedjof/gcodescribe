@@ -32,7 +32,7 @@ export default function SetupConnectionStep({
         <p>{t("setup.connectionCheckHint")}</p>
         {status?.error && <p>{status.error}</p>}
       </div>
-      <div className="setup-connection-methods">
+      <div data-tour="setup-connection" className="setup-connection-methods">
         <section>
           <h3>USB / Serial</h3>
           <p>{t("setup.usbHint")}</p>

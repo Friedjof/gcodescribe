@@ -79,7 +79,7 @@ export default function SetupProfileStep({
     <section className="setup-step-content">
       <h2>{t("setup.profileTitle")}</h2>
       <p className="setup-lead">{t("setup.profileIntro")}</p>
-      {!creating && <div className="setup-existing">
+      {!creating && <div data-tour="setup-profile-choice" className="setup-existing">
         <div>
           <strong>{profile.name}</strong>
           <span>
@@ -105,7 +105,7 @@ export default function SetupProfileStep({
       </button>
       {creating && (
         <form
-          className="setup-profile-form"
+          data-tour="setup-profile-choice" className="setup-profile-form"
           onSubmit={(event) => {
             event.preventDefault();
             void save();

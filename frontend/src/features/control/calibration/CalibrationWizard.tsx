@@ -1,3 +1,5 @@
+import { useEffect, useRef } from "react";
+import { useAppTour } from "../../tour/TourProvider";
 import GuidedCalibrationStep from "./GuidedCalibrationStep";
 import { useI18n } from "../../../i18n";
 import EditorMenu from "../../../components/editor/EditorMenu";
@@ -52,6 +54,16 @@ export default function CalibrationWizard({
 }) {
   const { t } = useI18n(),
     { steps, positions, busy, active, setActive, visible } = controls;
+  const tour = useAppTour();
+  const previousStep = useRef(active);
+  const requested = tour?.step?.calibration;
+  const requestedLocked = steps.find(step => step.id === requested)?.locked;
+  useEffect(() => {
+    if (guided && requested && !requestedLocked && !positions.busy && !busy) setActive(requested);
+  }, [tour?.request, tour?.step?.id, requestedLocked, positions.busy, busy, guided]);
+  useEffect(() => {
+    if (active !== previousStep.current) { previousStep.current = active; tour?.followCalibration(active); }
+  }, [active]);
   const locked = positions.busy || busy;
   if (!guided)
     return (
@@ -96,11 +108,12 @@ export default function CalibrationWizard({
     current = steps.find((step) => step.id === active) ?? required[0];
   return (
     <div className="calibration-focused">
-      <nav className="calibration-step-tabs" aria-label={t("paper.title")}>
+      <nav data-tour="calibration-tabs" className="calibration-step-tabs" aria-label={t("paper.title")}>
         {required.map((step, index) => (
           <button
             type="button"
             key={step.id}
+            data-tour={`calibration-${step.id}`}
             disabled={locked || step.locked}
             aria-current={current.id === step.id ? "step" : undefined}
             onClick={() => setActive(step.id)}

@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useAppTour } from "../../tour/TourProvider";
+import { useEffect, useRef, useState } from "react";
 import type {
   CalibrationProfile,
   PageIndex,
@@ -50,6 +51,7 @@ export default function SetupGuide({
   onNavigate: (id: WorkspaceId) => void;
   onAction: () => void;
 }) {
+  const tour = useAppTour();
   const { t } = useI18n(),
     { refresh, setIndex } = useProjectCalibration(),
     project = index.project!;
@@ -84,7 +86,19 @@ export default function SetupGuide({
   const choose = (next: SetupStep) => {
     setStep(next);
     setExpanded(true);
+    tour?.followSetup(next);
   };
+  const tourWasActive = useRef(false);
+  useEffect(() => {
+    if (tour?.step?.setup) {
+      tourWasActive.current = true;
+      setStep(tour.step.setup); setExpanded(true);
+    } else if (tourWasActive.current) {
+      tourWasActive.current = false;
+      setStep(nextSetupStep(progress, online, profile, drawing?.objectCount ?? 0));
+      setExpanded(!progress.finished);
+    }
+  }, [tour?.request, tour?.step?.id]);
   const useExisting = () => {
     update((p) => ({ ...p, confirmed: true, finished: false }));
     choose("connection");
@@ -93,6 +107,7 @@ export default function SetupGuide({
     if (!next.project) return;
     confirmProject(next.project.id, next.project.profileId);
     setIndex(next);
+    tour?.followSetup("connection");
   };
   return (
     <section

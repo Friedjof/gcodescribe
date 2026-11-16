@@ -1,0 +1,242 @@
+.app-tour-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  pointer-events: none;
+}
+.tour-spotlight {
+  position: fixed;
+  border-radius: 7px;
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+  box-shadow:
+    0 0 0 9999px rgb(21 31 48 / 0.28),
+    0 0 0 5px color-mix(in srgb, var(--accent) 14%, transparent);
+  pointer-events: none;
+  transition:
+    left 0.18s ease,
+    top 0.18s ease,
+    width 0.18s ease,
+    height 0.18s ease;
+}
+.tour-card {
+  pointer-events: auto;
+  position: fixed;
+  width: min(344px, calc(100vw - 24px));
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: var(--elevation-dialog);
+  animation: tour-arrive 0.18s ease-out;
+}
+.tour-card::before {
+  content: "";
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  top: 0;
+  height: 3px;
+  border-radius: 0 0 3px 3px;
+  background: linear-gradient(90deg, var(--accent), var(--studio-accent));
+}
+.tour-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.tour-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+}
+.tour-card-top > div {
+  display: flex;
+  gap: 3px;
+}
+.tour-card-top button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  width: 25px;
+  min-height: 25px;
+  padding: 4px;
+  border-radius: 5px;
+}
+.tour-card-top button:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+.tour-card h2 {
+  margin: 0 0 9px;
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+  line-height: 1.25;
+}
+.tour-card p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.tour-card .tour-task-note {
+  display: flex;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid var(--border);
+}
+.tour-task-note svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.tour-progress {
+  display: flex;
+  gap: 4px;
+  margin: 18px 0 14px;
+}
+.tour-progress > span {
+  height: 3px;
+  flex: 1;
+  border-radius: 3px;
+  background: var(--panel-3);
+}
+.tour-progress > .visited {
+  background: color-mix(in srgb, var(--accent) 35%, var(--panel-3));
+}
+.tour-progress > .current {
+  background: var(--accent);
+}
+.tour-card footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.tour-card footer button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 12px;
+  min-height: 31px;
+  padding: 5px 10px;
+  border-radius: 5px;
+}
+.tour-welcome {
+  width: min(500px, 94vw);
+  box-shadow: var(--elevation-dialog);
+}
+.tour-welcome .modal-body {
+  padding: 24px;
+  gap: 17px;
+}
+.tour-welcome .modal-body > p {
+  margin: 0;
+  line-height: 1.6;
+  font-size: 13px;
+}
+.tour-welcome-mark {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  color: var(--accent);
+}
+.tour-welcome-mark > svg {
+  padding: 7px;
+  box-sizing: content-box;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--panel-2);
+}
+.tour-welcome-mark > span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+.tour-welcome-mark small {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--studio-accent);
+}
+.tour-route {
+  list-style: none;
+  margin: 0;
+  padding: 12px 0;
+  display: flex;
+  gap: 10px;
+  border-block: 1px solid var(--border);
+}
+.tour-route li {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.tour-route svg {
+  color: var(--accent);
+}
+.tour-welcome .tour-note {
+  color: var(--muted);
+  font-size: 11px;
+}
+.tour-welcome .modal-foot button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.tour-resume-pill {
+  position: fixed;
+  z-index: 300;
+  bottom: 28px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  box-shadow: var(--elevation-menu);
+}
+@keyframes tour-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tour-card {
+    animation: none;
+  }
+  .tour-spotlight {
+    transition: none;
+  }
+}

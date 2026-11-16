@@ -143,7 +143,7 @@ export default function SetupDrawingStep({
           {task.error}
         </p>
       )}
-      <div className="setup-actions">
+      <div data-tour="setup-drawing" className="setup-actions">
         <button onClick={onDraw}>{t("start.openDrawing")}</button>
         <button onClick={onTemplates}>{t("start.templates")}</button>
       </div>

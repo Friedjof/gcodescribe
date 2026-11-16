@@ -52,7 +52,7 @@ export default function SetupPreviewStep({
     <section className="setup-step-content setup-preview">
       <h2>{t("setup.previewTitle")}</h2>
       <p className="setup-lead">{t("setup.previewIntro")}</p>
-      <div className="setup-actions">
+      <div data-tour="setup-preview" className="setup-actions">
         <button
           className="primary"
           disabled={!page?.objectCount || task.busy}
