@@ -1,6 +1,7 @@
+import JobThumbnail from "./components/JobThumbnail";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { PrinterStatus } from "../../api/types/printer";
-import { api, type GcodePreview, type GcodePreview3D, type Job } from "../../api";
+import { api, type GcodePreview3D, type Job } from "../../api";
 import { useI18n } from "../../i18n";
 import Modal from "../../components/Modal";
 import Gcode3D from "../../components/Gcode3D";
@@ -20,7 +21,6 @@ interface JobGroup {
   created: number;
 }
 
-const jobThumbCache = new Map<string, GcodePreview>();
 
 const COLOR_HEX: Record<string, string> = {
   black: "#111111", red: "#ff453a", blue: "#0a84ff", green: "#30d158",
@@ -210,10 +210,10 @@ export default function Convert({
   };
 
   // Filtering
-  const profileJobs = onlyActiveProfile ? jobs.filter((j) => j.profile?.matchesActive) : jobs;
+  const profileJobs = useMemo(() => onlyActiveProfile ? jobs.filter((j) => j.profile?.matchesActive) : jobs, [jobs, onlyActiveProfile]);
   const hiddenCount = jobs.length - profileJobs.length;
   const q = query.trim().toLowerCase();
-  const visibleJobs = q ? profileJobs.filter((j) => j.filename.toLowerCase().includes(q)) : profileJobs;
+  const visibleJobs = useMemo(() => q ? profileJobs.filter((j) => j.filename.toLowerCase().includes(q)) : profileJobs, [profileJobs, q]);
 
   const groups = useMemo(() => buildGroups(visibleJobs, sortBy), [visibleJobs, sortBy]);
 
@@ -353,7 +353,7 @@ export default function Convert({
           title={t("convert.openPreview")}
           onClick={() => selectMode ? toggleSelect(j.filename) : openPreview(j.filename)}
         >
-          <JobThumb filename={j.filename} />
+          <JobThumbnail job={j} />
         </button>
         <button
           className="job-meta job-open"
@@ -389,7 +389,7 @@ export default function Convert({
           className="job-tile-thumb"
           onClick={() => selectMode ? toggleSelect(j.filename) : openPreview(j.filename)}
         >
-          <JobThumb filename={j.filename} />
+          <JobThumbnail job={j} />
           {isSelected && <span className="job-tile-check-icon">✓</span>}
         </button>
         <div className="job-tile-meta">
@@ -526,6 +526,7 @@ export default function Convert({
             </div>
           </div>
 
+          <div className="jobs-list-scroll" role="region" aria-label={t("convert.title")} tabIndex={0}>
           {/* ---- empty states ---- */}
           {jobs.length === 0 && <p className="muted">{t("convert.noJobs")}</p>}
           {jobs.length > 0 && visibleJobs.length === 0 && q && (
@@ -577,6 +578,7 @@ export default function Convert({
               </ul>
             )
           )}
+          </div>
         </section>
 
         {/* ---- preview modal ---- */}
@@ -641,59 +643,4 @@ export default function Convert({
       {PromptNode}
     </>
   );
-}
-
-function JobThumb({ filename }: { filename: string }) {
-  const [preview, setPreview] = useState<GcodePreview | null>(jobThumbCache.get(filename) ?? null);
-
-  useEffect(() => {
-    if (preview) return;
-    let alive = true;
-    api
-      .jobPreview(filename)
-      .then((data) => {
-        jobThumbCache.set(filename, data);
-        if (alive) setPreview(data);
-      })
-      .catch(() => {});
-    return () => { alive = false; };
-  }, [filename, preview]);
-
-  if (!preview) return <span className="job-thumb-placeholder">…</span>;
-  return <GcodeThumbSvg preview={preview} />;
-}
-
-function GcodeThumbSvg({ preview }: { preview: GcodePreview }) {
-  const bounds = preview.bounds ?? boundsFromPolylines([...preview.polylines, ...preview.travels]);
-  if (!bounds) return <span className="job-thumb-placeholder">–</span>;
-
-  const [x0, y0, x1, y1] = bounds;
-  const width = Math.max(x1 - x0, 1);
-  const height = Math.max(y1 - y0, 1);
-  const pad = Math.max(width, height) * 0.05;
-  const toPath = (lines: number[][][]) =>
-    lines.map((line) => "M" + line.map(([x, y]) => `${x},${y}`).join("L")).join("");
-  const strokeWidth = Math.max(width, height) / 180;
-
-  return (
-    <svg
-      className="job-thumb-svg"
-      viewBox={`${x0 - pad} ${y0 - pad} ${width + pad * 2} ${height + pad * 2}`}
-      preserveAspectRatio="xMidYMid meet"
-    >
-      <path d={toPath(preview.travels)} className="job-thumb-travel" fill="none" strokeWidth={strokeWidth} />
-      <path d={toPath(preview.polylines)} className="job-thumb-draw" fill="none" strokeWidth={strokeWidth} />
-    </svg>
-  );
-}
-
-function boundsFromPolylines(lines: number[][][]): [number, number, number, number] | null {
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const line of lines) {
-    for (const [x, y] of line) {
-      minX = Math.min(minX, x); minY = Math.min(minY, y);
-      maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
-    }
-  }
-  return Number.isFinite(minX) ? [minX, minY, maxX, maxY] : null;
 }
