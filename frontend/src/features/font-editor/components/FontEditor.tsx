@@ -638,7 +638,7 @@ export default function FontEditor({ visible }: { visible: boolean }) {
             <p className="muted fe-empty-list-empty">{t("fontEditor.listEmpty")}</p>
           ) : (
             <div className="fe-empty-fonts" aria-label={t("fontEditor.myFonts")}>
-              {font.summaries.map((summary) => (
+              {font.summaries.slice(0, 6).map((summary) => (
                 <button
                   key={summary.id}
                   className="fe-empty-font-card"

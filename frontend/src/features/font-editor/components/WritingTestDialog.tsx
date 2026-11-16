@@ -1,3 +1,4 @@
+import EditorIcon from "../../../components/editor/EditorIcon";
 import SeedControl from "../../../components/SeedControl";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Stroke, StrokeFontDocument, StrokeGlyph, StrokePoint, StrokeVariant } from "../../../api";
@@ -373,6 +374,7 @@ export default function WritingTestDialog({
   const [speed, setSpeed] = useState(1);
   const [maxLineChars, setMaxLineChars] = useState(PREVIEW_LINE_CHARS);
   // Stable seed for the weighted-random variant picks; reshuffled on demand.
+  const [toolsPanel, setToolsPanel] = useState("playback");
   const [seedInput, setSeedInput] = useState<string | null>(null);
   const [variantSeed, setVariantSeed] = useState(() => Math.floor(Math.random() * 0x7fffffff));
   const [showTravels, setShowTravels] = useState(false);
@@ -737,13 +739,14 @@ export default function WritingTestDialog({
           </div>
         </section>
         <aside className="fe-writing-tools">
+          <nav className="fe-writing-tool-tabs"><button type="button" aria-pressed={toolsPanel === "playback"} onClick={() => setToolsPanel("playback")}><EditorIcon name="play" size={15}/>{t("fontEditor.writingPlaybackTab")}</button><button type="button" aria-pressed={toolsPanel === "align"} onClick={() => setToolsPanel("align")}><EditorIcon name="measure" size={15}/>{t("fontEditor.alignTitle")}</button></nav>
           <div className="fe-writing-tool-card fe-writing-savebox">
             <button className="primary" onClick={onSaveGlyph} disabled={!canSaveGlyph}>
               {t("fontEditor.saveGlyph")}
             </button>
             <span className="muted">{canSaveGlyph ? t("fontEditor.writingTestSaveHint") : t("fontEditor.writingTestSavedHint")}</span>
           </div>
-          <div className="fe-writing-tool-card fe-writing-play-card">
+          <div className="fe-writing-tool-card fe-writing-play-card" hidden={toolsPanel !== "playback"}>
             <button className="primary fe-writing-play-btn" onClick={playing ? pause : play} disabled={preview.timeline.length === 0}>
               {playing ? t("fontEditor.writingTestPause") : t("fontEditor.writingTestPlay")}
             </button>
@@ -758,7 +761,7 @@ export default function WritingTestDialog({
                 onChange={(e) => scrub(Number(e.target.value))}
               />
               <span className="muted fe-writing-scrub-pct">
-                {Math.round((playhead / preview.totalMs) * 100)}%
+                {Math.round(preview.totalMs > 0 ? (playhead / preview.totalMs) * 100 : 0)}%
               </span>
             </div>
             <label className="fe-writing-slider fe-writing-speed-slider">
@@ -797,10 +800,7 @@ export default function WritingTestDialog({
               </button>
 
             </div>
-            <SeedControl font value={seedInput ?? String(variantSeed)} onChange={(value) => {
-              setSeedInput(value);
-              if (/^\d{1,10}$/.test(value) && Number(value) <= 0x7fffffff) setVariantSeed(Number(value));
-            }} onRandomize={() => { setSeedInput(null); setVariantSeed(Math.floor(Math.random() * 0x7fffffff)); }} />
+
             <div className="fe-writing-toggle-row">
               <label className="fe-writing-check">
                 <input type="checkbox" checked={showTravels} onChange={(e) => setShowTravels(e.target.checked)} />
@@ -812,7 +812,7 @@ export default function WritingTestDialog({
               </label>
             </div>
           </div>
-          <div className="fe-writing-tool-card fe-writing-align-card">
+          <div className="fe-writing-tool-card fe-writing-align-card" hidden={toolsPanel !== "align"}>
             <GlyphAlignmentPanel
               hasStrokes={activeStrokes.length > 0}
               spacingBefore={activeSpacingBefore}
@@ -828,6 +828,10 @@ export default function WritingTestDialog({
               onAdvanceChange={onAdvanceChange}
             />
           </div>
+          <SeedControl font value={seedInput ?? String(variantSeed)} onChange={(value) => {
+              setSeedInput(value);
+              if (/^\d{1,10}$/.test(value) && Number(value) <= 0x7fffffff) setVariantSeed(Number(value));
+            }} onRandomize={() => { setSeedInput(null); setVariantSeed(Math.floor(Math.random() * 0x7fffffff)); }} />
         </aside>
       </div>
     </Modal>

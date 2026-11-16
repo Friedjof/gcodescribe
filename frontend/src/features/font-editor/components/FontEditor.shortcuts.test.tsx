@@ -133,7 +133,7 @@ describe("FontEditor keyboard shortcuts", () => {
 
   it("selects a moved stroke and deletes it with Delete", () => {
     const { container } = renderEditor();
-    const svg = container.querySelector("svg")!;
+    const svg = container.querySelector("svg.fe-canvas-svg")!;
 
     fireEvent.keyDown(window, { key: "m" });
     fireEvent.pointerDown(svg, {

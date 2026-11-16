@@ -1,3 +1,4 @@
+import PagedGrid from "../../../components/paging/PagedGrid";
 import { useMemo, useState } from "react";
 import { useI18n } from "../../../i18n";
 import Modal from "../../../components/Modal";
@@ -72,21 +73,8 @@ export default function GlyphOverviewDialog({
         {shown.length === 0 ? (
           <p className="muted">{t("fontEditor.noMatches")}</p>
         ) : (
-          <div className="fe-overview-grid">
-            {shown.map((e) => (
-              <button
-                key={e.key}
-                className={`fe-overview-cell ${e.captured ? "is-captured" : "is-missing"}`}
-                title={e.captured ? t("fontEditor.captured") : t("fontEditor.missing")}
-                onClick={() => {
-                  onPick(e.key);
-                  onClose();
-                }}
-              >
-                {e.key}
-              </button>
-            ))}
-          </div>
+          <PagedGrid minWidth={48} footerHeight={10} label={t("fontEditor.overviewTitle")} resetKey={`${query}/${status}/${kind}`} items={shown} itemKey={(entry) => entry.key} renderItem={(entry) => <button className={`fe-overview-cell ${entry.captured ? "is-captured" : "is-missing"}`} title={t(entry.captured ? "fontEditor.captured" : "fontEditor.missing")} onClick={() => { onPick(entry.key); onClose(); }}>{entry.key}</button>}/>
+
         )}
       </div>
     </Modal>

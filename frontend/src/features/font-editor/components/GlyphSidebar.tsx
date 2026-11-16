@@ -1,3 +1,5 @@
+import PaginationBar from "../../../components/paging/PaginationBar";
+import { useFitListPage } from "../../../components/paging/useFitListPage";
 import { useMemo, useState } from "react";
 import { useI18n } from "../../../i18n";
 import type { StrokeGlyph } from "../../../api";
@@ -26,6 +28,7 @@ export default function GlyphSidebar({
     );
   }, [glyphs, query]);
 
+  const paging = useFitListPage(filtered, 43, 8);
   return (
     <aside className="fe-sidebar">
       <h3 className="fe-sidebar-title">{t("fontEditor.glyphs")}</h3>
@@ -41,13 +44,14 @@ export default function GlyphSidebar({
         className="fe-search"
         value={query}
         placeholder={t("fontEditor.search")}
-        onChange={(e) => setQuery(e.target.value)}
+        onChange={(e) => { setQuery(e.target.value); paging.setPage(0); }}
       />
+      <div className="fe-glyph-viewport" ref={paging.viewport}>
       {filtered.length === 0 ? (
         <p className="muted fe-sidebar-empty">{t("fontEditor.noGlyphs")}</p>
       ) : (
         <ul className="fe-glyph-list">
-          {filtered.map((glyph) => (
+          {paging.items.map((glyph) => (
             <li key={glyph.key}>
               <button
                 className={`fe-glyph-item ${glyph.key === activeKey ? "is-active" : ""}`}
@@ -60,6 +64,8 @@ export default function GlyphSidebar({
           ))}
         </ul>
       )}
+      </div>
+      <PaginationBar page={paging.page} pages={paging.pages} onChange={paging.setPage} label={t("fontEditor.glyphs")}/>
     </aside>
   );
 }

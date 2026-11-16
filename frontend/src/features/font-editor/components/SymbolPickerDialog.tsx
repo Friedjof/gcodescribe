@@ -1,3 +1,5 @@
+import { useState } from "react";
+import PagedGrid from "../../../components/paging/PagedGrid";
 import { useI18n } from "../../../i18n";
 import Modal from "../../../components/Modal";
 import { SYMBOL_GROUPS } from "../lib/constants";
@@ -12,6 +14,8 @@ export default function SymbolPickerDialog({
   onClose: () => void;
 }) {
   const { t } = useI18n();
+  const [groupId, setGroupId] = useState(SYMBOL_GROUPS[0].id);
+  const group = SYMBOL_GROUPS.find((item) => item.id === groupId) ?? SYMBOL_GROUPS[0];
 
   return (
     <Modal
@@ -21,26 +25,9 @@ export default function SymbolPickerDialog({
       bodyClassName="fe-symbols-modal-body"
     >
       <div className="fe-symbols">
-        {SYMBOL_GROUPS.map((group) => (
-          <section key={group.id} className="fe-symbol-group">
-            <h4 className="fe-symbol-group-title">{t(group.labelKey)}</h4>
-            <div className="fe-symbol-grid">
-              {group.keys.map((key) => (
-                <button
-                  key={key}
-                  className={`fe-symbol-cell ${capturedKeys.has(key) ? "is-captured" : ""}`}
-                  title={capturedKeys.has(key) ? t("fontEditor.captured") : t("fontEditor.missing")}
-                  onClick={() => {
-                    onPick(key);
-                    onClose();
-                  }}
-                >
-                  {key}
-                </button>
-              ))}
-            </div>
-          </section>
-        ))}
+        <select aria-label={t("fontEditor.symbolsTitle")} value={groupId} onChange={(e) => setGroupId(e.target.value)}>{SYMBOL_GROUPS.map((item) => <option key={item.id} value={item.id}>{t(item.labelKey)}</option>)}</select>
+        <PagedGrid minWidth={44} footerHeight={10} label={t("fontEditor.symbolsTitle")} resetKey={groupId} items={group.keys} itemKey={(key) => key} renderItem={(key) => <button className={`fe-symbol-cell ${capturedKeys.has(key) ? "is-captured" : ""}`} title={t(capturedKeys.has(key) ? "fontEditor.captured" : "fontEditor.missing")} onClick={() => { onPick(key); onClose(); }}>{key}</button>}/>
+
       </div>
     </Modal>
   );

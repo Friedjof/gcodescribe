@@ -1,0 +1,43 @@
+/* Font tools share the same bounded panes and neutral surfaces as the editor. */
+.font-editor .fe-header { padding: 7px 10px; min-height: 42px; }
+.font-editor .fe-header input, .font-editor .fe-header button { font-size: 12px; min-height: 28px; padding: 5px 8px; border-radius: 3px; }
+.fe-body { grid-template-columns: 220px minmax(0,1fr) 280px; }
+.fe-body .fe-sidebar, .fe-body .fe-toolbar { padding: 10px; border-radius: 0; background: var(--panel); overflow: hidden; }
+.fe-glyph-viewport { min-height: 0; flex: 1; overflow: hidden; }
+.fe-glyph-viewport .fe-glyph-list { overflow: hidden; padding: 0; margin: 0; gap: 3px; }
+.fe-glyph-list > li { height: 40px; }
+.fe-glyph-list .fe-glyph-item { height: 40px; min-height: 40px; padding: 6px; border-radius: 3px; }
+.fe-list-modal { height: min(600px,88vh); }
+.fe-list-modal .modal-body { overflow: hidden; }
+.fe-font-list-viewport { flex: 1; min-height: 0; overflow: hidden; }
+.fe-font-list-viewport .fe-font-list { padding: 0; margin: 0; gap: 5px; }
+.fe-font-list-viewport .fe-font-list-item { height: 60px; padding: 6px; }
+.fe-symbols-modal, .fe-overview-modal { width: min(900px,95vw); height: min(650px,90vh); }
+.fe-symbols-modal-body, .fe-overview-modal-body { overflow: hidden; display: flex; flex-direction: column; }
+.fe-symbols, .fe-overview { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+.fe-symbols > select { flex: 0 0 auto; font-size: 12px; min-height: 29px; }
+.fe-overview-filters { flex: 0 0 auto; }
+.fe-symbols .paged-grid-cell > button, .fe-overview .paged-grid-cell > button { width: 100%; height: 100%; min-height: 0; padding: 3px; border-radius: 3px; }
+.fe-writing-modal { height: min(900px,97vh); }
+.fe-writing-modal-body { display: flex; flex-direction: column; padding: 10px; }
+.fe-writing-test { flex: 1; height: 100%; grid-template-columns: 240px minmax(0,1fr) 240px; gap: 8px; }
+.fe-writing-input-panel { border-radius: 3px; background: var(--panel-2); animation: none; padding: 10px; gap: 8px; }
+.fe-writing-input { min-height: 80px; resize: none; }
+.fe-writing-tools { display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+.fe-writing-tool-tabs { display: flex; flex: 0 0 auto; gap: 3px; }
+.fe-writing-tool-tabs button { flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px; font-size: 10px; padding: 5px; min-height: 29px; border-radius: 3px; background: transparent; }
+.fe-writing-tool-tabs button[aria-pressed="true"] { background: var(--active-bg); color: var(--accent); }
+.fe-writing-tools .fe-writing-tool-card { background: var(--panel-2); border-radius: 3px; padding: 9px; gap: 7px; animation: none; box-shadow: none; }
+.fe-writing-tool-card[hidden] { display: none; }
+.fe-writing-tools .fe-writing-savebox { order: 4; flex: 0 0 auto; }
+.fe-writing-tools .fe-writing-savebox button { min-height: 28px; padding: 5px; font-size: 12px; }
+.fe-writing-tools .fe-writing-savebox > span { font-size: 10px; line-height: 1.4; }
+.fe-writing-tools .seed-control { margin-top: auto; padding: 8px 0 0; font-size: 10px; }
+.fe-writing-tools .seed-control-row input { font-size: 14px; letter-spacing: 1px; }
+.fe-writing-tools .fe-align-panel { padding: 0; }
+.fe-writing-tools .fe-writing-play-btn { min-height: 29px; font-size: 12px; padding: 5px; }
+.fe-writing-tools .fe-writing-toggle-row { margin-top: 0; padding-top: 6px; }
+.fe-writing-tools .fe-writing-slider { gap: 2px 6px; }
+.fe-toolbar .fe-tool-actions { gap: 4px; }
+.fe-toolbar .fe-tool-icon { width: 30px; min-width: 30px; }
+.fe-toolbar .fe-tool-divider { margin: 0 2px; }
