@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" viewBox="0 0 280 232">
+<rect width="100%" height="100%" fill="white"/>
+<g transform="translate(10,22)">
+<text x="0" y="-10" font-family="sans-serif" font-size="6">Current order: 1180.9 mm travel</text>
+<rect x="84.0" y="10.0" width="2.0" height="180.0" fill="#ddd" stroke="#777" stroke-width=".4"/>
+<polyline points="0.00000,0.00000 79.00000,25.00000" fill="none" stroke="#dc4b44" stroke-width=".35" stroke-dasharray="1.2 1"/>
+<polyline points="79.00000,25.00000 80.00000,25.00000" fill="none" stroke="#15252b" stroke-width=".6"/>
+<polyline points="80.00000,25.00000 80.95000,6.95000 89.05000,6.95000 90.00000,25.00000" fill="none" stroke="#dc4b44" stroke-width=".35" stroke-dasharray="1.2 1"/>
+<polyline points="90.00000,25.00000 91.00000,25.00000" fill="none" stroke="#15252b" stroke-width=".6"/>
+<polyline points="91.00000,25.00000 91.00000,45.00000" fill="none" stroke="#dc4b44" stroke-width=".35" stroke-dasharray="1.2 1"/>
+<polyline points="91.00000,45.00000 90.00000,45.00000" fill="none" stroke="#15252b" stroke-width=".6"/>
+<polyline points="90.00000,45.00000 89.05000,6.95000 80.95000,6.95000 80.00000,45.00000" fill="none" stroke="#dc4b44" stroke-width=".35" stroke-dasharray="1.2 1"/>
+<polyline points="80.00000,45.00000 79.00000,45.00000" fill="none" stroke="#15252b" stroke-width=".6"/>
+<polyline points="79.00000,45.00000 79.00000,65.00000" fill="none" stroke="#dc4b44" stroke-width=".35" stroke-dasharray="1.2 1"/>
+<polyline points="79.00000,65.00000 80.00000,65.00000" fill="none" stroke="#15252b" stroke-width=".6"/>
+<polyline points="80.00000,65.00000 80.95000,6.95000 89.05000,6.95000 90.00000,65.00000" fill="none" stroke="#dc4b44" stroke-width=".35" stroke-dasharray="1.2 1"/>
+<polyline points="90.00000,65.00000 91.00000,65.00000" fill="none" stroke="#15252b" stroke-width=".6"/>
+<polyline points="91.00000,65.00000 91.00000,85.00000" fill="none" stroke="#dc4b44" stroke-width=".35" stroke-dasharray="1.2 1"/>
+<polyline points="91.00000,85.00000 90.00000,85.00000" fill="none" stroke="#15252b" stroke-width=".6"/>
+<polyline points="90.00000,85.00000 89.05000,6.95000 80.95000,6.95000 80.00000,85.00000" fill="none" stroke="#dc4b44" stroke-width=".35" stroke-dasharray="1.2 1"/>
+<polyline points="80.00000,85.00000 79.00000,85.00000" fill="none" stroke="#15252b" stroke-width=".6"/>
+<polyline points="79.00000,85.00000 79.00000,105.00000" fill="none" stroke="#dc4b44" stroke-width=".35" stroke-dasharray="1.2 1"/>
+<polyline points="79.00000,105.00000 80.00000,105.00000" fill="none" stroke="#15252b" stroke-width=".6"/>
+<polyline points="80.00000,105.00000 80.95000,193.05000 89.05000,193.05000 90.00000,105.00000" fill="none" stroke="#dc4b44" stroke-width=".35" stroke-dasharray="1.2 1"/>
+<polyline points="90.00000,105.00000 91.00000,105.00000" fill="none" stroke="#15252b" stroke-width=".6"/>
+<polyline points="91.00000,105.00000 91.00000,125.00000" fill="none" stroke="#dc4b44" stroke-width=".35" stroke-dasharray="1.2 1"/>
+<polyline points="91.00000,125.00000 90.00000,125.00000" fill="none" stroke="#15252b" stroke-width=".6"/>
+<polyline points="90.00000,125.00000 89.05000,193.05000 80.95000,193.05000 80.00000,125.00000" fill="none" stroke="#dc4b44" stroke-width=".35" stroke-dasharray="1.2 1"/>
+<polyline points="80.00000,125.00000 79.00000,125.00000" fill="none" stroke="#15252b" stroke-width=".6"/>
+<polyline points="79.00000,125.00000 79.00000,145.00000" fill="none" stroke="#dc4b44" stroke-width=".35" stroke-dasharray="1.2 1"/>
+<polyline points="79.00000,145.00000 80.00000,145.00000" fill="none" stroke="#15252b" stroke-width=".6"/>
+<polyline points="80.00000,145.00000 80.95000,193.05000 89.05000,193.05000 90.00000,145.00000" fill="none" stroke="#dc4b44" stroke-width=".35" stroke-dasharray="1.2 1"/>
+<polyline points="90.00000,145.00000 91.00000,145.00000" fill="none" stroke="#15252b" stroke-width=".6"/>
+<polyline points="91.00000,145.00000 91.00000,165.00000" fill="none" stroke="#dc4b44" stroke-width=".35" stroke-dasharray="1.2 1"/>
+<polyline points="91.00000,165.00000 90.00000,165.00000" fill="none" stroke="#15252b" stroke-width=".6"/>
+<polyline points="90.00000,165.00000 89.05000,193.05000 80.95000,193.05000 80.00000,165.00000" fill="none" stroke="#dc4b44" stroke-width=".35" stroke-dasharray="1.2 1"/>
+<polyline points="80.00000,165.00000 79.00000,165.00000" fill="none" stroke="#15252b" stroke-width=".6"/>
+<polyline points="79.00000,165.00000 79.00000,185.00000" fill="none" stroke="#dc4b44" stroke-width=".35" stroke-dasharray="1.2 1"/>
+<polyline points="79.00000,185.00000 80.00000,185.00000" fill="none" stroke="#15252b" stroke-width=".6"/>
+<polyline points="80.00000,185.00000 80.95000,193.05000 89.05000,193.05000 90.00000,185.00000" fill="none" stroke="#dc4b44" stroke-width=".35" stroke-dasharray="1.2 1"/>
+<polyline points="90.00000,185.00000 91.00000,185.00000" fill="none" stroke="#15252b" stroke-width=".6"/>
+</g>
+<g transform="translate(150,22)">
+<text x="0" y="-10" font-family="sans-serif" font-size="6">Candidate order: 427.2 mm travel</text>
+<rect x="84.0" y="10.0" width="2.0" height="180.0" fill="#ddd" stroke="#777" stroke-width=".4"/>
+<polyline points="0.00000,0.00000 79.00000,25.00000" fill="none" stroke="#dc4b44" stroke-width=".35" stroke-dasharray="1.2 1"/>
+<polyline points="79.00000,25.00000 80.00000,25.00000" fill="none" stroke="#15252b" stroke-width=".6"/>
+<polyline points="80.00000,25.00000 80.00000,45.00000" fill="none" stroke="#dc4b44" stroke-width=".35" stroke-dasharray="1.2 1"/>
+<polyline points="80.00000,45.00000 79.00000,45.00000" fill="none" stroke="#15252b" stroke-width=".6"/>
+<polyline points="79.00000,45.00000 79.00000,65.00000" fill="none" stroke="#dc4b44" stroke-width=".35" stroke-dasharray="1.2 1"/>
+<polyline points="79.00000,65.00000 80.00000,65.00000" fill="none" stroke="#15252b" stroke-width=".6"/>
+<polyline points="80.00000,65.00000 80.00000,85.00000" fill="none" stroke="#dc4b44" stroke-width=".35" stroke-dasharray="1.2 1"/>
+<polyline points="80.00000,85.00000 79.00000,85.00000" fill="none" stroke="#15252b" stroke-width=".6"/>
+<polyline points="79.00000,85.00000 79.00000,105.00000" fill="none" stroke="#dc4b44" stroke-width=".35" stroke-dasharray="1.2 1"/>
+<polyline points="79.00000,105.00000 80.00000,105.00000" fill="none" stroke="#15252b" stroke-width=".6"/>
+<polyline points="80.00000,105.00000 80.00000,125.00000" fill="none" stroke="#dc4b44" stroke-width=".35" stroke-dasharray="1.2 1"/>
+<polyline points="80.00000,125.00000 79.00000,125.00000" fill="none" stroke="#15252b" stroke-width=".6"/>
+<polyline points="79.00000,125.00000 79.00000,145.00000" fill="none" stroke="#dc4b44" stroke-width=".35" stroke-dasharray="1.2 1"/>
+<polyline points="79.00000,145.00000 80.00000,145.00000" fill="none" stroke="#15252b" stroke-width=".6"/>
+<polyline points="80.00000,145.00000 80.00000,165.00000" fill="none" stroke="#dc4b44" stroke-width=".35" stroke-dasharray="1.2 1"/>
+<polyline points="80.00000,165.00000 79.00000,165.00000" fill="none" stroke="#15252b" stroke-width=".6"/>
+<polyline points="79.00000,165.00000 79.00000,185.00000" fill="none" stroke="#dc4b44" stroke-width=".35" stroke-dasharray="1.2 1"/>
+<polyline points="79.00000,185.00000 80.00000,185.00000" fill="none" stroke="#15252b" stroke-width=".6"/>
+<polyline points="80.00000,185.00000 80.95000,193.05000 89.05000,193.05000 90.00000,185.00000" fill="none" stroke="#dc4b44" stroke-width=".35" stroke-dasharray="1.2 1"/>
+<polyline points="90.00000,185.00000 91.00000,185.00000" fill="none" stroke="#15252b" stroke-width=".6"/>
+<polyline points="91.00000,185.00000 91.00000,165.00000" fill="none" stroke="#dc4b44" stroke-width=".35" stroke-dasharray="1.2 1"/>
+<polyline points="91.00000,165.00000 90.00000,165.00000" fill="none" stroke="#15252b" stroke-width=".6"/>
+<polyline points="90.00000,165.00000 90.00000,145.00000" fill="none" stroke="#dc4b44" stroke-width=".35" stroke-dasharray="1.2 1"/>
+<polyline points="90.00000,145.00000 91.00000,145.00000" fill="none" stroke="#15252b" stroke-width=".6"/>
+<polyline points="91.00000,145.00000 91.00000,125.00000" fill="none" stroke="#dc4b44" stroke-width=".35" stroke-dasharray="1.2 1"/>
+<polyline points="91.00000,125.00000 90.00000,125.00000" fill="none" stroke="#15252b" stroke-width=".6"/>
+<polyline points="90.00000,125.00000 90.00000,105.00000" fill="none" stroke="#dc4b44" stroke-width=".35" stroke-dasharray="1.2 1"/>
+<polyline points="90.00000,105.00000 91.00000,105.00000" fill="none" stroke="#15252b" stroke-width=".6"/>
+<polyline points="91.00000,105.00000 91.00000,85.00000" fill="none" stroke="#dc4b44" stroke-width=".35" stroke-dasharray="1.2 1"/>
+<polyline points="91.00000,85.00000 90.00000,85.00000" fill="none" stroke="#15252b" stroke-width=".6"/>
+<polyline points="90.00000,85.00000 90.00000,65.00000" fill="none" stroke="#dc4b44" stroke-width=".35" stroke-dasharray="1.2 1"/>
+<polyline points="90.00000,65.00000 91.00000,65.00000" fill="none" stroke="#15252b" stroke-width=".6"/>
+<polyline points="91.00000,65.00000 91.00000,45.00000" fill="none" stroke="#dc4b44" stroke-width=".35" stroke-dasharray="1.2 1"/>
+<polyline points="91.00000,45.00000 90.00000,45.00000" fill="none" stroke="#15252b" stroke-width=".6"/>
+<polyline points="90.00000,45.00000 90.00000,25.00000" fill="none" stroke="#dc4b44" stroke-width=".35" stroke-dasharray="1.2 1"/>
+<polyline points="90.00000,25.00000 91.00000,25.00000" fill="none" stroke="#15252b" stroke-width=".6"/>
+</g>
+</svg>

@@ -1,0 +1,69 @@
+{
+  "scope": "Offline reversible-stroke candidate; fixed order, no obstacles or hardware",
+  "fixtures": "Existing app generators; seed efficiency-2026; maze size 12; 164x200 mm",
+  "start_mm": [
+    0.0,
+    0.0
+  ],
+  "park_mm": [
+    0.0,
+    220.0
+  ],
+  "checks": "9 sizes exhaustively checked against every orientation; no input mutation",
+  "cases": [
+    {
+      "name": "maze-classic",
+      "strokes": 45,
+      "travel_before_mm": 1520.643075,
+      "travel_after_mm": 1499.257029,
+      "reduction_percent": 1.406,
+      "median_ms_5_runs": 0.211,
+      "exact_segment_multiset_preserved": true
+    },
+    {
+      "name": "maze-hex",
+      "strokes": 60,
+      "travel_before_mm": 1326.925122,
+      "travel_after_mm": 1303.034603,
+      "reduction_percent": 1.8,
+      "median_ms_5_runs": 0.3,
+      "exact_segment_multiset_preserved": true
+    },
+    {
+      "name": "maze-polar",
+      "strokes": 18,
+      "travel_before_mm": 850.104012,
+      "travel_after_mm": 800.05488,
+      "reduction_percent": 5.887,
+      "median_ms_5_runs": 0.089,
+      "exact_segment_multiset_preserved": true
+    },
+    {
+      "name": "pattern-truchet",
+      "strokes": 132,
+      "travel_before_mm": 2301.377464,
+      "travel_after_mm": 2292.938078,
+      "reduction_percent": 0.367,
+      "median_ms_5_runs": 0.695,
+      "exact_segment_multiset_preserved": true
+    },
+    {
+      "name": "pattern-wave_field",
+      "strokes": 19,
+      "travel_before_mm": 650.636438,
+      "travel_after_mm": 650.636438,
+      "reduction_percent": 0.0,
+      "median_ms_5_runs": 0.099,
+      "exact_segment_multiset_preserved": true
+    },
+    {
+      "name": "pattern-hex_mosaic",
+      "strokes": 170,
+      "travel_before_mm": 2495.886938,
+      "travel_after_mm": 2495.886938,
+      "reduction_percent": 0.0,
+      "median_ms_5_runs": 0.962,
+      "exact_segment_multiset_preserved": true
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "scope": "Synthetic source-mm fixtures; no final-size or physical-print claims",
+  "centerline_parallel_lines": {
+    "10": {
+      "gap_mm": 1.27,
+      "before_consolidation_lines": 10,
+      "actual_output_lines": 1,
+      "before_draw_mm": 530.86,
+      "actual_draw_mm": 53.086000000000006,
+      "baseline_y_span_mm": 11.43,
+      "output_y_span_mm": 0.0
+    },
+    "25": {
+      "gap_mm": 3.175,
+      "before_consolidation_lines": 10,
+      "actual_output_lines": 10,
+      "before_draw_mm": 530.86,
+      "actual_draw_mm": 530.86,
+      "baseline_y_span_mm": 28.575000000000003,
+      "output_y_span_mm": 28.575000000000003
+    }
+  },
+  "preview_geometry_used_as_plot_input": {
+    "asset": {
+      "input_points": 40401,
+      "output_points": 20301,
+      "max_deviation_mm": 0.5,
+      "input_draw_mm": 28425.69260369932,
+      "output_draw_mm": 20100.0,
+      "input_peaks": 20100,
+      "output_vertical_span_per_line_mm": 0.0
+    },
+    "gallery": {
+      "input_points": 40401,
+      "output_points": 20301,
+      "max_deviation_mm": 0.5,
+      "input_draw_mm": 28425.69260369932,
+      "output_draw_mm": 20100.0,
+      "input_peaks": 20100,
+      "output_vertical_span_per_line_mm": 0.0
+    }
+  },
+  "transitive_consolidation": {
+    "input_lines": 11,
+    "output_lines": 1,
+    "band_width_mm": 10,
+    "pair_distance_limit_mm": 2.0
+  }
+}

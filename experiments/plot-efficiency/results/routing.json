@@ -1,0 +1,344 @@
+{
+  "note": "Synthetic and built-in-generator exact-path comparisons. Millimeters and local CPU timings; no measured hardware time.",
+  "scene_vs_existing_svg_2opt": [
+    {
+      "seed": 0,
+      "strokes": 250,
+      "greedy_mm": 3155.4296188403164,
+      "refined_mm": 2662.205770652404,
+      "greedy_ms": 33.28459899057634,
+      "refined_ms": 363.69816499063745
+    },
+    {
+      "seed": 1,
+      "strokes": 250,
+      "greedy_mm": 3049.5941711822556,
+      "refined_mm": 2720.7805093920365,
+      "greedy_ms": 84.1565259906929,
+      "refined_ms": 467.0557999925222
+    },
+    {
+      "seed": 2,
+      "strokes": 250,
+      "greedy_mm": 3133.162599401684,
+      "refined_mm": 2694.7643581722155,
+      "greedy_ms": 31.680313986726105,
+      "refined_ms": 509.45018298807554
+    },
+    {
+      "seed": 3,
+      "strokes": 250,
+      "greedy_mm": 3173.7588098014335,
+      "refined_mm": 2717.1452719287026,
+      "greedy_ms": 99.54665100667626,
+      "refined_ms": 477.14994798297994
+    },
+    {
+      "seed": 4,
+      "strokes": 250,
+      "greedy_mm": 3064.692492556221,
+      "refined_mm": 2797.3569815199094,
+      "greedy_ms": 41.07694100821391,
+      "refined_ms": 305.6998909742106
+    },
+    {
+      "seed": 5,
+      "strokes": 250,
+      "greedy_mm": 3327.2552735676345,
+      "refined_mm": 2795.3704701840243,
+      "greedy_ms": 36.33864599396475,
+      "refined_ms": 281.4267780049704
+    },
+    {
+      "seed": 6,
+      "strokes": 250,
+      "greedy_mm": 3192.566817266025,
+      "refined_mm": 2735.4496550062413,
+      "greedy_ms": 33.18454101099633,
+      "refined_ms": 282.86333798314445
+    },
+    {
+      "seed": 7,
+      "strokes": 250,
+      "greedy_mm": 3213.414496402457,
+      "refined_mm": 2690.0945928172887,
+      "greedy_ms": 26.504968001972884,
+      "refined_ms": 357.3757999984082
+    }
+  ],
+  "kd_threshold": [
+    {
+      "n": 500,
+      "current_ms": 115.19961600424722,
+      "kd_ms": 38.59890199964866,
+      "current_mm": 4185.734434770757,
+      "kd_mm": 4185.734434770757
+    },
+    {
+      "n": 1000,
+      "current_ms": 432.3183779779356,
+      "kd_ms": 79.91443198989145,
+      "current_mm": 5805.102364882458,
+      "kd_mm": 5805.102364882458
+    },
+    {
+      "n": 4000,
+      "current_ms": 7068.33202301641,
+      "kd_ms": 299.86003300291486,
+      "current_mm": 10953.227747881087,
+      "kd_mm": 10953.227747881087
+    },
+    {
+      "n": 4001,
+      "current_ms": 347.4128170055337,
+      "kd_ms": 315.7967470178846,
+      "current_mm": 10952.025475774293,
+      "kd_mm": 10952.025475774293
+    }
+  ],
+  "closed_loop_seams": [
+    {
+      "seed": 0,
+      "current_mm": 2277.2551119968048,
+      "seam_choice_mm": 1973.7760775271918,
+      "current_ms": 5.771997995907441,
+      "seam_choice_ms": 80.84925700677559
+    },
+    {
+      "seed": 1,
+      "current_mm": 2070.2485563922,
+      "seam_choice_mm": 1905.8790031887809,
+      "current_ms": 5.109644000185654,
+      "seam_choice_ms": 88.17776999785565
+    },
+    {
+      "seed": 2,
+      "current_mm": 2297.737441765497,
+      "seam_choice_mm": 1851.3302788134085,
+      "current_ms": 5.598327988991514,
+      "seam_choice_ms": 92.98523399047554
+    },
+    {
+      "seed": 3,
+      "current_mm": 2143.1082189579824,
+      "seam_choice_mm": 1840.171978923889,
+      "current_ms": 8.046864997595549,
+      "seam_choice_ms": 97.86812000675127
+    }
+  ],
+  "flipped_page_start": {
+    "strokes": 28,
+    "source_origin_sort_mm": 545.0454507895013,
+    "machine_origin_sort_mm": 277.0710678118655
+  },
+  "obstacle_cost": {
+    "strokes": 18,
+    "euclidean_sort_actual_mm": 1180.948300558329,
+    "obstacle_sort_actual_mm": 427.1730540960666,
+    "current_ms": 0.1681220019236207,
+    "obstacle_sort_ms": 21.20158600155264
+  },
+  "bed_boundary_repro": {
+    "start": [
+      50.0,
+      50.0
+    ],
+    "end": [
+      150.0,
+      50.0
+    ],
+    "obstacle": {
+      "x": 90.0,
+      "y": 0.0,
+      "w": 20.0,
+      "h": 140.0
+    },
+    "returned_path": [
+      [
+        86.95,
+        -3.05
+      ],
+      [
+        113.05,
+        -3.05
+      ],
+      [
+        150.0,
+        50.0
+      ]
+    ],
+    "note": "Planner has no bed bounds: returned y=-3.05 is outside a bed with min_y=0. The later safety checker rejects it despite a clear alternative around the upper side."
+  },
+  "merge_tolerance_repros": {
+    "tolerance_mm": 0.5,
+    "close_gap_mm": 0.020000000000000018,
+    "close_gap_strokes_after": 2,
+    "distant_gap_mm": 0.6788225099390855,
+    "distant_gap_strokes_after": 1,
+    "distant_gap_input": [
+      [
+        [
+          -1.0,
+          -0.24
+        ],
+        [
+          -0.24,
+          -0.24
+        ]
+      ],
+      [
+        [
+          0.24,
+          0.24
+        ],
+        [
+          1.0,
+          0.24
+        ]
+      ]
+    ],
+    "distant_gap_output": [
+      [
+        [
+          1.0,
+          0.24
+        ],
+        [
+          -0.24,
+          -0.24
+        ],
+        [
+          -1.0,
+          -0.24
+        ]
+      ]
+    ]
+  },
+  "builtin_mazes": [
+    {
+      "generator": "plotter.maze.generate.generate_maze",
+      "type": "classic",
+      "seed": "routing-evaluation-2026",
+      "size": 12,
+      "width": 190,
+      "height": 270,
+      "continuous": false,
+      "raw_strokes": 234,
+      "final_strokes": 56,
+      "current_mm": 1426.8633404755383,
+      "candidate_mm": 1152.0769173171657,
+      "current_ms": 1.6891660052351654,
+      "candidate_ms": 15.776026004459709
+    },
+    {
+      "generator": "plotter.maze.generate.generate_maze",
+      "type": "classic",
+      "seed": "routing-evaluation-2026",
+      "size": 12,
+      "width": 190,
+      "height": 270,
+      "continuous": true,
+      "raw_strokes": 234,
+      "final_strokes": 4,
+      "current_mm": 446.4073828294886,
+      "candidate_mm": 446.4073828294886,
+      "current_ms": 0.04111998714506626,
+      "candidate_ms": 0.7996509957592934
+    },
+    {
+      "generator": "plotter.maze.generate.generate_maze",
+      "type": "classic",
+      "seed": "routing-evaluation-2026",
+      "size": 24,
+      "width": 190,
+      "height": 270,
+      "continuous": false,
+      "raw_strokes": 875,
+      "final_strokes": 190,
+      "current_mm": 2602.289282587243,
+      "candidate_mm": 2144.1775329760117,
+      "current_ms": 19.804564013611525,
+      "candidate_ms": 161.34173699538223
+    },
+    {
+      "generator": "plotter.maze.generate.generate_maze",
+      "type": "classic",
+      "seed": "routing-evaluation-2026",
+      "size": 24,
+      "width": 190,
+      "height": 270,
+      "continuous": true,
+      "raw_strokes": 875,
+      "final_strokes": 4,
+      "current_mm": 362.4065072047622,
+      "candidate_mm": 362.4065072047622,
+      "current_ms": 0.04541801172308624,
+      "candidate_ms": 1.703451998764649
+    }
+  ],
+  "correctness": {
+    "bed_boundary": {
+      "bed_mm": [
+        210.0,
+        210.0
+      ],
+      "obstacles": [
+        {
+          "x": 90.0,
+          "y": 0.0,
+          "w": 20.0,
+          "h": 140.0
+        }
+      ],
+      "margin_mm": 3.0,
+      "corner_extra_mm": 0.05,
+      "start": [
+        50.0,
+        50.0
+      ],
+      "end": [
+        150.0,
+        50.0
+      ],
+      "current_path": [
+        [
+          86.95,
+          -3.05
+        ],
+        [
+          113.05,
+          -3.05
+        ],
+        [
+          150.0,
+          50.0
+        ]
+      ],
+      "current_safety_rejection": "G-code, Zeile 5: Travel bei (86.95, -3.05) au\u00dferhalb des Betts ('G0 X86.95 Y-3.05')",
+      "alternative_path": [
+        [
+          86.95,
+          143.05
+        ],
+        [
+          113.05,
+          143.05
+        ],
+        [
+          150.0,
+          50.0
+        ]
+      ],
+      "alternative_safety_passes": true
+    },
+    "hatch_noding": {
+      "source": "20 mm square plus 9 horizontal hatch lines at 2 mm increments, matching endpoint-on-outline topology of designer hatches",
+      "current_strokes": 10,
+      "candidate_strokes": 1,
+      "current_draw_mm": 260.0,
+      "candidate_draw_mm": 294.0,
+      "geometry_set_equal": true,
+      "caveat": "Noding permits traversal but continuous mode retraces some outline edges; ink deposition and time are not equivalent."
+    }
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "scope": "Synthetic object-local mm; diagnostics, not approved optimized geometry",
+  "dashed_corner": {
+    "original": [
+      [
+        [
+          0,
+          0
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          5,
+          5
+        ]
+      ]
+    ],
+    "actual": [
+      [
+        [
+          0,
+          0
+        ],
+        [
+          5,
+          5
+        ]
+      ]
+    ],
+    "original_mm": 10,
+    "actual_mm": 7.0710678118654755,
+    "omitted_corner_distance_to_diagonal_mm": 3.5355339059327373
+  },
+  "filled_hole": {
+    "hatch_lines": 10,
+    "hatch_lines_crossing_intended_white_hole": 5,
+    "intended_hole_area_mm2": 100
+  },
+  "dotted_stroke": {
+    "intended_marks": 11,
+    "generated_paths": 22,
+    "draw_mm": 17.599999999999987,
+    "note": "Current marks are crosses. Replacing them with pen contacts changes their shape."
+  }
+}
