@@ -1,0 +1,38 @@
+{
+  "shapely": "2.1.2",
+  "scope": "One local run; no full union or UI; counts self and directed pairs",
+  "cases": [
+    {
+      "input_points": 20000,
+      "output_points": 18600,
+      "geometry_ms": 11.119049013359472,
+      "simplify_ms": 13.897938973968849,
+      "index_query_ms": 5.882350000320002,
+      "candidate_pairs": 100,
+      "all_pairs": 10000
+    },
+    {
+      "input_points": 100000,
+      "output_points": 34700,
+      "geometry_ms": 2.8438180161174387,
+      "simplify_ms": 82.29318499797955,
+      "index_query_ms": 4.585510003380477,
+      "candidate_pairs": 100,
+      "all_pairs": 10000
+    },
+    {
+      "input_points": 400000,
+      "output_points": 35600,
+      "geometry_ms": 9.62694501504302,
+      "simplify_ms": 238.57676298939623,
+      "index_query_ms": 12.887961987871677,
+      "candidate_pairs": 100,
+      "all_pairs": 10000
+    }
+  ],
+  "dense_worst_case": {
+    "strokes": 1000,
+    "candidate_pairs": 1000000,
+    "index_query_ms": 607.6992020243779
+  }
+}
