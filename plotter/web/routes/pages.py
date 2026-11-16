@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import asdict
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
@@ -13,7 +14,8 @@ from plotter.core.jobmeta import delete_job_meta, read_job_meta
 from plotter.core.storage import jobs_dir
 from plotter.gcode.metrics import evaluate_gcode
 from plotter.gcode.preview import parse_gcode_3d_text
-from plotter.gcode.scene import page_polylines, save_scene_job, scene_gcode
+from plotter.gcode.scene import page_polylines, save_scene_job
+from plotter.plotplan import build_scene_plan, encode_plot_plan
 from plotter.text import text_polylines
 from plotter.web.deps import document_store, profile_service
 
@@ -580,10 +582,12 @@ def page_score(page_id: str, req: SceneRequest) -> dict:
     page = _page_for_preview(page_id, req.objects)
     try:
         _, _, cal = _require_active_page_profile(page, req)
-        gcode = scene_gcode(page, cal)
+        plan = build_scene_plan(page, cal)
+        gcode = encode_plot_plan(plan)
     except PlotterError as exc:
         return {"score": None, "metrics": None, "reason": str(exc)}
-    return {**evaluate_gcode(gcode, MAX_GCODE_BYTES), "reason": None}
+    return {**evaluate_gcode(gcode, MAX_GCODE_BYTES), "reason": None,
+            "plotPlan": {"id": plan.plan_id, "version": plan.version, **asdict(plan.report)}}
 
 
 @router.post("/pages/{page_id}/preview3d")
@@ -592,10 +596,12 @@ def page_preview_3d(page_id: str, req: SceneRequest) -> dict:
     page = _page_for_preview(page_id, req.objects)
     try:
         _, _, cal = _require_active_page_profile(page, req)
-        gcode = scene_gcode(page, cal)
+        plan = build_scene_plan(page, cal)
+        gcode = encode_plot_plan(plan)
     except PlotterError as exc:
         raise HTTPException(400, str(exc)) from exc
-    return {**parse_gcode_3d_text(gcode), "bed": [cal.bed_width, cal.bed_height]}
+    return {**parse_gcode_3d_text(gcode), "bed": [cal.bed_width, cal.bed_height],
+            "plotPlan": {"id": plan.plan_id, "version": plan.version, **asdict(plan.report)}}
 
 
 @router.post("/paint/text-polylines")

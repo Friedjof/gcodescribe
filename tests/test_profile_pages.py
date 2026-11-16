@@ -28,6 +28,21 @@ def _line_object(x0: float, y0: float, x1: float, y1: float) -> dict:
     }
 
 
+def test_score_preview_and_saved_job_share_one_plot_plan(client):
+    created = client.post("/api/pages", json={}).json()
+    url = f"/api/pages/{created['id']}"
+    saved = client.put(url, json={"objects": [_line_object(10, 10, 40, 20)]})
+    assert saved.status_code == 200, saved.text
+    score = client.post(url + "/score", json={})
+    preview = client.post(url + "/preview3d", json={})
+    job = client.post(url + "/gcode", json={})
+    assert score.status_code == preview.status_code == job.status_code == 200
+    assert score.json()["plotPlan"] == preview.json()["plotPlan"]
+    metadata = read_job_meta(jobs_dir() / job.json()["filename"])
+    assert metadata["source"]["plot_plan_id"] == score.json()["plotPlan"]["id"]
+    assert metadata["source"]["plot_plan_version"] == score.json()["plotPlan"]["version"]
+
+
 class TestPageProfileBinding:
     def test_new_page_gets_project_profile_after_global_switch(self, client):
         project = client.get("/api/pages").json()["project"]

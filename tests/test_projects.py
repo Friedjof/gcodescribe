@@ -232,7 +232,13 @@ def test_profile_edit_keeps_historical_slide_snapshot_but_new_jobs_use_current_p
     ProfileService().update(profile_id, calibration={"draw_feed": 17})
     assert client.get(f"/api/pages/{old_id}").json()["profileSnapshot"] == old["profileSnapshot"]
     assert client.get(f"/api/pages/{old_id}").json()["objects"] == objects
-    assert client.post(f"/api/pages/{old_id}/preview3d", json={}).json() == preview_before
+    preview_after = client.post(f"/api/pages/{old_id}/preview3d", json={}).json()
+    # A speed change keeps preview geometry but must invalidate the immutable
+    # plan identity: a later job uses the new feed even at the same coordinates.
+    assert {k: v for k, v in preview_after.items() if k != "plotPlan"} == {
+        k: v for k, v in preview_before.items() if k != "plotPlan"
+    }
+    assert preview_after["plotPlan"]["id"] != preview_before["plotPlan"]["id"]
     response = client.post(f"/api/pages/{old_id}/gcode", json={})
     assert response.status_code == 200, response.text
     meta = read_job_meta(workspace / "jobs" / response.json()["filename"])
