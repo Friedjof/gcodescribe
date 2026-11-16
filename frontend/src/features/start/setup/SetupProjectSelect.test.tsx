@@ -56,7 +56,7 @@ it("offers a retry after the project list fails to load", async () => {
   mocks.listProjects.mockRejectedValueOnce(new Error("List failed"));
   render(<SetupProjectSelect index={index} enabled />);
   expect(await screen.findByRole("alert")).toHaveTextContent("List failed");
-  fireEvent.click(screen.getByRole("button", { name: "save.retry" }));
+  fireEvent.click(screen.getByRole("button", { name: "common.reload" }));
   await screen.findByRole("option", { name: "Second" });
   await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
 });

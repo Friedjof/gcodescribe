@@ -44,7 +44,7 @@ describe("shared project/calibration snapshot", () => {
     await store.refresh();
     expect(store.getSnapshot()).toBe(snapshot);
     expect(api.getProfile).toHaveBeenCalledTimes(1);
-    expect(api.paper).toHaveBeenCalledTimes(1);
+    expect(api.paper).not.toHaveBeenCalled();
     expect(snapshot.profile?.id).toBe(a.index.project?.profileId);
     expect(snapshot.paper?.calibration.bed_width).toBe(210);
   });
@@ -139,15 +139,20 @@ describe("shared project/calibration snapshot", () => {
     expect(store.getSnapshot().paper).toBeNull();
   });
 
-  it("does not combine profile geometry with a newer paper response", async () => {
+  it("loads automatic positions without mixing in incompatible legacy paper metadata", async () => {
     const { api, store } = setup();
-    api.paper.mockResolvedValueOnce({ ...a.paper,
-      calibration: { ...a.profile.calibration, origin_x: 80 } });
-    await expect(store.refresh()).rejects.toThrow("Projektkalibrierung");
-    expect(store.getSnapshot().profile).toBeNull();
-    expect(store.getSnapshot().paper).toBeNull();
-    await store.refresh();
-    expect(store.getSnapshot().profile).toBe(a.profile);
+    const selected = fixture("b");
+    selected.profile.calibration = { ...selected.profile.calibration, defined_positions: [],
+      paper_corners: { bl: [20, 30], tr: [180, 190] } };
+    api.getProfile.mockResolvedValue(selected.profile);
+    api.paper.mockResolvedValue({ calibration: { ...selected.profile.calibration,
+      defined_positions: ["park", "calibration"] }, rect: [20, 30, 160, 160] });
+    store.setIndex(selected.index);
+    await vi.waitFor(() => expect(store.getSnapshot().profile).toBe(selected.profile));
+    expect(store.getSnapshot().error).toBeNull();
+    expect(store.getSnapshot().paper).toEqual({ calibration: selected.profile.calibration, rect: [20, 30, 160, 160] });
+    expect(store.getSnapshot().paper?.calibration.defined_positions).toEqual([]);
+    expect(api.paper).not.toHaveBeenCalled();
   });
 
   it("aborts a deactivated session and rejects late results", async () => {

@@ -1,10 +1,10 @@
 import type { CalibrationProfile, PageIndex, PaperState } from "../api/types";
+import { paperRect } from "../lib/paperGeometry";
 import { errorMessage, isAbortError } from "../api/errors";
 
 interface ProjectApi {
   listPages(signal?: AbortSignal): Promise<PageIndex>;
   getProfile(id: string, signal?: AbortSignal): Promise<CalibrationProfile>;
-  paper(projectId?: string, signal?: AbortSignal): Promise<PaperState>;
 }
 
 export interface ProjectCalibrationSnapshot {
@@ -21,17 +21,6 @@ const contextKey = (index: PageIndex): string => JSON.stringify([
   index.project?.id, index.project?.profileId,
   index.activeProfile?.fingerprint, index.activeProfile?.name,
 ]);
-
-// The two endpoints describe one calibration. Compare JSON values rather than
-// property order, so a concurrent write cannot mix two calibration versions.
-function sameJson(left: unknown, right: unknown): boolean {
-  if (left === right) return true;
-  if (!left || !right || typeof left !== "object" || typeof right !== "object") return false;
-  const a = left as Record<string, unknown>, b = right as Record<string, unknown>;
-  const keys = Object.keys(a);
-  return keys.length === Object.keys(b).length && keys.every(key =>
-    Object.prototype.hasOwnProperty.call(b, key) && sameJson(a[key], b[key]));
-}
 
 /** One project snapshot per app session; no component owns a second poll loop. */
 export class ProjectCalibrationStore {
@@ -85,17 +74,16 @@ export class ProjectCalibrationStore {
     const retain = this.snapshot.index && contextKey(this.snapshot.index) === key;
     this.publish({ index, ...(!retain ? { profile: null, paper: null } : {}), loading: true, error: null });
     if (!index.project) throw new Error("Kein aktives Projekt vorhanden.");
-    const [profile, paper] = await Promise.all([
-      this.api.getProfile(index.project.profileId, signal),
-      this.api.paper(index.project.id, signal),
-    ]);
+    const profile = await this.api.getProfile(index.project.profileId, signal);
     this.check(sequence);
     if (profile.id !== index.project.profileId) throw new Error("Das Projektprofil hat sich geändert. Bitte erneut laden.");
     if (index.activeProfile?.fingerprint && profile.fingerprint
         && index.activeProfile.fingerprint !== profile.fingerprint)
       throw new Error("Das Projektprofil wurde während des Ladens geändert. Bitte erneut laden.");
-    if (!sameJson(profile.calibration, paper.calibration))
-      throw new Error("Die Projektkalibrierung wurde während des Ladens geändert. Bitte erneut laden.");
+    // A single profile response owns both settings and preview geometry. Older
+    // /paper responses can materialize automatic positions as explicit overrides.
+    // Mixing those representations falsely reports a concurrent calibration edit.
+    const paper: PaperState = { calibration: profile.calibration, rect: paperRect(profile.calibration) };
     this.loadedKey = key;
     const changed = previous && (previous.id !== profile.id || previous.fingerprint !== profile.fingerprint || previous.name !== profile.name);
     this.publish({ profile, paper, loading: false, error: null,

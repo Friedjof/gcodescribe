@@ -73,7 +73,7 @@ export default function SetupProjectSelect({
         <div className="setup-project-error" role="alert">
           <span>{error}</span>
           {!task.error && <button onClick={() => reload((value) => value + 1)}>
-            {t("save.retry")}
+            {t("common.reload")}
           </button>}
         </div>
       )}

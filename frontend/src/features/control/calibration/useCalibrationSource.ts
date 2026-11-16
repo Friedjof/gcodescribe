@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type CalibrationProfile, type PaperState } from "../../../api";
 import { ApiError, errorMessage, isAbortError } from "../../../api/errors";
 import { useProjectCalibration } from "../../../state/ProjectCalibrationContext";
-import { paperRect } from "../paperLayout";
+import { paperRect } from "../../../lib/paperGeometry";
 
 /** The setup uses its project; the profile editor uses an explicit, independent profile. */
 export function useCalibrationSource(

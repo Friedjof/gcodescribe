@@ -120,11 +120,10 @@ it("uses the project's complete calibration even when the global profile differs
   await setup();
   expect(screen.getByText('paper.context Formelsammlungen Project profile')).toBeInTheDocument();
   expect(mocks.getProfile).toHaveBeenCalledWith("project-profile", expect.any(AbortSignal));
-  expect(mocks.paper).toHaveBeenCalledWith("project", expect.any(AbortSignal));
+  expect(mocks.paper).not.toHaveBeenCalled();
   expect(mocks.activeProfile).not.toHaveBeenCalled();
   expect(screen.queryByRole("img", { name: "A5 148 × 210 mm" })).not.toBeInTheDocument();
   expect(mocks.activateProfile).not.toHaveBeenCalled();
-  expect(mocks.paper).toHaveBeenCalledOnce();
 });
 
 it("keeps the plot area passive without resize handles", async () => {

@@ -288,3 +288,23 @@ covered both themes at 1024×768, 1280×720 and 1366×768, all four calibration 
 view switching, isolated profile writes and all 11 tour steps. An inactive profile
 was also opened on the actual old dev backend: preview and wizard visible, no
 conflict, no write request. No physical printer movement was performed.
+
+### Setup project selection: consistent calibration reads
+
+The running development server returned `defined_positions: []` from the selected
+profile but `["park", "calibration"]` from its paper endpoint. Coordinates and
+profile fingerprints matched. Comparing these representations therefore blocked
+Setup with a false concurrent-change error.
+
+The shared project store now derives the paper outline from its single profile
+response. Automatic-position metadata stays intact; project identity, fingerprint
+checks and cancellation of superseded reads remain in place. The existing
+read-only profile fallback shares this geometry helper. Load retry buttons now
+say “Reload” / “Erneut laden” instead of “Retry saving”.
+
+Regression coverage includes the observed legacy metadata discrepancy, delayed
+responses during project changes, shared polling and degenerate paper outlines.
+The production build passed. Firefox loaded Setup against the affected server
+without an error, then completed seven simulated selector changes using its real
+profile data. No global paper reads, JavaScript errors or actual writes occurred;
+the background refresh also retained a consistent selection.

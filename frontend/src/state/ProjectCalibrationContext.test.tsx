@@ -37,7 +37,7 @@ it("shares one read/poll between views and cleans up the timer and subscription"
   expect(screen.getByTestId("calibration").textContent).toBe("a:210:0");
   expect(mocks.listPages).toHaveBeenCalledTimes(1);
   expect(mocks.getProfile).toHaveBeenCalledTimes(1);
-  expect(mocks.paper).toHaveBeenCalledTimes(1);
+  expect(mocks.paper).not.toHaveBeenCalled();
   await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
   expect(mocks.listPages).toHaveBeenCalledTimes(2);
   expect(mocks.getProfile).toHaveBeenCalledTimes(1);

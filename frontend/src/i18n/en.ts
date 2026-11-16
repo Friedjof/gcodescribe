@@ -1,4 +1,5 @@
 const en: Record<string, string> = {
+  "common.reload": "Reload",
   "profiles.previewOnly": "Profile preview: the running server has not been updated yet. Restart the development server for visual editing; settings can still be edited under Details.",
   "profiles.viewMode": "Profile view",
   "profiles.visual": "Visual",

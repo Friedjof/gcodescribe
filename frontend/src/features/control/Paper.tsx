@@ -17,7 +17,7 @@ export default function Paper(props: CalibrationControllerProps & { guided?: boo
   if (!cal) return <div className="card">{t("common.loading")}</div>;
   return (
     <>
-      {controls.readOnly && <div className="profile-compat-notice" role="status"><span>{t("profiles.previewOnly")}</span><button onClick={retry}>{t("save.retry")}</button></div>}
+      {controls.readOnly && <div className="profile-compat-notice" role="status"><span>{t("profiles.previewOnly")}</span><button onClick={retry}>{t("common.reload")}</button></div>}
     <div className={`grid paper-grid${props.guided ? " paper-guided" : ""}`}>
       {visible && pressureOpen && <CalibrationPressureDialog canMove={!!online && !motionLocked && !positions.busy}
         projectId={projectId} profileId={profileId ?? undefined}

@@ -27,7 +27,7 @@ export default function SetupWorkspace({
       <div className="banner err" role="alert">
         {error}
         <button onClick={() => void refresh(true).catch(() => {})}>
-          {t("save.retry")}
+          {t("common.reload")}
         </button>
       </div>
     );
