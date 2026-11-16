@@ -34,7 +34,7 @@ import CanvasGestureReadout from "./components/canvas/CanvasGestureReadout";
 import type { GestureFeedback, RotationHint } from "./components/canvas/CanvasGestureReadout";
 import { geometryTask } from "./lib/geometryTasks";
 import { canvasUnitsPerPixel } from "./lib/canvasTransforms";
-import { fitCanvasView } from "./lib/canvasViewport";
+import { useCanvasViewport } from "./hooks/useCanvasViewport";
 import CanvasRulers from "./components/canvas/CanvasRulers";
 import CanvasGrid from "./components/canvas/CanvasGrid";
 import ObjectsLayer from "./components/canvas/ObjectsLayer";
@@ -67,10 +67,7 @@ type Drag =
   | { mode: "groupRotate"; ids: string[]; center: Pt; startAngle: number; startTs: Map<string, Transform> }
   | { mode: "rotate"; id: string; center: Pt; startAngle: number; startRotation: number };
 
-const cl = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const zValue = (obj: SceneObject, index: number) => obj.zOrder ?? index;
-const MIN_ZOOM = 0.5;
-const MAX_ZOOM = 48;
 const PEN_SIMPLIFY_EPS = 0.4;
 const PEN_MIN_LENGTH = 0.08;
 const ERASER_RADIUS = 2.5;
@@ -138,7 +135,7 @@ function PaintCanvas({
   const S = Math.max(W, H);
   const viewBounds = rotatedBounds(W, H, viewRotation);
   const size = useCanvasSize(svgRef, () => cancelGesture());
-  const baseView: ViewBox = fitCanvasView(viewBounds, size, padding + (showRulers ? 20 : 0));
+  const { view, setView, zoom, zoomAt, clampView, fitPage } = useCanvasViewport(viewBounds, size, padding + (showRulers ? 20 : 0), viewRotation);
 
   const [draft, setDraft] = useState<Draft | null>(null);
   const [marquee, setMarquee] = useState<Marquee | null>(null);
@@ -146,7 +143,6 @@ function PaintCanvas({
   const [guides, setGuides] = useState<Guide[]>([]);
   const [feedback, setFeedback] = useState<GestureFeedback | null>(null);
   const [rotationHint, setRotationHint] = useState<RotationHint | null>(null);
-  const [view, setView] = useState<ViewBox>(baseView);
   const [spaceDown, setSpaceDown] = useState(false);
   const [panning, setPanning] = useState(false);
   const drag = useRef<Drag | null>(null);
@@ -188,7 +184,6 @@ function PaintCanvas({
     const transform = previewTransforms.get(obj.id);
     return transform ? { ...obj, transform } : obj;
   }), [page.objects, previewTransforms]);
-  const zoom = baseView.w / view.w;
   // Stylus eraser tip or barrel eraser button overrides the active tool.
   const effectiveTool: Tool = stylusErasing ? "erase" : tool;
   const pixel = canvasUnitsPerPixel(view, size);
@@ -201,10 +196,6 @@ function PaintCanvas({
   // How close (mm) a moving edge/center must come to a reference before it
   // snaps. Scaled to the plot area so it feels the same regardless of size.
   const SNAP_TOL = pixel * 8;
-
-  useEffect(() => {
-    setView(baseView);
-  }, [baseView.x, baseView.y, baseView.w, baseView.h]);
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -228,32 +219,6 @@ function PaintCanvas({
       window.removeEventListener("keyup", up);
     };
   }, []);
-
-  const clampView = (next: ViewBox): ViewBox => {
-    const x = next.w >= baseView.w
-      ? baseView.x + (baseView.w - next.w) / 2
-      : cl(next.x, baseView.x, baseView.x + baseView.w - next.w);
-    const y = next.h >= baseView.h
-      ? baseView.y + (baseView.h - next.h) / 2
-      : cl(next.y, baseView.y, baseView.y + baseView.h - next.h);
-    return { ...next, x, y };
-  };
-
-  const zoomAt = (factor: number, anchor?: Pt) => {
-    setView((current) => {
-      const currentZoom = baseView.w / current.w;
-      const nextZoom = cl(currentZoom * factor, MIN_ZOOM, MAX_ZOOM);
-      const nextW = baseView.w / nextZoom;
-      const nextH = baseView.h / nextZoom;
-      const a = anchor ?? [current.x + current.w / 2, current.y + current.h / 2];
-      return clampView({
-        x: a[0] - (a[0] - current.x) * (nextW / current.w),
-        y: a[1] - (a[1] - current.y) * (nextH / current.h),
-        w: nextW,
-        h: nextH,
-      });
-    });
-  };
 
   const placementFrames = useMemo(() => new Map(page.objects.map(object => [object.id, objectPlacementFrame(object)])), [page.objects]);
   // Wrappers that enforce the hard plot-area boundary before every transform write.
@@ -768,7 +733,7 @@ function PaintCanvas({
   return (
     <div className="paint-canvas">
       <div className="paint-zoom-controls">
-        <button className="ghost tiny" type="button" onClick={() => { cancelGesture(); setView(baseView); }} title={t("interface.fitPage")}>{t("interface.fitPage")}</button>
+        <button className="ghost tiny" type="button" onClick={() => { cancelGesture(); fitPage(); }} title={t("interface.fitPage")}>{t("interface.fitPage")}</button>
         <button className="ghost tiny" type="button" aria-label={t("paint.zoomOut")} title={t("paint.zoomOut")} onClick={() => zoomAt(1 / 1.2)}>−</button>
         <span>{t("paint.zoomLevel", { pct: String(Math.round(zoom * 100)) })}</span>
         <button className="ghost tiny" type="button" aria-label={t("paint.zoomIn")} title={t("paint.zoomIn")} onClick={() => zoomAt(1.2)}>+</button>
