@@ -1,3 +1,4 @@
+import EditorIcon from "../../components/editor/EditorIcon";
 import { useJobPreview } from "./hooks/useJobPreview";
 import JobThumbnail from "./components/JobThumbnail";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -458,8 +459,8 @@ export default function Convert({
               value={viewMode}
               onChange={setViewMode}
               options={[
-                { value: "list", label: "≡" },
-                { value: "tile", label: "⊞" },
+                { value: "list", label: <EditorIcon name="list" size={17}/>, title: t("jobs.viewList") },
+                { value: "tile", label: <EditorIcon name="grid" size={17}/>, title: t("jobs.viewTiles") },
               ]}
             />
           </div>
