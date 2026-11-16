@@ -549,7 +549,7 @@ it("uses a focused beginner flow without executing motion when changing steps", 
   render(<Paper status={{configured:true,online:true}} onAction={vi.fn()} guided />);
   const pen=await screen.findByRole("button",{name:/paper.nav.pen/});
   fireEvent.click(pen);
-  expect(await screen.findByText("paper.step2Hint")).toBeInTheDocument();
+  expect(await screen.findByText("calibration.penHint")).toBeInTheDocument();
   expect(screen.queryByRole("button",{name:/paper.step1$/})).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button",{name:"paper.optionalTools"}));
   fireEvent.keyDown(document.activeElement!,{key:"ArrowDown"});

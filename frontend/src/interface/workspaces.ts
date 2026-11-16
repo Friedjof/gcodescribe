@@ -8,9 +8,10 @@ export interface WorkspaceDefinition {
   primary: boolean;
   keepAlive: boolean;
   capability?: "ai";
+  retired?: boolean;
 }
 export const WORKSPACES: readonly WorkspaceDefinition[] = [
-  { id: "start", label: "workspace.start", description: "workspace.startHint", primary: true, keepAlive: true },
+  { id: "start", label: "workspace.start", description: "workspace.startHint", primary: false, keepAlive: false, retired: true },
   { id: "paint", label: "workspace.paint", description: "workspace.paintHint", primary: true, keepAlive: true },
   { id: "games", label: "workspace.games", description: "workspace.gamesHint", primary: true, keepAlive: true },
   { id: "gallery", label: "workspace.gallery", description: "workspace.galleryHint", primary: false, keepAlive: true },
@@ -21,19 +22,19 @@ export const WORKSPACES: readonly WorkspaceDefinition[] = [
   { id: "font", label: "workspace.font", description: "workspace.fontHint", primary: false, keepAlive: true },
   { id: "ai", label: "workspace.ai", description: "workspace.aiHint", primary: false, keepAlive: true, capability: "ai" },
 ];
-export const DEFAULT_VISIBLE: readonly WorkspaceId[] = ["start", "paint", "games", "convert", "paper"];
+export const DEFAULT_VISIBLE: readonly WorkspaceId[] = ["paint", "games", "convert", "paper"];
 export const isWorkspaceId = (value: unknown): value is WorkspaceId => typeof value === "string" && (WORKSPACE_IDS as readonly string[]).includes(value);
-export const workspaceAvailable = (workspace: WorkspaceDefinition, aiEnabled: boolean) => workspace.capability !== "ai" || aiEnabled;
+export const workspaceAvailable = (workspace: WorkspaceDefinition, aiEnabled: boolean) => !workspace.retired && (workspace.capability !== "ai" || aiEnabled);
 export const workspaceById = (id: WorkspaceId): WorkspaceDefinition => WORKSPACES.find(workspace => workspace.id === id)!;
 export function visibleWorkspaces(order: readonly WorkspaceId[], visible: readonly WorkspaceId[], aiEnabled: boolean) {
   const shown = new Set(visible);
   const result = order.map(workspaceById).filter(workspace => shown.has(workspace.id) && workspaceAvailable(workspace, aiEnabled));
-  return result.length ? result : [workspaceById("start")];
+  return result.length ? result : [workspaceById("paper")];
 }
 export function usableWorkspace(active: WorkspaceId, order: readonly WorkspaceId[], visible: readonly WorkspaceId[], aiEnabled: boolean): WorkspaceId {
   const available = visibleWorkspaces(order, visible, aiEnabled);
   if (available.some(workspace => workspace.id === active)) return active;
   const index = order.indexOf(active);
   const following = available.find(workspace => order.indexOf(workspace.id) >= index);
-  return following?.id ?? available[available.length - 1]?.id ?? "start";
+  return following?.id ?? available[available.length - 1]?.id ?? "paper";
 }

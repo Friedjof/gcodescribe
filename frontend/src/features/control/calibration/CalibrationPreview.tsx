@@ -1,20 +1,22 @@
 import { useI18n } from "../../../i18n";
-import LiveView from "../LiveView";
+import CalibrationMap from "./CalibrationMap";
+import CompactCalibrationPreview from "./CompactCalibrationPreview";
 import type { Calibration } from "../../../api";
 import { PAPER_FORMATS } from "../paperLayout";
 import { CORNERS } from "./steps";
 import type { CalibrationController } from "./useCalibrationController";
 
-type Controls = Pick<CalibrationController,
+export type CalibrationPreviewControls = Pick<CalibrationController,
   "positionsOpen" | "clickMove" | "formatId" | "setFormatId" | "currentFormat" |
   "formatLandscape" | "setFormatLandscape" | "pos" | "rect" | "preview" | "positions" |
   "visible" | "homed" | "canMove" | "canEdit" | "moveTo" | "active" | "handleDragCorner" |
   "handleDropCorner" | "obstacles" | "saveObstacles" | "currentPlot" | "cornerAngles" |
   "setClickMove" | "previewJob" | "setPreviewJob" | "jobs" | "refreshJobs">;
 
-export default function CalibrationPreview({ cal, controls }: { cal: Calibration; controls: Controls }) {
+export default function CalibrationPreview({ cal, controls, compact = false }: { cal: Calibration; controls: CalibrationPreviewControls; compact?: boolean }) {
   const { t } = useI18n();
-  const { positionsOpen, clickMove, formatId, setFormatId, currentFormat, formatLandscape, setFormatLandscape, pos, rect, preview, positions, visible, homed, canMove, canEdit, moveTo, active, handleDragCorner, handleDropCorner, obstacles, saveObstacles, currentPlot, cornerAngles, setClickMove, previewJob, setPreviewJob, jobs, refreshJobs } = controls;
+  const { positionsOpen, clickMove, formatId, setFormatId, currentFormat, formatLandscape, setFormatLandscape, pos, preview, positions, homed, obstacles, currentPlot, cornerAngles, setClickMove, previewJob, setPreviewJob, jobs, refreshJobs } = controls;
+  if (compact) return <CompactCalibrationPreview cal={cal} controls={controls}/>;
   return (
     <section className="card paper-live-panel">
       <h2>{t("paper.liveView")}</h2>
@@ -32,23 +34,7 @@ export default function CalibrationPreview({ cal, controls }: { cal: Calibration
             {formatLandscape ? t("paper.landscape") : t("paper.portrait")} ↻
           </button>}
       </div>
-      <LiveView key={visible ? "visible" : "hidden"}
-        cal={cal}
-        position={pos}
-        rect={rect}
-        preview={preview}
-        onMoveTo={positionsOpen
-          ? positions.ready && !positions.busy ? (x, y) => positions.move({ x, y }) : undefined
-          : visible && clickMove && homed && canMove ? moveTo : undefined}
-        selectedPosition={positionsOpen ? positions.kind : null}
-        target={positions.target}
-        onDragCorner={visible && canEdit && active === "corners" ? handleDragCorner : undefined}
-        onDropCorner={visible && canEdit && active === "corners" ? handleDropCorner : undefined}
-        formatPreview={currentFormat ? { format: currentFormat, landscape: formatLandscape } : undefined}
-        obstacles={obstacles}
-        editingObstacles={visible && canEdit && active === "obstacles"}
-        onObstaclesChange={canEdit ? saveObstacles : undefined}
-      />
+      <CalibrationMap cal={cal} controls={controls}/>
       <div className="paper-area-readout">
         <span>{t("paper.drawingArea")} {currentPlot.w.toFixed(1)} × {currentPlot.h.toFixed(1)} mm</span>
       </div>

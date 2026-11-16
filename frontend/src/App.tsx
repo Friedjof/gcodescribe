@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import type { PrinterStatus } from "./api/types/printer";
 import { api, onAppEvent, type AiImageStatus, type EffectiveSettings } from "./api";
 import StatusPill from "./components/StatusPill";
@@ -13,15 +13,16 @@ const Games = lazy(() => import("./features/games/Games"));
 const Gallery = lazy(() => import("./features/gallery/Gallery"));
 const Calibrate = lazy(() => import("./features/control/Calibrate"));
 const Control = lazy(() => import("./features/control/Control"));
-const Paper = lazy(() => import("./features/control/Paper"));
 import WorkspaceTabs from "./components/editor/WorkspaceTabs";
 import TabSettings from "./components/editor/TabSettings";
-import InterfaceMenu from "./components/editor/InterfaceMenu";
+import ProgramMenus from "./components/editor/ProgramMenus";
+import type { PaintWorkspaceCommand } from "./interface/commands";
+const PaintInfoModal = lazy(() => import("./features/paint/components/PaintInfoModal"));
 import EditorIcon from "./components/editor/EditorIcon";
 import { SetupProgressProvider } from "./features/start/setup/SetupProgressProvider";
 import { InterfaceProvider, useInterface } from "./interface/InterfaceProvider";
 import { WORKSPACES, visibleWorkspaces, usableWorkspace, workspaceById, type WorkspaceId } from "./interface/workspaces";
-const StartOverview = lazy(() => import("./features/start/StartOverview"));
+const SetupWorkspace = lazy(() => import("./features/start/SetupWorkspace"));
 const SettingsDialog = lazy(() => import("./features/settings/SettingsDialog"));
 import { useToasts } from "./components/Toasts";
 import { useI18n } from "./i18n";
@@ -53,22 +54,27 @@ function AdminApp() {
   const toast = useToasts();
   const [galleryResult, setGalleryResult] = useState<string>();
   const { preferences, update } = useInterface();
-  const [requestedTab, setRequestedTab] = useState<Tab>("start");
+  const [requestedTab, setRequestedTab] = useState<Tab>("paper");
   const [tabSettingsOpen, setTabSettingsOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [paintCommand, setPaintCommand] = useState<PaintWorkspaceCommand | null>(null);
+  const commandId = useRef(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [visited, setVisited] = useState<Set<Tab>>(() => new Set<Tab>(["start"]));
+  const [visited, setVisited] = useState<Set<Tab>>(() => new Set<Tab>(["paper"]));
   const [status, setStatus] = useState<PrinterStatus | null>(null);
   const [aiStatus, setAiStatus] = useState<AiImageStatus | null>(null);
   const [aiInitialFile, setAiInitialFile] = useState<File | null>(null);
   const [desktop, setDesktop] = useState(false);
   const tab = usableWorkspace(requestedTab, preferences.workspaceOrder, preferences.visibleWorkspaces, aiStatus?.enabled ?? false);
   const workspaces = visibleWorkspaces(preferences.workspaceOrder, preferences.visibleWorkspaces, aiStatus?.enabled ?? false);
-  const interactive = !settingsOpen && !tabSettingsOpen;
-  const setTab = (id: Tab) => {
+  const interactive = !settingsOpen && !tabSettingsOpen && !helpOpen;
+  const setTab = useCallback((id: Tab) => {
+    if (id === "start") id = "paper";
     if (id === "ai" && !aiStatus?.enabled) return;
     update(prefs => prefs.visibleWorkspaces.includes(id) ? prefs : { ...prefs, visibleWorkspaces: [...prefs.visibleWorkspaces, id] });
     setRequestedTab(id);
-  };
+  }, [aiStatus?.enabled, update]);
+  const openPaint = useCallback(() => setTab("paint"), [setTab]);
   useEffect(() => { if (tab !== requestedTab) setRequestedTab(tab); }, [tab, requestedTab]);
   const notifications = usePlotNotifications(status);
   const notificationPermission = notifications.permission;
@@ -131,22 +137,17 @@ function AdminApp() {
 
   return (
     <SetupProgressProvider>
-    <ProjectCalibrationProvider active={tab === "start" || tab === "paint" || tab === "paper"}>
+    <ProjectCalibrationProvider active={tab === "paint" || tab === "paper" || tab === "games"}>
     <div className={`app tab-${tab}`}>
       <header className="app-titlebar">
         <h1 className="app-brand"><EditorIcon name="draw" size={20} />GCodeScribe</h1>
         <div className="app-main-menu">
-          <button type="button" className="app-menu-button icon-only" aria-label={t("workspace.start")} title={t("workspace.start")} onClick={() => setTab("start")}><EditorIcon name="home" size={17} /></button>
-          <InterfaceMenu onCustomize={() => setTabSettingsOpen(true)} />
+          <ProgramMenus aiEnabled={aiStatus?.enabled ?? false} onNavigate={setTab} onSettings={() => setSettingsOpen(true)} onCustomize={() => setTabSettingsOpen(true)} onHelp={() => setHelpOpen(true)}
+            onProjects={() => { setPaintCommand({ id: ++commandId.current, type: "projects" }); setTab("paint"); }}
+            onNewPage={() => { setPaintCommand({ id: ++commandId.current, type: "new-page" }); setTab("paint"); }}
+            notifications={{ supported: notificationPermission !== "unsupported", granted: notificationPermission === "granted", action: notificationPermission === "granted" ? notifications.test : notifications.request }} />
         </div>
         <div className="header-actions">
-          <button className="notify-enable" aria-label={t(notificationPermission === "granted" ? "notify.test" : "notify.enable")} disabled={notificationPermission === "unsupported"}
-            onClick={notificationPermission === "granted" ? notifications.test : notifications.request}
-            title={t(notificationPermission === "unsupported"
-              ? window.isSecureContext === false ? "notify.secureRequired" : "notify.unsupported"
-              : notificationPermission === "granted" ? "notify.testHint" : "notify.enableHint")}>
-            <EditorIcon name="bell" size={16} /><span className="notify-label">{t(notificationPermission === "granted" ? "notify.test" : "notify.enable")}</span>
-          </button>
           <select className="lang-select" value={lang} onChange={(e) => setLang(e.target.value as "de" | "ba" | "en" | "fr" | "es")}>
             <option value="de">{t("lang.de")}</option>
             <option value="ba">{t("lang.ba")}</option>
@@ -154,7 +155,6 @@ function AdminApp() {
             <option value="fr">{t("lang.fr")}</option>
             <option value="es">{t("lang.es")}</option>
           </select>
-          <button className="settings-btn" onClick={() => setSettingsOpen(true)} title={t("settings.headerButton")} aria-label={t("settings.headerButton")}><EditorIcon name="settings" size={18} /></button>
           <button className="app-connection-button" title={t("start.configureConnection")} aria-label={t("start.configureConnection")} onClick={() => setSettingsOpen(true)}><StatusPill status={status} /></button>
           {canStopPlot(status) && <QuickStopPlot status={status} onAction={refreshStatus} />}
         </div>
@@ -163,6 +163,7 @@ function AdminApp() {
       {tabSettingsOpen && <TabSettings aiEnabled={aiStatus?.enabled ?? false} onClose={() => setTabSettingsOpen(false)} onOpen={setTab} />}
 
       <Suspense fallback={<DelayedLoading />}>
+      {helpOpen && <PaintInfoModal onClose={() => setHelpOpen(false)} />}
       {settingsOpen && (
         <SettingsDialog
           onClose={() => setSettingsOpen(false)}
@@ -190,16 +191,14 @@ function AdminApp() {
           visited.has(value) ? (
             <div key={value} role="tabpanel" id={`workspace-panel-${value}`} aria-labelledby={`workspace-tab-${value}`} hidden={tab !== value} style={{ display: tab === value ? "contents" : "none" }}>
               <Suspense fallback={<DelayedLoading />}>
-              {value === "start" && <StartOverview visible={tab === "start" && interactive} onAction={refreshStatus} status={status} onNavigate={setTab} onSettings={() => setSettingsOpen(true)} />}
-              {value === "paint" && <Paint visible={tab === "paint" && interactive} status={status} onAction={refreshStatus} desktop={desktop} />}
-              {value === "games" && <Games visible={tab === "games" && interactive} onOpenPaint={() => setTab("paint")} desktop={desktop} />}
-              {value === "gallery" && <Gallery initialItemId={galleryResult} visible={tab === "gallery" && interactive} onOpenPaint={() => setTab("paint")} onOpenAiDesigner={aiStatus?.enabled ? openInAiDesigner : undefined} aiEnabled={aiStatus?.enabled ?? false} desktop={desktop} />}
+              {value === "paint" && <Paint command={paintCommand} onCommandHandled={() => setPaintCommand(null)} visible={tab === "paint" && interactive} status={status} onAction={refreshStatus} desktop={desktop} />}
+              {value === "games" && <Games visible={tab === "games" && interactive} onOpenPaint={openPaint} desktop={desktop} />}
+              {value === "gallery" && <Gallery initialItemId={galleryResult} visible={tab === "gallery" && interactive} onOpenPaint={openPaint} onOpenAiDesigner={aiStatus?.enabled ? openInAiDesigner : undefined} aiEnabled={aiStatus?.enabled ?? false} desktop={desktop} />}
               {value === "ai" && (
-                <AiImageDesigner status={aiStatus} visible={tab === "ai" && interactive} onOpenPaint={() => setTab("paint")} initialFile={aiInitialFile} />
+                <AiImageDesigner status={aiStatus} visible={tab === "ai" && interactive} onOpenPaint={openPaint} initialFile={aiInitialFile} />
               )}
               {value === "paper" && (
-                preferences.experience === "guided" ? <StartOverview setupOnly visible={tab === "paper" && interactive} onAction={refreshStatus} status={status} onNavigate={setTab} onSettings={() => setSettingsOpen(true)} />
-                : <Paper status={status} onAction={refreshStatus} visible={tab === "paper" && interactive} />
+                <SetupWorkspace visible={tab === "paper" && interactive} onAction={refreshStatus} status={status} onNavigate={setTab} onSettings={() => setSettingsOpen(true)} />
               )}
               {value === "convert" && (
                 <Convert status={status} onAction={refreshStatus} visible={tab === "convert" && interactive} />

@@ -1,3 +1,4 @@
+import GuidedCalibrationStep from "./GuidedCalibrationStep";
 import { useI18n } from "../../../i18n";
 import EditorMenu from "../../../components/editor/EditorMenu";
 import SpecialPositions from "../SpecialPositions";
@@ -111,7 +112,7 @@ export default function CalibrationWizard({
       </nav>
       <section className="calibration-current-step">
         <h3>{t(current.titleKey)}</h3>
-        {!current.locked && <StepContent id={current.id} controls={controls} />}
+        {!current.locked && <GuidedCalibrationStep key={current.id} id={current.id} controls={controls} />}
       </section>
       <div className="calibration-optional-tools">
         <EditorMenu

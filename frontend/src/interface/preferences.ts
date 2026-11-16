@@ -18,9 +18,9 @@ export const INTERFACE_STORAGE_KEY = "gcs.interface.v1";
 const record = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const number = (value: unknown, fallback: number, min: number, max: number) => typeof value === "number" && Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback;
 const boolean = (value: unknown, fallback: boolean) => typeof value === "boolean" ? value : fallback;
-const ids = (value: unknown, fallback: readonly WorkspaceId[]) => Array.isArray(value) ? [...new Set(value.filter(isWorkspaceId))] : [...fallback];
+const ids = (value: unknown, fallback: readonly WorkspaceId[]) => Array.isArray(value) ? [...new Set(value.map(id => id === "start" ? "paper" : id).filter(isWorkspaceId))] : [...fallback];
 export function defaultInterfacePreferences(): InterfacePreferences {
-  return { version: 1, theme: "light", density: "comfortable", experience: "guided", workspaceOrder: [...WORKSPACE_IDS],
+  return { version: 1, theme: "light", density: "compact", experience: "guided", workspaceOrder: WORKSPACE_IDS.filter(id => id !== "start"),
     visibleWorkspaces: [...DEFAULT_VISIBLE], pagesPanel: { open: true, width: 220 }, propertiesPanel: { open: false, width: 260 },
     canvas: { rulers: true, gridVisible: false, padding: 32 } };
 }
@@ -32,8 +32,8 @@ export function normalizeInterfacePreferences(value: unknown): InterfacePreferen
   const order = ids(root.workspaceOrder, WORKSPACE_IDS);
   const visible = ids(root.visibleWorkspaces, DEFAULT_VISIBLE);
   return { version: 1, theme: ["light", "dark", "system"].includes(String(root.theme)) ? root.theme as ThemePreference : defaults.theme,
-    density: root.density === "compact" ? "compact" : "comfortable", experience: root.experience === "full" ? "full" : "guided",
-    workspaceOrder: [...order, ...WORKSPACE_IDS.filter(id => !order.includes(id))],
+    density: root.density === "comfortable" ? "comfortable" : "compact", experience: root.experience === "full" ? "full" : "guided",
+    workspaceOrder: [...order, ...WORKSPACE_IDS.filter(id => id !== "start" && !order.includes(id))],
     visibleWorkspaces: visible.length ? visible : [...DEFAULT_VISIBLE],
     pagesPanel: { open: boolean(pages.open, true), width: number(pages.width, 220, 180, 400) },
     propertiesPanel: { open: boolean(properties.open, false), width: number(properties.width, 260, 240, 400) },
@@ -58,5 +58,5 @@ export class InterfacePreferencesStore {
     this.listeners.forEach(listener => listener());
   };
   reload = () => { this.snapshot = readInterfacePreferences(this.storage); this.listeners.forEach(listener => listener()); };
-  resetTabs = (full = false) => this.update(preferences => ({ ...preferences, workspaceOrder: [...WORKSPACE_IDS], visibleWorkspaces: full ? [...WORKSPACE_IDS] : [...DEFAULT_VISIBLE] }));
+  resetTabs = (full = false) => this.update(preferences => ({ ...preferences, workspaceOrder: WORKSPACE_IDS.filter(id => id !== "start"), visibleWorkspaces: full ? WORKSPACE_IDS.filter(id => id !== "start") : [...DEFAULT_VISIBLE] }));
 }

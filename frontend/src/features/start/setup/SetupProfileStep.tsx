@@ -79,7 +79,7 @@ export default function SetupProfileStep({
     <section className="setup-step-content">
       <h2>{t("setup.profileTitle")}</h2>
       <p className="setup-lead">{t("setup.profileIntro")}</p>
-      <div className="setup-existing">
+      {!creating && <div className="setup-existing">
         <div>
           <strong>{profile.name}</strong>
           <span>
@@ -95,7 +95,7 @@ export default function SetupProfileStep({
         >
           {t("setup.useExisting")}
         </button>
-      </div>
+      </div>}
       <button
         className="ghost setup-create-toggle"
         aria-expanded={creating}

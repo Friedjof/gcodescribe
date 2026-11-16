@@ -15,7 +15,7 @@ export default function InterfaceMenu({ onCustomize }: { onCustomize: () => void
     return () => { window.removeEventListener("pointerdown", close); window.removeEventListener("keydown", key); };
   }, [open]);
   return <div className="interface-menu" ref={root}>
-    <button type="button" className="app-menu-button icon-only" aria-label={t("interface.view")} title={t("interface.view")} aria-expanded={open} onClick={() => setOpen(!open)}><EditorIcon name="sun" size={17} /></button>
+    <button type="button" className="app-menu-button" aria-label={t("interface.view")} title={t("interface.view")} aria-expanded={open} onClick={() => setOpen(!open)}>{t("interface.view")}</button>
     {open && <div className="interface-menu-popover">
       <label>{t("interface.appearance")}<select value={preferences.theme} onChange={event => update(prefs => ({ ...prefs, theme: event.target.value as ThemePreference }))}>
         <option value="light">{t("interface.light")}</option><option value="dark">{t("interface.dark")}</option><option value="system">{t("interface.system")}</option></select></label>

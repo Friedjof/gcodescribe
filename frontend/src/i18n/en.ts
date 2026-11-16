@@ -1,4 +1,41 @@
 const en: Record<string, string> = {
+  "paging.previous": "Previous page",
+  "paging.next": "Next page",
+  "games.allCategories": "All categories",
+  "games.previewDraft": "Preview · Generate to confirm",
+
+  "interface.openNamedArea": "Open {name}",
+
+"common.refresh": "Refresh",
+
+"calibration.penHint": "Set paper contact first, then the raised pen height.",
+
+"calibration.captureCorner": "Capture position",
+
+"calibration.corner": "Paper corner",
+
+"calibration.dragPaper": "Adjust on the bed",
+
+"calibration.testPen": "Test pen",
+
+"calibration.lift": "2. Lift pen",
+
+"calibration.contact": "1. Paper contact",
+
+"calibration.penMove": "Move pen",
+
+"calibration.preview.job": "Job preview",
+
+"calibration.preview.paper": "Paper",
+
+"calibration.preview.view": "Position",
+
+  "app.file": "File",
+  "app.tools": "Tools",
+  "app.help": "Help",
+  "app.newPage": "New page",
+  "app.projects": "Projects…",
+
   "paint.emptyPageTitle": "Start your page",
   "paint.addText": "Add text",
   "paint.drawFree": "Draw",
@@ -62,10 +99,10 @@ const en: Record<string, string> = {
   "setup.calibrationTitle": "3. Set up paper and pen",
   "setup.calibrationIntro": "Follow the steps below: reference the machine, set the pen height, define the paper and check the usable area. Special positions and obstacles are optional.",
   "setup.calibrationOffline": "The printer is offline. You can review the settings or prepare a drawing first.",
-  "setup.confirmCalibration": "I checked the paper area and pen heights for this profile.",
+  "setup.confirmCalibration": "Paper and pen settings checked",
   "setup.calibrationRequired": "Save the pen calibration first. The raised pen must be above the drawing height, and the plot area must be valid.",
-  "setup.continueDrawing": "Save progress and create the first page",
-  "setup.skipCalibration": "Prepare a drawing first; calibrate later",
+  "setup.continueDrawing": "Next: first page",
+  "setup.skipCalibration": "Calibrate later",
   "setup.drawingTitle": "4. Create your first page",
   "setup.drawingIntro": "Your project already has a blank page. Start with a short text, draw freely or use a template.",
   "setup.sampleText": "Hello, GCodeScribe!",

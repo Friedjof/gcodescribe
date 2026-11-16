@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type Page, type SceneObject } from "../../api";
 import { startImport } from "../../api/assetTasks";
 import { errorMessage, isAbortError } from "../../api/errors";
 import { discardEdits, flushEdits, queueObjects, rememberPage } from "../../api/pageEdits";
 import type { PrinterStatus } from "../../api/types/printer";
+import type { PaintWorkspaceCommand } from "../../interface/commands";
 import PanelResizeHandle from "../../components/editor/PanelResizeHandle";
 import { useInterface } from "../../interface/InterfaceProvider";
 import PaintEmptyState from "./components/PaintEmptyState";
@@ -50,11 +51,15 @@ import { DEFAULT_VECTOR_STYLE, type FillStyle } from "./lib/styling";
 
 export default function Paint({
   visible = true,
+  command,
+  onCommandHandled,
   status,
   onAction,
   desktop = false,
 }: {
   visible?: boolean;
+  command?: PaintWorkspaceCommand | null;
+  onCommandHandled?: () => void;
   status?: PrinterStatus | null;
   onAction?: () => void;
   desktop?: boolean;
@@ -192,6 +197,15 @@ export default function Paint({
     prompt,
     fail,
   });
+
+  const handledCommand = useRef<number | null>(null);
+  useEffect(() => {
+    if (!visible || !page || !renderProfile || !command || handledCommand.current === command.id) return;
+    handledCommand.current = command.id;
+    if (command.type === "projects") setProjectsOpen(true);
+    else void pages.newPage();
+    onCommandHandled?.();
+  }, [visible, page?.id, renderProfile?.id, command?.id]);
 
   const setGrid = (patch: Partial<{ step: number; snap: boolean }>) => {
     if (!page) return;

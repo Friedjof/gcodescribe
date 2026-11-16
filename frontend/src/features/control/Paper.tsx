@@ -4,7 +4,7 @@ import { useCalibrationController, type CalibrationControllerProps } from "./cal
 import CalibrationWizard from "./calibration/CalibrationWizard";
 import CalibrationPreview from "./calibration/CalibrationPreview";
 
-export default function Paper(props: CalibrationControllerProps & { guided?: boolean }) {
+export default function Paper(props: CalibrationControllerProps & { guided?: boolean; onConnection?: () => void }) {
   const { t } = useI18n();
   const controls = useCalibrationController(props);
   const { cal, error, retry, visible, pressureOpen, online, motionLocked, positions,
@@ -14,14 +14,14 @@ export default function Paper(props: CalibrationControllerProps & { guided?: boo
     <button onClick={retry}>Erneut laden</button></div>;
   if (!cal) return <div className="card">{t("common.loading")}</div>;
   return (
-    <div className="grid paper-grid">
+    <div className={`grid paper-grid${props.guided ? " paper-guided" : ""}`}>
       {visible && pressureOpen && <CalibrationPressureDialog canMove={!!online && !motionLocked && !positions.busy}
         projectId={projectId} profileId={profileId ?? undefined}
         onClose={() => setPressureOpen(false)} onBusyChange={setPressureBusy}
         position={pos} onPosition={setPos} onAction={props.onAction} />}
       {/* ── Left: Wizard ────────────────────────────────────────── */}
       <section className="card paper-wizard-panel">
-        <h2>{t("paper.title")}</h2>
+        {!props.guided && <><h2>{t("paper.title")}</h2>
         <p className="calibration-intro">{t("paper.guideIntro")}</p>
         {profileName && (
           <p className="calibration-context">{t("paper.context", { project: project?.name ?? "", profile: profileName })}</p>
@@ -32,10 +32,12 @@ export default function Paper(props: CalibrationControllerProps & { guided?: boo
           </div>
         )}
 
+        </>}
+        {props.guided && <div className="paper-connection-strip"><span title={profileName ?? undefined}>{profileName}</span>{!online && <button onClick={props.onConnection}>{t("start.configureConnection")}</button>}</div>}
         <CalibrationWizard controls={controls} guided={props.guided ?? false} />
       </section>
       {/* ── Right: Live View ─────────────────────────────────────── */}
-      <CalibrationPreview cal={cal} controls={controls} />
+      <CalibrationPreview cal={cal} controls={controls} compact={props.guided} />
 
     </div>
   );

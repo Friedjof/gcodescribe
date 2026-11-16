@@ -36,11 +36,11 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 16px 18px;
+  padding: 8px 12px;
   flex: 0 0 auto;
-  background: #0b0b0d;
+  background: var(--panel-2);
   border-bottom: 1px solid var(--border);
-  border-radius: 16px 16px 0 0;
+  border-radius: 4px 4px 0 0;
 }
 .modal-head h2 { margin: 0; font-size: 15px; font-weight: 600; min-width: 0; }
 .modal-head h2 .muted { font-weight: 400; }
@@ -63,16 +63,16 @@
   border-radius: 8px;
 }
 .modal-close:hover { background: var(--panel-2); color: var(--text); }
-.modal-body { flex: 1; min-height: 0; padding: 16px 18px; display: flex; }
+.modal-body { flex: 1; min-height: 0; padding: 12px; display: flex; flex-direction: column; }
 .modal-foot {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  padding: 14px 18px;
+  padding: 8px 12px;
   flex: 0 0 auto;
   background: var(--panel);
   border-top: 1px solid var(--border);
-  border-radius: 0 0 16px 16px;
+  border-radius: 0 0 4px 4px;
 }
 
 /* ---- Confirm / Prompt dialogs -------------------------------------------- */

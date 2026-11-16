@@ -26,5 +26,5 @@ it("refreshes preferences changed by another window", () => {
   localStorage.setItem(INTERFACE_STORAGE_KEY, JSON.stringify({ ...defaultInterfacePreferences(), theme: "dark" }));
   act(() => window.dispatchEvent(new StorageEvent("storage", { key: INTERFACE_STORAGE_KEY })));
   expect(document.documentElement.dataset.theme).toBe("dark");
-  expect(screen.getByText("dark:guided:comfortable")).toBeTruthy();
+  expect(screen.getByText("dark:guided:compact")).toBeTruthy();
 });

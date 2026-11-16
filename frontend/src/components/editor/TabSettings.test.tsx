@@ -13,8 +13,9 @@ it("persists visibility and ordering without opening or resetting editors", () =
   fireEvent.click(screen.getByRole("checkbox", { name: /workspace.font/ }));
   const stored = () => JSON.parse(localStorage.getItem(INTERFACE_STORAGE_KEY)!);
   expect(stored().visibleWorkspaces).toContain("font");
+  const before = stored().workspaceOrder.indexOf("font");
   fireEvent.click(screen.getByRole("button", { name: "interface.moveTabUp:workspace.font" }));
-  expect(stored().workspaceOrder.indexOf("font")).toBe(7);
+  expect(stored().workspaceOrder.indexOf("font")).toBe(before - 1);
   expect(open).not.toHaveBeenCalled();
 });
 it("does not allow hiding the last available workspace or enabling server-disabled AI", () => {

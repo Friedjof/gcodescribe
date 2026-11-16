@@ -1,4 +1,41 @@
 const de: Record<string, string> = {
+  "paging.previous": "Vorherige Seite",
+  "paging.next": "Nächste Seite",
+  "games.allCategories": "Alle Kategorien",
+  "games.previewDraft": "Vorschau · Zum Übernehmen erzeugen",
+
+  "interface.openNamedArea": "{name} öffnen",
+
+"common.refresh": "Aktualisieren",
+
+"calibration.penHint": "Stelle zuerst den Papierkontakt ein, danach die Abhebehöhe.",
+
+"calibration.captureCorner": "Position übernehmen",
+
+"calibration.corner": "Papierecke",
+
+"calibration.dragPaper": "Am Bett ausrichten",
+
+"calibration.testPen": "Stift testen",
+
+"calibration.lift": "2. Stift abheben",
+
+"calibration.contact": "1. Papierkontakt",
+
+"calibration.penMove": "Stift fahren",
+
+"calibration.preview.job": "Auftragsvorschau",
+
+"calibration.preview.paper": "Papier",
+
+"calibration.preview.view": "Position",
+
+  "app.file": "Datei",
+  "app.tools": "Extras",
+  "app.help": "Hilfe",
+  "app.newPage": "Neue Seite",
+  "app.projects": "Projekte …",
+
   "paint.emptyPageTitle": "Beginne deine Seite",
   "paint.addText": "Text einfügen",
   "paint.drawFree": "Zeichnen",
@@ -62,10 +99,10 @@ const de: Record<string, string> = {
   "setup.calibrationTitle": "3. Papier und Stift einrichten",
   "setup.calibrationIntro": "Gehe die Schritte unten durch: Maschine referenzieren, Stifthöhe einstellen, Papier festlegen und die nutzbare Fläche prüfen. Spezialpositionen und Hindernisse sind optional.",
   "setup.calibrationOffline": "Der Drucker ist offline. Du kannst die Einstellungen ansehen oder zunächst eine Zeichnung vorbereiten.",
-  "setup.confirmCalibration": "Ich habe Papierfläche und Stifthöhen für dieses Profil geprüft.",
+  "setup.confirmCalibration": "Papier- und Stifteinstellungen geprüft",
   "setup.calibrationRequired": "Speichere zuerst die Stiftkalibrierung. Der angehobene Stift muss über der Zeichenhöhe liegen und die Plotfläche muss gültig sein.",
-  "setup.continueDrawing": "Fortschritt speichern und erste Seite erstellen",
-  "setup.skipCalibration": "Zuerst Zeichnung vorbereiten, später kalibrieren",
+  "setup.continueDrawing": "Weiter zur Seite",
+  "setup.skipCalibration": "Später kalibrieren",
   "setup.drawingTitle": "4. Erste Seite erstellen",
   "setup.drawingIntro": "Dein Projekt besitzt bereits eine leere Seite. Beginne mit einem kurzen Text, zeichne frei oder verwende eine Vorlage.",
   "setup.sampleText": "Hallo, GCodeScribe!",

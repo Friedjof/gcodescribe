@@ -18,6 +18,7 @@
   max-height: min(880px, 92vh);
 }
 .settings-modal .modal-body {
+  flex-direction: row;
   padding: 0;
   overflow: hidden;
   gap: 0;

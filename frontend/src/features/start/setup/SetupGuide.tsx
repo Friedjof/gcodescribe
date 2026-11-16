@@ -107,18 +107,10 @@ export default function SetupGuide({
                 ? ready
                   ? "setup.readyTitle"
                   : "setup.preparedTitle"
-                : "start.setupTitle",
+                : "workspace.paper",
             )}
           </h2>
-          <p>
-            {t(
-              progress.finished
-                ? ready
-                  ? "setup.readyHint"
-                  : "setup.preparedHint"
-                : "setup.guideHint",
-            )}
-          </p>
+          <small title={project.name}>{project.name}</small>
         </div>
         {progress.finished && (
           <button
@@ -152,7 +144,7 @@ export default function SetupGuide({
         ))}
       </ol>
       {expanded && (
-        <div className="setup-guide-body">
+        <div className={`setup-guide-body setup-stage-${step}`}>
           {step === "profile" && (
             <SetupProfileStep
               index={index}
@@ -176,26 +168,15 @@ export default function SetupGuide({
           )}
           {step === "calibration" && (
             <>
-              <div className="setup-calibration-heading">
-                <h2>{t("setup.calibrationTitle")}</h2>
-                <p>{t("setup.calibrationIntro")}</p>
-                {!online && (
-                  <div className="setup-offline-row">
-                    <span>{t("setup.calibrationOffline")}</span>
-                    <button onClick={onSettings}>
-                      {t("start.configureConnection")}
-                    </button>
-                  </div>
-                )}
-              </div>
               <Paper
                 guided
+                onConnection={onSettings}
                 status={status}
                 onAction={onAction}
                 visible={visible && step === "calibration"}
               />
               <div className="setup-calibration-finish">
-                <label className="setup-check">
+                <label className="setup-check" title={!calibrationReady(profile) ? t("setup.calibrationRequired") : t("setup.confirmCalibration")}>
                   <input
                     type="checkbox"
                     checked={calibrationConfirmed}
@@ -206,9 +187,6 @@ export default function SetupGuide({
                   />
                   {t("setup.confirmCalibration")}
                 </label>
-                {!calibrationReady(profile) && (
-                  <p>{t("setup.calibrationRequired")}</p>
-                )}
                 <div className="setup-actions">
                   <button
                     className="primary"
