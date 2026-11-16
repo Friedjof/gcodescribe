@@ -179,3 +179,25 @@ Browser-Zwischenbefund bei 1366×768: alle vier Kalibrierungsaufgaben und alle 1
 - OSM lives directly in that workspace. Place search, layer selection and drawing parameters have their own property tabs. Map changes debounce by 250 ms, cancel superseded requests, retain the last visible drawing, and reuse up to six recent results. Insertion requires a result matching current settings. Full route/3D analysis runs only on explicit request.
 - Random templates have a permanent, explained five-digit random code (including Bingo), an explicit dice action, and repeatable Generate behavior. Codes are preserved as object metadata and shown in the drawing status. The font writing test also exposes and explains its variant code.
 - Validation: production build passed; 505 frontend tests passed before the final object-metadata regression was added. Inline OSM checked in Firefox at 1366 × 768 with mocked map data: no dialog and no overflowing pane, including all layers and drawing settings. Real OSM network latency is external and was not benchmarked by this fixture.
+
+### Final desktop review
+
+The desktop review now covers the nine available workspaces (drawing, templates, gallery, jobs, setup, profiles, control, font editor and AI designer), rather than only the start screen.
+
+| Area | Result |
+| --- | --- |
+| Desktop layouts | Firefox: 54 workspace/theme/viewport combinations at 1024 × 768, 1366 × 768 and 1920 × 1080; no overflowing main panes or uncaught JavaScript errors in those checks. |
+| Setup | New-profile form, connection, all four calibration tasks, first-page and preview tasks fit at 1024 and 1366 pixels. Connected control rendering used simulated GET responses; all writes/motion requests were blocked and none were attempted. |
+| Templates / random code | All 14 templates checked. The same five-digit code reproduced identical preview paths, and code 54321 remained visible after creating a canvas page. Mandala and pattern styles now use named choices that fit the inspector. |
+| OSM | Inline place/content/drawing tabs; matching-result insertion, cancellation and bounded cache tested. Local map fixtures were used; external OSM service latency remains outside this UI benchmark. |
+| Jobs | Collection retains vertical scrolling. Six list/tile switches with 45 local test jobs reached the next painted view in 19–29 ms. Heavy path conversion is bounded/cached. Replaced or closed 3D previews cannot be reopened by late responses. |
+| Other dialogs | All profile and settings groups, writing-test playback/alignment, font/symbol collections, project settings, STL parameter pages and gallery item details checked. Confirmation and text prompts now share modal focus and Escape ownership. |
+| AI | Local fake generation → saved gallery item → detail view succeeded. No paid/external AI request was made. |
+| Development | Polling-based Vite startup succeeded in 110 ms on a separate test port; HTML and current styles returned HTTP 200. The full interactive make launcher was not used because it may manage existing user services. |
+| Automated checks | 516 frontend tests passed; 1019 Python tests passed after the captured-project fix; Ruff passed. Production build passed. Vite still reports its existing advisory for a main chunk larger than 500 kB. |
+
+Template insertion now captures the target project and expected profile fingerprint. A parallel project switch cannot redirect the page, and a changed target profile is rejected. Creating a page in a different project also preserves the currently active project's page selection.
+
+The retired generated-template dialog, duplicate manual/automatic seed wiring and 53 obsolete dialog/layout rules have been removed. Feature layouts and bounded collection components live in separate modules; no dependencies were added. Changes are saved as separate commits on `interface-refactoring`; the original main branch and the rollback tag remain available.
+
+Physical serial/OctoPrint motion and installed DEB/Flatpak notification delivery were not exercised by these UI fixtures. Existing desktop-notification regression tests passed (7 tests, also part of the Python suite). This pass does not publish a new release or claim a real printer test.
