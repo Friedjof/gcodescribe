@@ -1,3 +1,6 @@
+import { settingsGroups } from "./settingsGroups";
+import PaginationBar from "../../components/paging/PaginationBar";
+import { useFitListPage } from "../../components/paging/useFitListPage";
 import { useEffect, useRef, useState } from "react";
 import type { ConfigSource, OctoPrintCheckResult, SettingsSection, SettingsPatch, SettingValue } from "../../api";
 import { errorMessage } from "../../api/errors";
@@ -34,6 +37,8 @@ export default function SettingsDialog({
   const [err, setErr] = useState<string | null>(null);
   const [pending, setPending] = useState<SettingsPatch>({});
   const [saving, setSaving] = useState(false);
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const close = () => { if (!saving) { if (Object.keys(pending).length) setDiscardOpen(true); else onClose(); } };
 
   const isDirty = Object.keys(pending).length > 0;
 
@@ -45,23 +50,27 @@ export default function SettingsDialog({
   }, []);
 
   const handleChange = (key: string, value: SettingValue) => {
+    if (saving) return;
     setPending((prev) => ({ ...prev, [key]: value }));
   };
 
   const handleReset = (sec: string, field: string) => {
+    if (saving) return;
     const key = `${sec}.${field}`;
     if (key in pending) {
       setPending((prev) => { const next = { ...prev }; delete next[key]; return next; });
       return;
     }
+    setSaving(true);
     api
       .resetSetting(sec, field)
       .then((d) => { setData(d); onSaved?.(d); })
-      .catch((e) => setErr(errorMessage(e)));
+      .catch((e) => setErr(errorMessage(e)))
+      .finally(() => setSaving(false));
   };
 
   const save = () => {
-    if (!isDirty) return;
+    if (!isDirty || saving) return;
     setSaving(true);
     // Drop secret fields left blank — empty = "keep existing key"
     const secretWriteKeys = new Set(Object.values(SECRET_KEY_MAP));
@@ -91,11 +100,13 @@ export default function SettingsDialog({
   );
 
   return (
-    <Modal title={t("settings.title")} onClose={onClose} className="settings-modal" footer={footer}>
+    <>
+    <Modal title={t("settings.title")} onClose={close} className="settings-modal" footer={footer}>
       <nav className="settings-nav">
         {SECTIONS.map((s) => (
           <button
             key={s}
+            disabled={saving}
             className={`settings-nav-item${section === s ? " active" : ""}`}
             onClick={() => setSection(s)}
           >
@@ -104,11 +115,12 @@ export default function SettingsDialog({
         ))}
       </nav>
 
-      <div className="settings-content">
+      <fieldset className="settings-content" disabled={saving}>
         {!data && !err && <p className="muted">{t("common.loading")}</p>}
         {err && <p className="settings-err">{err}</p>}
         {data && (
           <SectionView
+            key={section}
             section={section}
             data={data}
             pending={pending}
@@ -117,8 +129,10 @@ export default function SettingsDialog({
             onSettingsChange={(next) => { setData(next); onSaved?.(next); }}
           />
         )}
-      </div>
+      </fieldset>
     </Modal>
+    {discardOpen && <Modal title={t("settings.discardTitle")} onClose={() => setDiscardOpen(false)} footer={<><button onClick={() => setDiscardOpen(false)}>{t("common.cancel")}</button><button onClick={onClose} className="primary">{t("settings.discard")}</button></>}><p>{t("settings.discardHint")}</p></Modal>}
+    </>
   );
 }
 
@@ -138,15 +152,20 @@ function SectionView({
   onSettingsChange: (settings: EffectiveSettings) => void;
 }) {
   const { t } = useI18n();
+  const [groupId, setGroupId] = useState<string | null>(null);
   if (section === "fonts") return <FontSettingsSection />;
 
   const rawSection = data[section] as SettingsPatch;
+  const groups = settingsGroups(section, rawSection);
+  const group = groups.find((item) => item.id === groupId) ?? groups[0];
+  const printerDirty = Object.keys(pending).some((key) => key.startsWith("printer."));
 
   return (
     <section className="settings-section">
       <h3 className="settings-section-heading">{t(`settings.${section}.heading`)}</h3>
+      {groups.length > 1 && <nav className="settings-group-tabs" aria-label={t(`settings.section.${section}`)}>{groups.map((item) => <button type="button" key={item.id} aria-pressed={group.id === item.id} onClick={() => setGroupId(item.id)}>{t(`settings.group.${item.id}`)}</button>)}</nav>}
       <dl className="settings-rows">
-        {Object.entries(rawSection).map(([field, value]) => {
+        {group.fields.map(([field, value]) => {
           const key = `${section}.${field}`;
           const label = t(`settings.${section}.${field}`);
 
@@ -201,6 +220,7 @@ function SectionView({
               key={field}
               label={label}
               value={effectiveValue}
+              options={key === "printer.default_backend" ? [{ value: "", label: t("settings.backend.auto") }, { value: "serial", label: "USB / Serial" }, { value: "octoprint", label: "OctoPrint" }] : undefined}
               source={fieldSource}
               onChange={(v) => onChange(key, v)}
               onReset={fieldSource === "saved" || fieldSource === "pending"
@@ -211,7 +231,7 @@ function SectionView({
         })}
       </dl>
 
-      {section === "printer" && <OctoPrintCheckSection />}
+      {section === "printer" && group.id === "octoprint" && <OctoPrintCheckSection key={JSON.stringify(data.printer) + String(printerDirty)} dirty={printerDirty} />}
       {section === "mcp" && <McpTokenSection onSettingsChange={onSettingsChange} />}
     </section>
   );
@@ -277,6 +297,7 @@ function McpTokenSection({
 
 function FontSettingsSection() {
   const { t } = useI18n();
+  const [fontTab, setFontTab] = useState("library");
   const { fonts, loading, error, reload, setFonts } = useTextFonts();
   const [label, setLabel] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -329,12 +350,16 @@ function FontSettingsSection() {
       .finally(() => setBusy(false));
   };
 
+  const paging = useFitListPage(fonts, 45, 6);
+
   return (
     <section className="settings-section">
       <h3 className="settings-section-heading">{t("settings.fonts.heading")}</h3>
       <p className="muted">{t("settings.fonts.help")}</p>
       {(error || localError) && <p className="settings-err">{localError ?? error}</p>}
 
+      <nav className="settings-group-tabs"><button type="button" aria-pressed={fontTab === "library"} onClick={() => setFontTab("library")}>{t("settings.fonts.library")}</button><button type="button" aria-pressed={fontTab === "import"} onClick={() => setFontTab("import")}>{t("settings.fonts.add")}</button></nav>
+      <div hidden={fontTab !== "import"} className="settings-font-import">
       <div className="settings-font-block">
         <span className="muted">{t("settings.fonts.uploadHint")}</span>
         <input
@@ -376,8 +401,11 @@ function FontSettingsSection() {
         />
       </div>
 
+      </div>
+      <div hidden={fontTab !== "library"} className="settings-font-library">
+      <div className="settings-font-viewport" ref={paging.viewport}>
       <ul className="settings-font-list">
-        {fonts.map((font) => (
+        {paging.items.map((font) => (
           <li key={font.id} className="settings-font-item">
             <span className="settings-font-name">{fontLabel(font, t)}</span>
             <span className="settings-source settings-source-default">
@@ -401,8 +429,11 @@ function FontSettingsSection() {
           </li>
         ))}
       </ul>
+      </div>
+      <PaginationBar page={paging.page} pages={paging.pages} onChange={paging.setPage} label={t("settings.fonts.heading")}/>
       {loading && <p className="muted">{t("common.loading")}</p>}
       <button className="ghost" disabled={loading || busy} onClick={reload}>{t("settings.fonts.reload")}</button>
+      </div>
     </section>
   );
 }
@@ -434,6 +465,7 @@ function SecretRow({
         </span>
         {source && !hasPending && <SourceBadge source={source} />}
         <input
+          aria-label={label}
           type="password"
           className="settings-input settings-input-secret"
           value={pendingValue}
@@ -473,8 +505,10 @@ function EditableRow({
   source,
   onChange,
   onReset,
+  options,
 }: {
   label: string;
+  options?: { value: string; label: string }[];
   value: unknown;
   source?: DisplaySource;
   onChange: (v: SettingValue) => void;
@@ -488,7 +522,7 @@ function EditableRow({
     <>
       <dt className="settings-label">{label}</dt>
       <dd className="settings-value">
-        <FieldInput value={value} onChange={onChange} />
+        {options ? <select className="settings-input" aria-label={label} value={String(value)} onChange={(e) => onChange(e.target.value)}>{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select> : <FieldInput label={label} value={value} onChange={onChange} />}
         {(hasSaved || isPending) && onReset && (
           <button className="settings-reset ghost" onClick={onReset} title={t("settings.resetField")}>
             ↺
@@ -503,13 +537,13 @@ function EditableRow({
 
 // ── Shared primitives ─────────────────────────────────────────────────────────
 
-function FieldInput({ value, onChange }: { value: unknown; onChange: (v: SettingValue) => void }) {
+function FieldInput({ value, onChange, label }: { label: string; value: unknown; onChange: (v: SettingValue) => void }) {
   const { t } = useI18n();
 
   if (typeof value === "boolean") {
     return (
       <label className="settings-toggle">
-        <input type="checkbox" checked={value} onChange={(e) => onChange(e.target.checked)} />
+        <input aria-label={label} type="checkbox" checked={value} onChange={(e) => onChange(e.target.checked)} />
         <span className={value ? "settings-val ok" : "settings-val muted"}>
           {value ? t("settings.value.yes") : t("settings.value.no")}
         </span>
@@ -518,7 +552,7 @@ function FieldInput({ value, onChange }: { value: unknown; onChange: (v: Setting
   }
   if (typeof value === "number") {
     return (
-      <input
+      <input aria-label={label}
         type="number"
         className="settings-input settings-input-num"
         value={value}
@@ -527,7 +561,7 @@ function FieldInput({ value, onChange }: { value: unknown; onChange: (v: Setting
     );
   }
   return (
-    <input
+    <input aria-label={label}
       type="text"
       className="settings-input"
       value={String(value ?? "")}
@@ -583,6 +617,7 @@ function SerialPortRow({
             type="text"
             className="settings-input settings-serial-input"
             value={value}
+            aria-label={label}
             placeholder="/dev/ttyUSB0"
             onChange={(e) => onChange(e.target.value)}
           />
@@ -623,12 +658,13 @@ function SerialPortRow({
 
 // ── OctoPrint connection check ────────────────────────────────────────────────
 
-function OctoPrintCheckSection() {
+function OctoPrintCheckSection({ dirty }: { dirty: boolean }) {
   const { t } = useI18n();
   const [result, setResult] = useState<OctoPrintCheckResult | null>(null);
   const [checking, setChecking] = useState(false);
 
   const check = () => {
+    if (dirty || checking) return;
     setChecking(true);
     setResult(null);
     api.octoprintCheck()
@@ -639,10 +675,11 @@ function OctoPrintCheckSection() {
 
   return (
     <div className="settings-octo-check">
-      <button onClick={check} disabled={checking} className="settings-octo-btn">
+      <button onClick={check} disabled={checking || dirty} className="settings-octo-btn">
         {checking ? t("settings.printer.checking") : t("settings.printer.checkConnection")}
       </button>
-      {result && (
+      {dirty && <p className="muted">{t("settings.printer.saveBeforeTest")}</p>}
+      {!dirty && result && (
         <span className={`settings-octo-result ${result.ok ? "ok" : "err"}`}>
           {result.ok
             ? t("settings.printer.checkOk", { version: result.version ?? "?" })

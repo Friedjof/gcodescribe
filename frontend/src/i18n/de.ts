@@ -1,4 +1,22 @@
 const de: Record<string, string> = {
+  "paint.properties.content": "Inhalt",
+  "paint.properties.style": "Aussehen",
+
+  "fontEditor.writingPlaybackTab": "Wiedergabe",
+
+  "settings.discardTitle": "Änderungen verwerfen?",
+  "settings.discardHint": "Deine Änderungen sind noch nicht gespeichert. Möchtest du die Einstellungen trotzdem schließen?",
+  "settings.discard": "Verwerfen und schließen",
+  "settings.group.connection": "Verbindungsart",
+  "settings.group.octoprint": "OctoPrint",
+  "settings.group.serial": "USB / Seriell",
+  "settings.group.access": "Zugang",
+  "settings.group.output": "Bildausgabe",
+  "settings.group.limits": "Grenzwerte",
+  "settings.backend.auto": "Automatisch",
+  "settings.printer.saveBeforeTest": "Speichere die geänderten Verbindungsdaten zuerst. Der Test prüft die gespeicherte Konfiguration.",
+  "settings.fonts.library": "Installierte Schriften",
+
   "seed.label": "Zufallscode (Seed)",
   "seed.hint": "Gleicher Code + gleiche Einstellungen = gleiches Muster. Notiere die fünf Ziffern zum Wiederholen. Der Würfel erzeugt einen neuen Code.",
   "seed.new": "Neuen Zufallscode würfeln",

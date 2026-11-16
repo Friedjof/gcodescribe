@@ -1,4 +1,22 @@
 const en: Record<string, string> = {
+  "paint.properties.content": "Content",
+  "paint.properties.style": "Appearance",
+
+  "fontEditor.writingPlaybackTab": "Playback",
+
+  "settings.discardTitle": "Discard changes?",
+  "settings.discardHint": "Your changes have not been saved. Close settings and discard them?",
+  "settings.discard": "Discard and close",
+  "settings.group.connection": "Connection type",
+  "settings.group.octoprint": "OctoPrint",
+  "settings.group.serial": "USB / Serial",
+  "settings.group.access": "Access",
+  "settings.group.output": "Image output",
+  "settings.group.limits": "Limits",
+  "settings.backend.auto": "Automatic",
+  "settings.printer.saveBeforeTest": "Save changed connection details first. This test checks the saved configuration.",
+  "settings.fonts.library": "Installed fonts",
+
   "seed.label": "Random code (seed)",
   "seed.hint": "Same code + same settings = same pattern. Keep these five digits to repeat it. The dice creates a new code.",
   "seed.new": "Roll a new random code",
