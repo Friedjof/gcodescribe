@@ -1,4 +1,6 @@
 const es: Record<string, string> = {
+  "interface.moreTabs": "Más pestañas",
+
     "lang.de": "Alemán",
     "lang.en": "Inglés",
     "lang.ba": "Bávaro",

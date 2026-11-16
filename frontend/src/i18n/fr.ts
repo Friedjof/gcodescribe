@@ -1,4 +1,6 @@
 const fr: Record<string, string> = {
+  "interface.moreTabs": "Autres onglets",
+
     "lang.de": "Allemand",
     "lang.en": "Anglais",
     "lang.ba": "Bavarois",
