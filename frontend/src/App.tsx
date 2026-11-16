@@ -18,6 +18,7 @@ import WorkspaceTabs from "./components/editor/WorkspaceTabs";
 import TabSettings from "./components/editor/TabSettings";
 import InterfaceMenu from "./components/editor/InterfaceMenu";
 import EditorIcon from "./components/editor/EditorIcon";
+import { SetupProgressProvider } from "./features/start/setup/SetupProgressProvider";
 import { InterfaceProvider, useInterface } from "./interface/InterfaceProvider";
 import { WORKSPACES, visibleWorkspaces, usableWorkspace, workspaceById, type WorkspaceId } from "./interface/workspaces";
 const StartOverview = lazy(() => import("./features/start/StartOverview"));
@@ -129,6 +130,7 @@ function AdminApp() {
   };
 
   return (
+    <SetupProgressProvider>
     <ProjectCalibrationProvider active={tab === "start" || tab === "paint" || tab === "paper"}>
     <div className={`app tab-${tab}`}>
       <header className="app-titlebar">
@@ -188,7 +190,7 @@ function AdminApp() {
           visited.has(value) ? (
             <div key={value} role="tabpanel" id={`workspace-panel-${value}`} aria-labelledby={`workspace-tab-${value}`} hidden={tab !== value} style={{ display: tab === value ? "contents" : "none" }}>
               <Suspense fallback={<DelayedLoading />}>
-              {value === "start" && <StartOverview status={status} onNavigate={setTab} onSettings={() => setSettingsOpen(true)} />}
+              {value === "start" && <StartOverview visible={tab === "start" && interactive} onAction={refreshStatus} status={status} onNavigate={setTab} onSettings={() => setSettingsOpen(true)} />}
               {value === "paint" && <Paint visible={tab === "paint" && interactive} status={status} onAction={refreshStatus} desktop={desktop} />}
               {value === "games" && <Games visible={tab === "games" && interactive} onOpenPaint={() => setTab("paint")} desktop={desktop} />}
               {value === "gallery" && <Gallery initialItemId={galleryResult} visible={tab === "gallery" && interactive} onOpenPaint={() => setTab("paint")} onOpenAiDesigner={aiStatus?.enabled ? openInAiDesigner : undefined} aiEnabled={aiStatus?.enabled ?? false} desktop={desktop} />}
@@ -196,7 +198,8 @@ function AdminApp() {
                 <AiImageDesigner status={aiStatus} visible={tab === "ai" && interactive} onOpenPaint={() => setTab("paint")} initialFile={aiInitialFile} />
               )}
               {value === "paper" && (
-                <Paper status={status} onAction={refreshStatus} visible={tab === "paper" && interactive} />
+                preferences.experience === "guided" ? <StartOverview setupOnly visible={tab === "paper" && interactive} onAction={refreshStatus} status={status} onNavigate={setTab} onSettings={() => setSettingsOpen(true)} />
+                : <Paper status={status} onAction={refreshStatus} visible={tab === "paper" && interactive} />
               )}
               {value === "convert" && (
                 <Convert status={status} onAction={refreshStatus} visible={tab === "convert" && interactive} />
@@ -212,5 +215,6 @@ function AdminApp() {
       <footer className="app-statusbar"><span>{t(workspaceById(tab).label)}</span><span>{t(preferences.experience === "guided" ? "interface.guided" : "interface.full")} · {t(preferences.density === "compact" ? "interface.compact" : "interface.comfortable")}</span></footer>
     </div>
     </ProjectCalibrationProvider>
+    </SetupProgressProvider>
   );
 }

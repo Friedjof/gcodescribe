@@ -147,3 +147,16 @@ Ein Schritt kann mehrere kleine Commits umfassen. Funktionsfehler werden als eig
 - [draw.io: Editor-Themes und Modi](https://www.drawio.com/docs/manual/editor/appearance/): feste Panels, Tabs und verschiedene Dichten der Editoroberfläche.
 - [draw.io: Mehr Platz für die Zeichenfläche](https://www.drawio.com/docs/manual/editor/increase-drawing-canvas/): bedarfsgerechtes Ausblenden von Oberflächenteilen.
 - [Office: Registerkarten und Befehlsgruppen](https://support.microsoft.com/en-gb/office/foundations-experiences/customize-the-ribbon-in-office?appver=zsc900&helpid=76843&ns=onenote&syslcid=2057&uilcid=2057&version=90): bekannte Gruppierung von Befehlen. Die konkrete Umsetzung hier ist eine eigene, auf den Plotter zugeschnittene Planung.
+
+## Umsetzungsstand
+
+Die Arbeit erfolgt auf `interface-refactoring`; `main` und der Sicherungstag bleiben unverändert.
+
+- Shell, echte Arbeitsbereich-Tabs, Tab-Verwaltung und lokale Layout-Präferenzen sind implementiert.
+- Der Designer besitzt optionale, verstellbare Seiten-/Eigenschaftenbereiche, weißes Papier, Lineale, eine feste Zoomleiste und einstellbaren Papierrand. Ansichtsänderungen schreiben keine Geometrie.
+- Dokumentbefehle wurden in eine gemeinsame Menüleiste verschoben. Der Anfängermodus reduziert die ständig sichtbaren Werkzeuge; Spezialwerkzeuge bleiben erreichbar.
+- Der Einrichtungsassistent führt durch Profil/Projekt, Verbindung, Papier/Stift, erste Textseite und echte G-Code-Vorschau. Fortschritt wird pro Projekt gespeichert und an die geprüfte Profilversion gebunden. Offline-Vorbereitung bleibt von vollständiger Maschineneinrichtung unterscheidbar.
+- Die Anfänger-Kalibrierung verwendet dieselben Controller wie die vollständige Ansicht, zeigt aber jeweils einen Arbeitsschritt. Zusätzliche Positionen und Hindernisse stehen in einem optionalen Menü.
+- Dialogfokus und Tastaturnavigation wurden abgesichert, damit Menünavigation keine Jog-Befehle auslöst.
+
+Zwischenprüfung: 485 Frontend-Tests erfolgreich; produktiver Frontend-Build erfolgreich. Browserdurchläufe gegen einen lokalen Backend-Prozess mit separater Testdatenablage: vorhandenes Profil, Neuanlage eines Profils samt Projekt, Offline-Einstieg, erste Textseite und 3D-Wegvorschau. Kein Hardwarezugriff und kein Druckstart. Weitere Theme-, Layout-, Integrations- und Paketprüfungen folgen.

@@ -544,3 +544,16 @@ it("publishes a completed calibration save even if its view has since been hidde
   await waitFor(() => expect(mocks.getProfile.mock.calls.length).toBeGreaterThan(reads));
   expect(onAction).not.toHaveBeenCalled();
 });
+
+it("uses a focused beginner flow without executing motion when changing steps", async () => {
+  render(<Paper status={{configured:true,online:true}} onAction={vi.fn()} guided />);
+  const pen=await screen.findByRole("button",{name:/paper.nav.pen/});
+  fireEvent.click(pen);
+  expect(await screen.findByText("paper.step2Hint")).toBeInTheDocument();
+  expect(screen.queryByRole("button",{name:/paper.step1$/})).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button",{name:"paper.optionalTools"}));
+  fireEvent.keyDown(document.activeElement!,{key:"ArrowDown"});
+  expect(mocks.jog).not.toHaveBeenCalled();expect(mocks.home).not.toHaveBeenCalled();
+  fireEvent.keyDown(document.activeElement!,{key:"Escape"});
+  expect(mocks.jog).not.toHaveBeenCalled();
+});

@@ -39,11 +39,11 @@ export const calibrationClient = {
     req<CalibrationProfileSummary[]>(`/api/profiles?include_archived=${includeArchived}`),
   getProfile: (id: string, signal?: AbortSignal) => req<CalibrationProfile>(`/api/profiles/${id}`, { signal }),
   activeProfile: (signal?: AbortSignal) => req<CalibrationProfile>("/api/profiles/active", { signal }),
-  createProfile: (name?: string) =>
+  createProfile: (name?: string, calibration?: Partial<Calibration>) =>
     req<CalibrationProfile>("/api/profiles", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, calibration }),
     }),
   saveProfile: (id: string, updates: { name?: string; calibration?: Partial<Calibration> }) =>
     req<CalibrationProfile>(`/api/profiles/${id}`, {
