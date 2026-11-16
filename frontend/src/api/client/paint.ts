@@ -18,11 +18,11 @@ export const paintClient = {
   getPage: (id: string, signal?: AbortSignal) => req<Page>(`/api/pages/${id}`, { signal }).then(rememberPage),
   pageThumbnail: (id: string, signal?: AbortSignal) =>
     req<{ revision: number; modified: number; thumb: PageThumb | null }>(`/api/pages/${id}/thumbnail`, { signal }),
-  createPage: (name?: string, folderId?: string | null) =>
+  createPage: (name?: string, folderId?: string | null, projectId?: string, expected?: ProfileRef | null) =>
     req<Page>("/api/pages", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, folderId }),
+      body: JSON.stringify({ name, folderId, projectId, expected_profile_id: expected?.id, expected_profile_fingerprint: expected?.fingerprint }),
     }),
   savePage: (id: string, updates: Partial<Pick<Page, "objects" | "grid" | "name" | "markdown" | "coloring" | "continuous">>) =>
     req<Page>(`/api/pages/${id}`, {

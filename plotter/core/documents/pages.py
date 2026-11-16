@@ -96,7 +96,8 @@ class PageRepository:
             page["mcp"] = dict(mcp)
         self.data.store.set(self.data.page_key(page_id), page)
         index["order"].append(self.data.meta(page))
-        index["activeId"] = page_id
+        if project_id == index["activeProjectId"]:
+            index["activeId"] = page_id
         project["activeId"] = page_id
         project["modified"] = ts
         self.data.save_index(index)

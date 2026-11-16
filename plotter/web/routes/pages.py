@@ -156,6 +156,9 @@ def get_page_thumbnail(page_id: str) -> dict:
 class CreateRequest(BaseModel):
     name: str | None = None
     folderId: str | None = None
+    projectId: str | None = None
+    expected_profile_id: str | None = None
+    expected_profile_fingerprint: str | None = None
 
 
 class ExpectedProfileRequest(BaseModel):
@@ -163,7 +166,9 @@ class ExpectedProfileRequest(BaseModel):
     expected_profile_fingerprint: str | None = None
 
 
-def _require_expected_profile(req: ExpectedProfileRequest | None, active: dict) -> None:
+def _require_expected_profile(
+    req: ExpectedProfileRequest | CreateRequest | None, active: dict
+) -> None:
     if req is None:
         return
     if req.expected_profile_id and req.expected_profile_id != active["id"]:
@@ -186,7 +191,20 @@ def _require_expected_profile(req: ExpectedProfileRequest | None, active: dict) 
 @router.post("/pages")
 def create_page(req: CreateRequest) -> dict:
     try:
-        return document_store().create_page(req.name, folder_id=req.folderId)
+        store = document_store()
+        if req.projectId or req.expected_profile_id or req.expected_profile_fingerprint:
+            project_id = req.projectId or store.list_pages()["project"]["id"]
+            project = next((p for p in store.projects() if p["id"] == project_id), None)
+            if project is None:
+                raise HTTPException(404, "Projekt nicht gefunden")
+            if project.get("archived"):
+                raise HTTPException(409, "Das Zielprojekt ist archiviert.")
+            profile = profile_meta(profile_service().get(project["profileId"]))
+            _require_expected_profile(req, profile)
+            return store.create_page(
+                req.name, profile=profile, project_id=project_id, folder_id=req.folderId
+            )
+        return store.create_page(req.name, folder_id=req.folderId)
     except KeyError as exc:
         raise HTTPException(404, "Ordner oder Projekt nicht gefunden") from exc
 

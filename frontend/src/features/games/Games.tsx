@@ -385,7 +385,7 @@ function Games({
     setBusy(true);
     setErr(null);
     api
-      .createPage(template.name)
+      .createPage(template.name, undefined, index.project.id, profile)
       .then((page) =>
         api.savePage(page.id, {
           objects: [templateObject(gameId, template.lines, SEEDED_GAMES.has(gameId) ? preview?.seed : undefined)],
@@ -410,7 +410,7 @@ function Games({
     setBusy(true);
     setErr(null);
     api
-      .createPage(template.name)
+      .createPage(template.name, undefined, index.project.id, profile)
       .then((page) =>
         api.savePage(page.id, {
           objects: [polylinesObject(template.lines)],

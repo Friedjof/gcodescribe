@@ -580,3 +580,58 @@ def test_project_covers_and_slide_thumbnails_are_lazy_and_refresh_after_edit(wor
         changed = client.get(f"/api/pages/{page_id}/thumbnail").json()
         assert changed["thumb"]["d"] != first["thumb"]["d"]
         assert render.call_count == 2
+
+
+def test_captured_project_page_creation_does_not_switch_the_current_project(workspace, cal):
+    from plotter.core.document import get_document_store
+    from plotter.web.app import app
+
+    client = TestClient(app)
+    first = client.get("/api/pages").json()
+    second = client.post("/api/projects", json={"name": "Other window"}).json()
+    profile = first["activeProfile"]
+    response = client.post("/api/pages", json={
+        "name": "Captured template", "projectId": first["project"]["id"],
+        "expected_profile_id": profile["id"],
+        "expected_profile_fingerprint": profile["fingerprint"],
+    })
+    assert response.status_code == 200
+    page = response.json()
+    assert page["projectId"] == first["project"]["id"]
+    assert page["profileId"] == profile["id"]
+    assert page["profileFingerprint"] == profile["fingerprint"]
+    active = client.get("/api/pages").json()
+    assert active["project"]["id"] == second["project"]["id"]
+    assert active["activeId"] == second["activeId"]
+    # Legacy activeId must remain consistent too, not only the project view.
+    store = get_document_store()._pages.data
+    assert store.index()["activeId"] == second["activeId"]
+    reopened = client.post(f"/api/projects/{first['project']['id']}/activate").json()
+    assert reopened["activeId"] == page["id"]
+
+
+def test_captured_template_rejects_a_changed_profile_without_creating_a_page(workspace, cal):
+    from plotter.web.app import app
+
+    client = TestClient(app)
+    index = client.get("/api/pages").json()
+    profile = index["activeProfile"]
+    ProfileService().update(profile["id"], calibration={"plot_width": 90})
+    response = client.post("/api/pages", json={
+        "projectId": index["project"]["id"],
+        "expected_profile_id": profile["id"],
+        "expected_profile_fingerprint": profile["fingerprint"],
+    })
+    assert response.status_code == 409
+    assert len(client.get("/api/pages").json()["order"]) == len(index["order"])
+
+
+def test_captured_template_rejects_missing_and_archived_projects(workspace, cal):
+    from plotter.web.app import app
+
+    client = TestClient(app)
+    index = client.get("/api/pages").json()
+    assert client.post("/api/pages", json={"projectId": "gone"}).status_code == 404
+    client.post("/api/projects", json={"name": "Other"})
+    client.put(f"/api/projects/{index['project']['id']}", json={"archived": True})
+    assert client.post("/api/pages", json={"projectId": index["project"]["id"]}).status_code == 409
