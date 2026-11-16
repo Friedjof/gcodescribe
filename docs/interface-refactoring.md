@@ -201,3 +201,35 @@ Template insertion now captures the target project and expected profile fingerpr
 The retired generated-template dialog, duplicate manual/automatic seed wiring and 53 obsolete dialog/layout rules have been removed. Feature layouts and bounded collection components live in separate modules; no dependencies were added. Changes are saved as separate commits on `interface-refactoring`; the original main branch and the rollback tag remain available.
 
 Physical serial/OctoPrint motion and installed DEB/Flatpak notification delivery were not exercised by these UI fixtures. Existing desktop-notification regression tests passed (7 tests, also part of the Python suite). This pass does not publish a new release or claim a real printer test.
+
+### Guided tour, visual finish and fine drawing lines
+
+- A replayable 11-step tour now highlights the actual profile, connection,
+  calibration, first-page, preview, drawing and template controls. First-time
+  setup offers it automatically; Help → Guided tour opens it later. Back, Next,
+  minimize, resume and saved progress keep it optional. Tour completion does not
+  certify machine setup: returning to setup restores the real pending task.
+- The overlay yields to settings, dialogs and printer activity. Real actions
+  underneath remain usable; locked calibration steps retain their prerequisites.
+  Manually switching tabs minimizes the tour. Temporarily revealing a hidden
+  workspace does not change the user's saved tab preferences.
+- The editor has quieter nested borders, consistent menu/dialog elevation,
+  subtle paper shadow, a teal studio accent and short transitions. Reduced-motion
+  preferences disable the decorative movement. Desktop density is preserved.
+- Drawing ink now stays at 0.9 CSS pixels through zooming, mirroring and unequal
+  object scales. The grid also keeps a stable screen width. Drafts, live scenes
+  and shared previews use the same display width. Large drawings switch from a
+  bounded bitmap to exact vector detail before the bitmap would be enlarged.
+  Source geometry, eraser edit radius, pen settings and generated G-code are
+  independent of this display correction.
+
+Validation: 528 frontend tests passed; the final production build passed. The
+tour completed at 1024×768 and 1366×768 without overflowing panes or cards. An
+additional dark/reduced-motion browser run used real clicks to confirm a profile,
+open/close settings, switch tabs and resume; hidden-tab preferences survived and
+no write/motion request was attempted. A dense 52,250-point drawing exercised
+bitmap/vector switching at high zoom; saved source geometry stayed identical.
+The 54 workspace/theme/viewport combinations were checked again with the new
+visual styles: no overflowing main panes or uncaught JavaScript errors.
+The previous Python/Ruff checks still apply because this pass changes only the
+frontend. Physical printer and installed DEB/Flatpak checks remain outstanding.
