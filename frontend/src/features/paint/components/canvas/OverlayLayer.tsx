@@ -10,6 +10,7 @@ export default function OverlayLayer({
   marqueeRect,
   guides,
   stroke,
+  lineStroke = stroke,
   effRadius,
 }: {
   draftTool: Tool | null;
@@ -18,6 +19,7 @@ export default function OverlayLayer({
   marqueeRect: [number, number, number, number] | null;
   guides: Guide[];
   stroke: number;
+  lineStroke?: number;
   effRadius: number;
 }) {
   const STROKE = stroke;
@@ -43,7 +45,7 @@ export default function OverlayLayer({
           fill={draftTool === "areaFill" ? "var(--ink)" : "none"}
           fillOpacity={draftTool === "areaFill" ? 0.14 : undefined}
           stroke={draftTool === "erase" || draftTool === "eraseLine" ? "var(--err)" : "var(--ink)"}
-          strokeWidth={draftTool === "erase" || draftTool === "eraseLine" ? effRadius * 2 : STROKE}
+          strokeWidth={draftTool === "erase" || draftTool === "eraseLine" ? effRadius * 2 : lineStroke}
           strokeDasharray={draftTool === "eraseLine" ? `${STROKE * 2} ${STROKE}` : undefined}
           strokeLinejoin="round" strokeLinecap="round" />
       ))}

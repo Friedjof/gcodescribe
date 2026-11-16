@@ -1,3 +1,4 @@
+import { DISPLAY_INK_PX } from "../lib/displayStroke";
 import { useMemo } from "react";
 import type { GallerySvg } from "../api";
 
@@ -21,7 +22,6 @@ export default function PolylinePreview({
   );
   const w = Math.max(data.width, 1);
   const h = Math.max(data.height, 1);
-  const strokeWidth = Math.max(w, h) / 350;
 
   return (
     <svg
@@ -29,7 +29,7 @@ export default function PolylinePreview({
       viewBox={`${-w * 0.02} ${-h * 0.02} ${w * 1.04} ${h * 1.04}`}
       preserveAspectRatio="xMidYMid meet"
     >
-      <path d={d} fill="none" stroke={stroke} strokeWidth={strokeWidth} strokeLinecap="round" />
+      <path d={d} fill="none" stroke={stroke} strokeWidth={DISPLAY_INK_PX} vectorEffect="non-scaling-stroke" strokeLinecap="round" />
     </svg>
   );
 }

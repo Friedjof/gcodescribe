@@ -1,3 +1,4 @@
+import { DISPLAY_INK_PX } from "../../../lib/displayStroke";
 import { forwardRef, type ReactNode } from "react";
 import type { Calibration, Page, SceneObject } from "../../../api";
 import { IDENTITY, toMultiPath, type Pt } from "../lib/geometry";
@@ -98,14 +99,14 @@ const SceneView = forwardRef<SVGSVGElement, SceneViewProps>(function SceneView({
 
       {objectsByZ.map((obj) => {
         const t = obj.transform ?? IDENTITY;
-        const strokeScale = Math.max(t.scaleX ?? t.scale, t.scaleY ?? t.scale);
         return (
           <g key={obj.id} transform={objTransform(t)} opacity={obj.plotted ? 0.25 : 1} style={{ pointerEvents: "none" }}>
             <path
               d={toMultiPath((obj.cachedPolylines ?? []) as Pt[][])}
               fill="none"
               stroke={obj.plotted ? "var(--muted)" : "var(--busy)"}
-              strokeWidth={STROKE / strokeScale}
+              strokeWidth={DISPLAY_INK_PX}
+              vectorEffect="non-scaling-stroke"
               strokeLinejoin="round"
               strokeLinecap="round"
             />

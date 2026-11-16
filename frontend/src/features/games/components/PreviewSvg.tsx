@@ -1,3 +1,4 @@
+import { DISPLAY_INK_PX } from "../../../lib/displayStroke";
 import { useMemo } from "react";
 import type { Calibration } from "../../../api";
 import { toPath, type Pt } from "../../paint/lib/geometry";
@@ -12,7 +13,7 @@ export default function GamePreviewSvg({ cal, lines, solutionLines, strokeWidth,
   const W = cal.plot_width;
   const H = cal.plot_height;
   const pad = Math.max(W, H) * 0.04 + 4;
-  const stroke = strokeWidth ?? Math.max(Math.max(W, H) * 0.004, 0.45);
+  const stroke = strokeWidth ?? DISPLAY_INK_PX;
   // Independent subpaths can share one SVG element. A city with tens of
   // thousands of roads should not need tens of thousands of DOM nodes.
   const paths = useMemo(() => {
@@ -47,6 +48,7 @@ export default function GamePreviewSvg({ cal, lines, solutionLines, strokeWidth,
             fill="none"
             stroke="var(--ink)"
             strokeWidth={stroke}
+            vectorEffect={strokeWidth === undefined ? "non-scaling-stroke" : undefined}
             strokeLinejoin="round"
             strokeLinecap="round"
           />
@@ -58,7 +60,8 @@ export default function GamePreviewSvg({ cal, lines, solutionLines, strokeWidth,
             d={toPath(line)}
             fill="none"
             stroke="rgba(255, 80, 80, 0.85)"
-            strokeWidth={stroke * 2.2}
+            strokeWidth={stroke * 1.5}
+            vectorEffect={strokeWidth === undefined ? "non-scaling-stroke" : undefined}
             strokeLinejoin="round"
             strokeLinecap="round"
           />

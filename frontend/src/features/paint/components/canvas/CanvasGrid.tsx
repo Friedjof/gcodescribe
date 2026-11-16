@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { useI18n } from "../../../../i18n";
 
 /** Plot-area background: bordered sheet, minor/major grid pattern, the
@@ -11,6 +12,7 @@ export default function CanvasGrid({
   major,
   gridVisible = true,
   showOrientation = true,
+  pixel = 1,
 }: {
   W: number;
   H: number;
@@ -20,23 +22,26 @@ export default function CanvasGrid({
   major: number;
   gridVisible?: boolean;
   showOrientation?: boolean;
+  pixel?: number;
 }) {
   const { t } = useI18n();
+  const shadowId = useId();
   return (
     <>
       <defs>
+        <filter id={shadowId} x="-5%" y="-5%" width="110%" height="110%"><feDropShadow dx="0" dy={pixel * 1.5} stdDeviation={pixel * 1.5} floodColor="#1b2638" floodOpacity="0.16"/></filter>
         <pattern id="pc-grid-minor" width={step} height={step} patternUnits="userSpaceOnUse">
           <path d={`M ${step} 0 L 0 0 L 0 ${step}`} fill="none"
-            stroke="var(--paper-grid-minor)" strokeWidth={0.25} />
+            stroke="var(--paper-grid-minor)" strokeWidth={pixel * 0.45} />
         </pattern>
         <pattern id="pc-grid-major" width={major} height={major} patternUnits="userSpaceOnUse">
           <rect width={major} height={major} fill="url(#pc-grid-minor)" />
           <path d={`M ${major} 0 L 0 0 L 0 ${major}`} fill="none"
-            stroke="var(--paper-grid-major)" strokeWidth={0.4} />
+            stroke="var(--paper-grid-major)" strokeWidth={pixel * 0.7} />
         </pattern>
       </defs>
       <rect x={0} y={0} width={W} height={H} fill="var(--paper)"
-        stroke="var(--paper-border)" strokeWidth={0.6} />
+        stroke="var(--paper-border)" strokeWidth={pixel * 0.9} filter={`url(#${shadowId})`} />
       {gridVisible && <rect x={0} y={0} width={W} height={H} fill="url(#pc-grid-major)" />}
       {pad > 0 && <g pointerEvents="none" aria-hidden="true">
         {showOrientation && <g className="canvas-orientation-marker">

@@ -1,3 +1,4 @@
+import { displayStrokeWorld } from "../../lib/displayStroke";
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Calibration, Page, SceneObject } from "../../api";
 import {
@@ -190,10 +191,11 @@ function PaintCanvas({
   const effectiveTool: Tool = stylusErasing ? "erase" : tool;
   const pixel = canvasUnitsPerPixel(view, size);
   const STROKE = pixel * 1.3;
-  const LINE_STROKE = (S * 0.0045) / zoom;
+  const LINE_STROKE = displayStrokeWorld(pixel);
   const HANDLE = pixel * 11;
   // Effective eraser radius: point mode = cursor-tip size (zoom-adaptive, ~1 strokewidth)
-  const effRadius = eraserIsPoint ? LINE_STROKE * 1.2 : (eraserRadiusProp ?? ERASER_RADIUS);
+  // Keep the edit radius independent of the cosmetic display width.
+  const effRadius = eraserIsPoint ? (S * 0.0045 / zoom) * 1.2 : (eraserRadiusProp ?? ERASER_RADIUS);
 
   // How close (mm) a moving edge/center must come to a reference before it
   // snaps. Scaled to the plot area so it feels the same regardless of size.
@@ -767,7 +769,7 @@ function PaintCanvas({
         onDrop={onDrop}
       >
         <g transform={canvasRotationTransform}>
-        <CanvasGrid W={W} H={H} S={S} pad={pad} step={step} major={major} gridVisible={gridVisible} showOrientation={viewRotation !== 0} />
+        <CanvasGrid W={W} H={H} S={S} pad={pad} step={step} major={major} gridVisible={gridVisible} pixel={pixel} showOrientation={viewRotation !== 0} />
 
         <ObjectsLayer objects={objectsByZ} selectedIds={selectedIds} stroke={LINE_STROKE} active={visible} interactive={previewTransforms.size > 0 || panning || zooming} />
 
@@ -778,6 +780,7 @@ function PaintCanvas({
           marqueeRect={marquee ? marqueeBounds(marquee) : null}
           guides={guides}
           stroke={STROKE}
+          lineStroke={LINE_STROKE}
           effRadius={effRadius}
         />
 

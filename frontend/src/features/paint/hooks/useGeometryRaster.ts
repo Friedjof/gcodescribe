@@ -1,3 +1,4 @@
+import { DISPLAY_INK_PX } from "../../../lib/displayStroke";
 import { useEffect, useRef, useState } from "react";
 import { geometryTask } from "../lib/geometryTasks";
 import { localBounds, type Pt } from "../lib/geometry";
@@ -8,6 +9,12 @@ export function rasterGeometry(lines: Pt[][]) {
   let count = counts.get(lines);
   if (count === undefined) { count = lines.reduce((sum, line) => sum + line.length, 0); counts.set(lines, count); }
   return count > 40000 && typeof OffscreenCanvas !== "undefined";
+}
+/** Avoid magnifying a capped bitmap when zooming into fine linework. */
+export function rasterFitsDisplay(lines: Pt[][], stroke: number) {
+  const bounds = localBounds(lines);
+  const edge = Math.max(bounds[2] - bounds[0], bounds[3] - bounds[1]);
+  return Number.isFinite(edge) && edge / Math.max(stroke, 0.000001) * DISPLAY_INK_PX <= 2048;
 }
 export function useGeometryRaster(lines: Pt[][], stroke: number, active: boolean) {
   const [raster, setRaster] = useState<{ url: string; lines: Pt[][]; stroke: number }>();

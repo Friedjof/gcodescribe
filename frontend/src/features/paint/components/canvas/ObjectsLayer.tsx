@@ -1,9 +1,10 @@
+import { DISPLAY_INK_PX } from "../../../../lib/displayStroke";
 import { memo, useId, useMemo } from "react";
 import type { SceneObject } from "../../../../api";
 import { EMPTY_LINES, IDENTITY, localBounds, type Pt, type Transform } from "../../lib/geometry";
 import { sourcePageFrame } from "../../lib/sourcePage";
 import { useGeometryPath } from "../../hooks/useGeometryPath";
-import { rasterGeometry, useGeometryRaster } from "../../hooks/useGeometryRaster";
+import { rasterFitsDisplay, rasterGeometry, useGeometryRaster } from "../../hooks/useGeometryRaster";
 import { pressurePreviewPaths } from "../../lib/pressure";
 function objTransform(t: Transform) {
   return `translate(${t.x} ${t.y}) rotate(${(t.rotation * 180) / Math.PI}) scale(${t.scaleX ?? t.scale},${t.scaleY ?? t.scale})`;
@@ -18,11 +19,12 @@ const ObjectView = memo(function ObjectView({ obj, selected, stroke, interactive
   const pageBounds = sourcePage ? localBounds(sourcePage) : null;
   const lines = (obj.cachedPolylines ?? EMPTY_LINES) as Pt[][];
   const large = !mask && rasterGeometry(lines);
+  const rasterEligible = large && rasterFitsDisplay(lines, stroke / scale);
   const pressurePaths = useMemo(() => obj.data?.pressureEnabled && !large && active && !interactive
     ? pressurePreviewPaths(lines, obj.data?.cachedSegmentPressures ?? obj.data?.baseSegmentPressures) : undefined,
   [obj.data?.pressureEnabled, obj.data?.cachedSegmentPressures, obj.data?.baseSegmentPressures, lines, large, active, interactive]);
-  const { image: raster, failed } = useGeometryRaster(lines, stroke / scale, large && active && !interactive);
-  const d = useGeometryPath(lines, interactive, active, large && !failed);
+  const { image: raster, failed } = useGeometryRaster(lines, stroke / scale, rasterEligible && active && !interactive);
+  const d = useGeometryPath(lines, interactive, active, rasterEligible && !failed);
   const maskId = useId();
   return <g transform={objTransform(t)} opacity={obj.plotted ? 0.25 : 1} pointerEvents="none">
     {selected && pageBounds &&
@@ -32,14 +34,14 @@ const ObjectView = memo(function ObjectView({ obj, selected, stroke, interactive
         strokeDasharray={`${stroke * 4 / scale} ${stroke * 3 / scale}`} />}
     {pressurePaths ? pressurePaths.map((path, i) => path && <path key={i} d={path} fill="none"
       stroke={obj.plotted ? "var(--muted)" : "var(--ink)"} strokeOpacity={0.35 + i / 7 * 0.65}
-      strokeWidth={stroke / scale} strokeLinejoin="round" strokeLinecap="round" />) : raster ? <>
+      strokeWidth={DISPLAY_INK_PX} vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />) : raster ? <>
       <defs><mask id={maskId} maskUnits="userSpaceOnUse" x={raster.x} y={raster.y} width={raster.width} height={raster.height}>
         <image href={raster.url} x={raster.x} y={raster.y} width={raster.width} height={raster.height} preserveAspectRatio="none" />
       </mask></defs>
       <rect x={raster.x} y={raster.y} width={raster.width} height={raster.height} fill={obj.plotted ? "var(--muted)" : "var(--ink)"} mask={`url(#${maskId})`} />
     </> : <path d={d} fill={mask ? "var(--paper)" : "none"} fillOpacity={mask ? 0.92 : undefined}
       stroke={mask ? selected ? "var(--accent)" : "var(--paper-mask)" : obj.plotted ? "var(--muted)" : "var(--ink)"}
-      strokeWidth={stroke / scale} strokeDasharray={mask ? `${stroke * 2 / scale} ${stroke / scale}` : undefined}
+      strokeWidth={mask ? stroke / scale : DISPLAY_INK_PX} vectorEffect={mask ? undefined : "non-scaling-stroke"} strokeDasharray={mask ? `${stroke * 2 / scale} ${stroke / scale}` : undefined}
       strokeLinejoin="round" strokeLinecap="round" />}
   </g>;
 });
