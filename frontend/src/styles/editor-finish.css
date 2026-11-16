@@ -1,0 +1,229 @@
+/* Ink / paper identity: surface separation uses one edge or elevation at each level. */
+:root {
+  --studio-accent: #137f78;
+  --elevation-control: 0 1px 2px rgb(21 31 48 / 0.07);
+  --elevation-panel: 0 2px 8px rgb(21 31 48 / 0.045);
+  --elevation-menu:
+    0 8px 24px rgb(21 31 48 / 0.14), 0 2px 5px rgb(21 31 48 / 0.06);
+  --elevation-dialog:
+    0 24px 65px rgb(21 31 48 / 0.22), 0 4px 12px rgb(21 31 48 / 0.08);
+}
+:root[data-theme="dark"] {
+  --studio-accent: #74d1c4;
+  --elevation-control: 0 1px 2px #0003;
+  --elevation-panel: 0 2px 9px #0002;
+  --elevation-menu: 0 10px 28px #0006, 0 2px 6px #0003;
+  --elevation-dialog: 0 24px 75px #0009, 0 4px 15px #0005;
+}
+.app-titlebar {
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--accent) 4%, var(--panel)),
+    var(--panel) 50%
+  );
+  border-bottom-color: color-mix(in srgb, var(--border) 80%, var(--panel));
+}
+.app-brand {
+  letter-spacing: -0.025em;
+  gap: 7px;
+}
+.app-brand > svg {
+  background: var(--active-bg);
+  border-radius: 5px;
+  padding: 3px;
+  box-sizing: content-box;
+  width: 15px;
+  height: 15px;
+  stroke: var(--accent);
+}
+.workspace-tabs-row {
+  background: color-mix(in srgb, var(--panel-2) 88%, var(--workspace));
+}
+.workspace-tabs > button {
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease;
+}
+.workspace-tabs > button[aria-selected="true"] {
+  border-color: var(--border);
+  box-shadow:
+    inset 0 2px 0 var(--accent),
+    0 -1px 5px rgb(21 31 48 / 0.025);
+}
+.app-statusbar {
+  background: color-mix(in srgb, var(--panel) 96%, var(--studio-accent));
+}
+.app
+  .card:not(.paint-editor):not(.ai-editor):not(.ai-controls):not(
+    .paper-wizard-panel
+  ):not(.paper-preview) {
+  box-shadow: var(--elevation-panel);
+}
+button.primary {
+  box-shadow:
+    inset 0 1px 0 #ffffff19,
+    var(--elevation-control);
+}
+button:not(:disabled),
+.button {
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease,
+    box-shadow 0.12s ease;
+}
+button.primary:hover:not(:disabled) {
+  box-shadow:
+    inset 0 1px 0 #ffffff22,
+    0 2px 6px rgb(21 31 48 / 0.16);
+}
+button:focus-visible,
+a:focus-visible,
+[tabindex]:focus-visible {
+  outline-width: 2px;
+}
+.editor-command-menu,
+.interface-menu-popover,
+.project-menu-popover {
+  border-radius: 8px;
+  box-shadow: var(--elevation-menu);
+}
+.modal {
+  border-radius: 10px;
+  box-shadow: var(--elevation-dialog);
+  animation: studio-dialog-enter 0.16s ease-out;
+}
+.modal-head {
+  border-radius: 0;
+  background: var(--panel);
+}
+.modal-head h2 {
+  letter-spacing: -0.015em;
+}
+.modal-foot {
+  border-radius: 0;
+  background: var(--panel-2);
+}
+.modal-backdrop {
+  background: rgb(20 29 43 / 0.35);
+}
+/* Adjacent docks have one divider; nested panels have a quiet tonal surface. */
+.paint .paint-pages {
+  border-right: 0;
+}
+.paint .panel-resize-handle {
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  min-width: 5px;
+}
+.paint .panel-resize-handle:hover,
+.paint .panel-resize-handle.dragging {
+  border-right-color: var(--accent);
+  background: var(--active-bg);
+}
+.paint .paint-context-panel {
+  padding: 10px;
+}
+.paint .ctx-header {
+  border-bottom: 0;
+  margin-bottom: 2px;
+  padding-bottom: 7px;
+}
+.paint .ctx-property-tabs {
+  margin-bottom: 10px;
+}
+.paint .paint-tool-rail {
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+}
+.paint .paint-canvas {
+  background-color: var(--workspace);
+}
+.template-stage-preview .games-preview,
+.osm-inline-preview .games-preview {
+  border: 0;
+  box-shadow: none;
+}
+.profile-field-panels .field-group,
+section.project-settings-section {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+section.project-settings-section {
+  padding-inline: 0;
+}
+.settings-font-import .settings-font-block {
+  border: 0;
+  background: var(--panel-2);
+  border-radius: 6px;
+}
+.fe-writing-input-panel,
+.fe-writing-tools .fe-writing-tool-card {
+  border: 0;
+  background: var(--panel-2);
+  box-shadow: none;
+  border-radius: 6px;
+}
+.fe-writing-tools .fe-writing-savebox {
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  padding-inline: 0;
+}
+.fe-body .fe-toolbar {
+  border-left: 1px solid var(--border);
+}
+.fe-body .fe-toolbar > .fe-align-panel {
+  border: 0;
+  box-shadow: none;
+  padding-inline: 0;
+}
+.ai-controls .ai-style {
+  border: 0;
+  border-left: 2px solid var(--studio-accent);
+  background: transparent;
+  border-radius: 0;
+}
+.ai-editor .ai-stage {
+  border-radius: 6px;
+}
+.job-tile,
+.gallery-item {
+  transition:
+    border-color 0.12s ease,
+    box-shadow 0.12s ease;
+}
+.job-tile:hover,
+.gallery-item:hover {
+  box-shadow: var(--elevation-panel);
+}
+@keyframes studio-dialog-enter {
+  from {
+    opacity: 0;
+    transform: translateY(5px) scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+.setup-guide .setup-existing {
+  border: 0;
+  border-left: 2px solid var(--studio-accent);
+  border-radius: 0 6px 6px 0;
+}
+.setup-guide .setup-sample-form {
+  border: 0;
+  border-radius: 6px;
+  background: var(--panel-2);
+}
