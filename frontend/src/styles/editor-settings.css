@@ -1,0 +1,19 @@
+.settings-content { min-height: 0; min-inline-size: 0; margin: 0; border: 0; overflow: hidden; padding: 14px 18px; display: flex; flex-direction: column; }
+.settings-section { min-height: 0; flex: 1; display: flex; flex-direction: column; }
+.settings-section-heading { font-size: 13px; margin-bottom: 12px; text-transform: none; letter-spacing: 0; }
+.settings-group-tabs { display: flex; align-items: center; gap: 4px; border-bottom: 1px solid var(--border); padding-bottom: 7px; margin-bottom: 10px; flex: 0 0 auto; }
+.settings-group-tabs button { font-size: 12px; min-height: 29px; padding: 5px 10px; border: 0; border-radius: 3px; background: transparent; }
+.settings-group-tabs button[aria-pressed="true"] { background: var(--active-bg); color: var(--accent); }
+.settings-label, .settings-value { padding-top: 9px; padding-bottom: 9px; font-size: 12px; }
+.settings-value input, .settings-value select { font-size: 12px; min-height: 29px; padding: 5px 7px; }
+.settings-value .settings-input { min-width: 0; }
+.settings-value-secret { flex-wrap: wrap; }
+.settings-source { font-size: 9px; }
+.settings-font-library { min-height: 0; flex: 1; display: flex; flex-direction: column; }
+.settings-font-library[hidden], .settings-font-import[hidden] { display: none; }
+.settings-font-viewport { flex: 1; min-height: 0; overflow: hidden; }
+.settings-font-viewport .settings-font-list { margin: 0; padding: 0; gap: 0; overflow: hidden; }
+.settings-font-viewport .settings-font-item { height: 45px; min-height: 45px; max-height: 45px; padding: 5px 0; font-size: 11px; box-sizing: border-box; }
+.settings-font-item button { padding: 4px 7px; min-height: 27px; font-size: 10px; }
+.settings-font-import .settings-font-block { padding: 12px; margin-bottom: 12px; }
+.settings-font-import input, .settings-font-import button, .settings-font-import select { font-size: 12px; }
