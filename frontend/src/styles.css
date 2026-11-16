@@ -20,3 +20,7 @@
 @import "./styles/editor-workspace.css";
 
 @import "./styles/editor-setup.css";
+
+@import "./styles/editor-templates.css";
+
+@import "./styles/seed-control.css";

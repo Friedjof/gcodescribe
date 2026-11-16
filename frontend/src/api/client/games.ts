@@ -50,8 +50,8 @@ export const gamesClient = {
     params.set("continuous", String(continuous));
     return req<OsmMapGcode>(`/api/osm-map/gcode?${params.toString()}`, { signal });
   },
-  geocodePlace: (q: string) => {
+  geocodePlace: (q: string, signal?: AbortSignal) => {
     const params = new URLSearchParams({ q });
-    return req<{ results: GeocodeResult[] }>(`/api/geocode?${params.toString()}`);
+    return req<{ results: GeocodeResult[] }>(`/api/geocode?${params.toString()}`, { signal });
   },
 };

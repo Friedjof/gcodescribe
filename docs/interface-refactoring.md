@@ -160,3 +160,22 @@ Die Arbeit erfolgt auf `interface-refactoring`; `main` und der Sicherungstag ble
 - Dialogfokus und Tastaturnavigation wurden abgesichert, damit Menünavigation keine Jog-Befehle auslöst.
 
 Zwischenprüfung: 485 Frontend-Tests erfolgreich; produktiver Frontend-Build erfolgreich. Browserdurchläufe gegen einen lokalen Backend-Prozess mit separater Testdatenablage: vorhandenes Profil, Neuanlage eines Profils samt Projekt, Offline-Einstieg, erste Textseite und 3D-Wegvorschau. Kein Hardwarezugriff und kein Druckstart. Weitere Theme-, Layout-, Integrations- und Paketprüfungen folgen.
+
+## Zusätzliche Nutzerkorrekturen vom 16.11.
+
+- Oberfläche war noch zu unübersichtlich: Symbolleiste auf eine Zeile reduziert, Eigenschaften bei Bedarf und mehr einheitliche SVG-Symbole.
+- Desktop hat Vorrang. Einrichten/Kalibrieren müssen ohne Scrollen erreichbar bleiben. Der doppelte Start-/Einrichtungsbereich entfällt; bestehende gespeicherte Start-Tabs werden migriert.
+- Kopf kompakter und klassische Programmmenüs (Datei, Ansicht, Extras, Hilfe).
+- Tab-Verwaltungsdialog vollständig prüfen; eine globale horizontale Flex-Regel hat Einleitung und Liste nebeneinander gedrückt. Dialogkörper jetzt standardmäßig vertikal, spezifische Mehrspalten-Dialoge definieren ihre Aufteilung ausdrücklich.
+- Vorlagen grundlegend als Bibliothek links, Vorschau Mitte, paginierte Parameter rechts aufbauen. Erzeugen/Übernehmen bleiben sichtbar.
+- Ausnahme für Scrollen: Die **Auftragsliste soll scrollen**; ihre Filter und Aktionen bleiben stehen. Beim Listen-/Kachelwechsel Vorschaudaten wiederverwenden und nur sichtbare Thumbnails laden.
+- Aktueller Auftrag: alle Funktionen und Dialoge auf Formatierung, Funktion und Übersichtlichkeit prüfen. Hardwarebewegungen werden in der isolierten Browserprüfung nicht ausgeführt.
+
+Browser-Zwischenbefund bei 1366×768: alle vier Kalibrierungsaufgaben und alle 14 Vorlagen ohne vertikalen/horizontalen Inhaltsüberlauf; Tab-Dialog vollständig im Fenster; 45 künstliche Jobs in einem eigenen Scrollbereich. Neue Vorlagenvorschau tatsächlich erzeugt. Vollständiger Frontend-Lauf derzeit 499 Tests erfolgreich. Weitere Funktions-/Dialogprüfung läuft.
+
+### Inline maps and reproducible random templates
+
+- Templates now use a paginated library, a full-height paper preview, and a bounded properties pane. Parameter pages preserve their values; creation actions remain visible.
+- OSM lives directly in that workspace. Place search, layer selection and drawing parameters have their own property tabs. Map changes debounce by 250 ms, cancel superseded requests, retain the last visible drawing, and reuse up to six recent results. Insertion requires a result matching current settings. Full route/3D analysis runs only on explicit request.
+- Random templates have a permanent, explained five-digit random code (including Bingo), an explicit dice action, and repeatable Generate behavior. Codes are preserved as object metadata and shown in the drawing status. The font writing test also exposes and explains its variant code.
+- Validation: production build passed; 505 frontend tests passed before the final object-metadata regression was added. Inline OSM checked in Firefox at 1366 × 768 with mocked map data: no dialog and no overflowing pane, including all layers and drawing settings. Real OSM network latency is external and was not benchmarked by this fixture.

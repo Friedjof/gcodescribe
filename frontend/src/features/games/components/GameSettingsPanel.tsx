@@ -1,3 +1,4 @@
+import PagedControls from "../../../components/paging/PagedControls";
 import EditorIcon from "../../../components/editor/EditorIcon";
 import type { Calibration } from "../../../api";
 import Segmented from "../../../components/Segmented";
@@ -27,45 +28,69 @@ export interface SeedInputState {
 }
 
 export interface GameSettingsPanelProps {
+  embedded?: boolean;
   selectedGameId: GameId;
   cal: Calibration;
   autoTemplate: TemplateSpec;
   onGenerate: () => void;
   busy: boolean;
   dotsBoxes: {
-    density: DotsDensity; jitter: DotsJitter; playable: DotsPlayable; seed: SeedInputState;
-    onDensity: (v: DotsDensity) => void; onJitter: (v: DotsJitter) => void; onPlayable: (v: DotsPlayable) => void;
+    density: DotsDensity;
+    jitter: DotsJitter;
+    playable: DotsPlayable;
+    seed: SeedInputState;
+    onDensity: (v: DotsDensity) => void;
+    onJitter: (v: DotsJitter) => void;
+    onPlayable: (v: DotsPlayable) => void;
   };
   battleshipsSize: BattleshipsSize;
   onBattleshipsSize: (v: BattleshipsSize) => void;
   maze: {
-    size: MazeSize; type: MazeType; seed: SeedInputState;
-    onSize: (v: MazeSize) => void; onType: (v: MazeType) => void;
+    size: MazeSize;
+    type: MazeType;
+    seed: SeedInputState;
+    onSize: (v: MazeSize) => void;
+    onType: (v: MazeType) => void;
   };
   sudoku: {
-    difficulty: SudokuDifficulty; seed: SeedInputState;
+    difficulty: SudokuDifficulty;
+    seed: SeedInputState;
     onDifficulty: (v: SudokuDifficulty) => void;
   };
   mandala: {
-    mode: ColoringMandalaMode; complexity: number; showSeed: boolean; seed: SeedInputState;
+    mode: ColoringMandalaMode;
+    complexity: number;
+    showSeed: boolean;
+    seed: SeedInputState;
     onMode: (v: ColoringMandalaMode) => void;
     onComplexity: (v: number) => void;
     onShowSeed: (v: boolean) => void;
   };
   pattern: {
-    mode: ColoringPatternMode; complexity: number; showSeed: boolean; seed: SeedInputState;
+    mode: ColoringPatternMode;
+    complexity: number;
+    showSeed: boolean;
+    seed: SeedInputState;
     onMode: (v: ColoringPatternMode) => void;
     onComplexity: (v: number) => void;
     onShowSeed: (v: boolean) => void;
   };
   curveMorph: {
-    curves: number; complexity: number; snapToGrid: boolean; seed: SeedInputState;
+    curves: number;
+    complexity: number;
+    snapToGrid: boolean;
+    seed: SeedInputState;
     onCurves: (v: number) => void;
     onComplexity: (v: number) => void;
     onSnap: (v: boolean) => void;
   };
   noodles: {
-    columns: number; thickness: number; fill: number; rounded: boolean; maxLength: number; seed: SeedInputState;
+    columns: number;
+    thickness: number;
+    fill: number;
+    rounded: boolean;
+    maxLength: number;
+    seed: SeedInputState;
     onColumns: (v: number) => void;
     onThickness: (v: number) => void;
     onFill: (v: number) => void;
@@ -75,6 +100,7 @@ export interface GameSettingsPanelProps {
 }
 
 export function GameSettingsPanel({
+  embedded = false,
   selectedGameId,
   cal,
   autoTemplate,
@@ -91,7 +117,16 @@ export function GameSettingsPanel({
   noodles,
 }: GameSettingsPanelProps) {
   const { t } = useI18n();
-  const hasSettings = ["dotsBoxes", "battleships", "maze", "sudoku", "coloringMandala", "coloringPattern", "curveMorph", "noodles"].includes(selectedGameId);
+  const hasSettings = [
+    "dotsBoxes",
+    "battleships",
+    "maze",
+    "sudoku",
+    "coloringMandala",
+    "coloringPattern",
+    "curveMorph",
+    "noodles",
+  ].includes(selectedGameId);
 
   return (
     <>
@@ -100,58 +135,93 @@ export function GameSettingsPanel({
           <div className="games-panel-head">
             <h3>{t("games.settings")}</h3>
           </div>
-          <div className="games-settings">
+          <PagedControls key={selectedGameId} size={3}>
             {selectedGameId === "dotsBoxes" && (
               <>
                 <div className="games-setting-row">
-                  <span className="games-setting-label">{t("games.param.density")}</span>
+                  <span className="games-setting-label">
+                    {t("games.param.density")}
+                  </span>
                   <Segmented<DotsDensity>
                     value={dotsBoxes.density}
                     onChange={dotsBoxes.onDensity}
                     options={[
-                      { value: "relaxed",  label: t("games.option.density.relaxed") },
-                      { value: "balanced", label: t("games.option.density.balanced") },
-                      { value: "dense",    label: t("games.option.density.dense") },
-                      { value: "extreme",  label: t("games.option.density.extreme") },
+                      {
+                        value: "relaxed",
+                        label: t("games.option.density.relaxed"),
+                      },
+                      {
+                        value: "balanced",
+                        label: t("games.option.density.balanced"),
+                      },
+                      {
+                        value: "dense",
+                        label: t("games.option.density.dense"),
+                      },
+                      {
+                        value: "extreme",
+                        label: t("games.option.density.extreme"),
+                      },
                     ]}
                   />
                 </div>
                 <div className="games-setting-row">
-                  <span className="games-setting-label">{t("games.param.borderShape")}</span>
+                  <span className="games-setting-label">
+                    {t("games.param.borderShape")}
+                  </span>
                   <Segmented<DotsJitter>
                     value={dotsBoxes.jitter}
                     onChange={dotsBoxes.onJitter}
                     options={[
-                      { value: "straight", label: t("games.option.borderShape.straight") },
-                      { value: "organic",  label: t("games.option.borderShape.organic") },
-                      { value: "wild",     label: t("games.option.borderShape.wild") },
+                      {
+                        value: "straight",
+                        label: t("games.option.borderShape.straight"),
+                      },
+                      {
+                        value: "organic",
+                        label: t("games.option.borderShape.organic"),
+                      },
+                      {
+                        value: "wild",
+                        label: t("games.option.borderShape.wild"),
+                      },
                     ]}
                   />
                 </div>
                 <div className="games-setting-row">
-                  <span className="games-setting-label">{t("games.param.playable")}</span>
+                  <span className="games-setting-label">
+                    {t("games.param.playable")}
+                  </span>
                   <Segmented<DotsPlayable>
                     value={dotsBoxes.playable}
                     onChange={dotsBoxes.onPlayable}
                     options={[
-                      { value: "sparse",   label: t("games.option.playable.sparse") },
-                      { value: "balanced", label: t("games.option.playable.balanced") },
-                      { value: "full",     label: t("games.option.playable.full") },
+                      {
+                        value: "sparse",
+                        label: t("games.option.playable.sparse"),
+                      },
+                      {
+                        value: "balanced",
+                        label: t("games.option.playable.balanced"),
+                      },
+                      { value: "full", label: t("games.option.playable.full") },
                     ]}
                   />
                 </div>
-                <SeedInputRow state={dotsBoxes.seed} />
+                {!embedded && <SeedInputRow state={dotsBoxes.seed} />}
               </>
             )}
 
             {selectedGameId === "battleships" && (
               <div className="games-setting-row">
-                <span className="games-setting-label">{t("games.param.boardSize")}</span>
+                <span className="games-setting-label">
+                  {t("games.param.boardSize")}
+                </span>
                 <Segmented<BattleshipsSize>
                   value={battleshipsSize}
                   onChange={onBattleshipsSize}
                   options={[
-                    { value: "s8",  label: "8×8" },
+                    { value: "s8", label: "8×8" },
                     { value: "s10", label: "10×10" },
                     { value: "s12", label: "12×12" },
                   ]}
@@ -162,22 +232,42 @@ export function GameSettingsPanel({
             {selectedGameId === "maze" && (
               <>
                 <div className="games-setting-row">
-                  <span className="games-setting-label">{t("games.param.mazeSize")}</span>
+                  <span className="games-setting-label">
+                    {t("games.param.mazeSize")}
+                  </span>
                   <Segmented<MazeSize>
                     value={maze.size}
                     onChange={maze.onSize}
                     options={[
-                      { value: "small",   label: t("games.option.mazeSize.small") },
-                      { value: "medium",  label: t("games.option.mazeSize.medium") },
-                      { value: "large",   label: t("games.option.mazeSize.large") },
-                      { value: "huge",    label: t("games.option.mazeSize.huge") },
-                      { value: "extreme", label: t("games.option.mazeSize.extreme") },
+                      {
+                        value: "small",
+                        label: t("games.option.mazeSize.small"),
+                      },
+                      {
+                        value: "medium",
+                        label: t("games.option.mazeSize.medium"),
+                      },
+                      {
+                        value: "large",
+                        label: t("games.option.mazeSize.large"),
+                      },
+                      { value: "huge", label: t("games.option.mazeSize.huge") },
+                      {
+                        value: "extreme",
+                        label: t("games.option.mazeSize.extreme"),
+                      },
                     ]}
                   />
                 </div>
                 <div className="games-setting-row">
-                  <span className="games-setting-label">{t("games.param.mazeType")}</span>
-                  <div className="maze-type-selector" role="radiogroup" aria-label={t("games.param.mazeType")}>
+                  <span className="games-setting-label">
+                    {t("games.param.mazeType")}
+                  </span>
+                  <div
+                    className="maze-type-selector"
+                    role="radiogroup"
+                    aria-label={t("games.param.mazeType")}
+                  >
                     {MAZE_TYPES.map((type) => (
                       <button
                         key={type.id}
@@ -194,42 +284,67 @@ export function GameSettingsPanel({
                     ))}
                   </div>
                 </div>
-                <SeedInputRow state={maze.seed} />
+                {!embedded && <SeedInputRow state={maze.seed} />}
               </>
             )}
 
             {selectedGameId === "sudoku" && (
               <>
                 <div className="games-setting-row">
-                  <span className="games-setting-label">{t("games.param.difficulty")}</span>
+                  <span className="games-setting-label">
+                    {t("games.param.difficulty")}
+                  </span>
                   <Segmented<SudokuDifficulty>
                     value={sudoku.difficulty}
                     onChange={sudoku.onDifficulty}
                     options={[
-                      { value: "easy",   label: t("games.option.difficulty.easy") },
-                      { value: "medium", label: t("games.option.difficulty.medium") },
-                      { value: "hard",   label: t("games.option.difficulty.hard") },
+                      {
+                        value: "easy",
+                        label: t("games.option.difficulty.easy"),
+                      },
+                      {
+                        value: "medium",
+                        label: t("games.option.difficulty.medium"),
+                      },
+                      {
+                        value: "hard",
+                        label: t("games.option.difficulty.hard"),
+                      },
                     ]}
                   />
                 </div>
-                <SeedInputRow state={sudoku.seed} />
+                {!embedded && <SeedInputRow state={sudoku.seed} />}
               </>
             )}
 
             {selectedGameId === "coloringMandala" && (
               <>
                 <div className="games-setting-row">
-                  <span className="games-setting-label">{t("games.param.coloringMode")}</span>
+                  <span className="games-setting-label">
+                    {t("games.param.coloringMode")}
+                  </span>
                   <Segmented<ColoringMandalaMode>
                     value={mandala.mode}
                     onChange={mandala.onMode}
                     options={[
-                      { value: "flower",    label: t("games.option.coloring.flower") },
-                      { value: "star",      label: t("games.option.coloring.star") },
-                      { value: "butterfly", label: t("games.option.coloring.butterfly") },
-                      { value: "sun",       label: t("games.option.coloring.sun") },
-                      { value: "nature",    label: t("games.option.coloring.nature") },
-                      { value: "magic",     label: t("games.option.coloring.magic") },
+                      {
+                        value: "flower",
+                        label: t("games.option.coloring.flower"),
+                      },
+                      { value: "star", label: t("games.option.coloring.star") },
+                      {
+                        value: "butterfly",
+                        label: t("games.option.coloring.butterfly"),
+                      },
+                      { value: "sun", label: t("games.option.coloring.sun") },
+                      {
+                        value: "nature",
+                        label: t("games.option.coloring.nature"),
+                      },
+                      {
+                        value: "magic",
+                        label: t("games.option.coloring.magic"),
+                      },
                     ]}
                   />
                 </div>
@@ -245,22 +360,30 @@ export function GameSettingsPanel({
                   onText={t("games.seedVisible")}
                   offText={t("games.seedHidden")}
                 />
-                <SeedInputRow state={mandala.seed} />
+                {!embedded && <SeedInputRow state={mandala.seed} />}
               </>
             )}
 
             {selectedGameId === "coloringPattern" && (
               <>
                 <div className="games-setting-row">
-                  <span className="games-setting-label">{t("games.param.coloringMode")}</span>
-                  <div className="coloring-pattern-selector" role="radiogroup" aria-label={t("games.param.coloringMode")}>
+                  <span className="games-setting-label">
+                    {t("games.param.coloringMode")}
+                  </span>
+                  <div
+                    className="coloring-pattern-selector"
+                    role="radiogroup"
+                    aria-label={t("games.param.coloringMode")}
+                  >
                     {COLORING_PATTERN_OPTIONS.map((option) => {
                       const label = t(option.labelKey);
                       return (
                         <button
                           key={option.value}
                           type="button"
-                          className={pattern.mode === option.value ? "selected" : ""}
+                          className={
+                            pattern.mode === option.value ? "selected" : ""
+                          }
                           title={label}
                           aria-label={label}
                           aria-checked={pattern.mode === option.value}
@@ -285,7 +408,7 @@ export function GameSettingsPanel({
                   onText={t("games.seedVisible")}
                   offText={t("games.seedHidden")}
                 />
-                <SeedInputRow state={pattern.seed} />
+                {!embedded && <SeedInputRow state={pattern.seed} />}
               </>
             )}
 
@@ -310,7 +433,7 @@ export function GameSettingsPanel({
                   onText={t("games.gridOn")}
                   offText={t("games.gridOff")}
                 />
-                <SeedInputRow state={curveMorph.seed} />
+                {!embedded && <SeedInputRow state={curveMorph.seed} />}
               </>
             )}
 
@@ -347,39 +470,46 @@ export function GameSettingsPanel({
                   onText={t("games.cornersRound")}
                   offText={t("games.cornersSquare")}
                 />
-                <SeedInputRow state={noodles.seed} />
+                {!embedded && <SeedInputRow state={noodles.seed} />}
               </>
             )}
+          </PagedControls>
+        </div>
+      )}
+
+      {!embedded && (
+        <div className="games-panel">
+          <div className="games-panel-head">
+            <h3>{t("games.autoFitTitle")}</h3>
+          </div>
+          <p className="muted games-detail-copy">{t("games.autoFitHint")}</p>
+          <div className="games-chip-grid">
+            {autoFitIndicators(autoTemplate, cal, t).map((detail) => (
+              <span
+                key={`${detail.label}-${detail.value}`}
+                className="games-chip"
+              >
+                <strong>{detail.label}:</strong> {detail.value}
+              </span>
+            ))}
           </div>
         </div>
       )}
 
-      <div className="games-panel">
-        <div className="games-panel-head">
-          <h3>{t("games.autoFitTitle")}</h3>
+      {!embedded && (
+        <div className="games-generate-wrap">
+          <button
+            type="button"
+            className="primary games-generate-btn"
+            title={t("games.generate")}
+            aria-label={t("games.generate")}
+            onClick={onGenerate}
+            disabled={busy}
+          >
+            <EditorIcon name="preview" size={17} /> {t("games.generate")}
+          </button>
         </div>
-        <p className="muted games-detail-copy">{t("games.autoFitHint")}</p>
-        <div className="games-chip-grid">
-          {autoFitIndicators(autoTemplate, cal, t).map((detail) => (
-            <span key={`${detail.label}-${detail.value}`} className="games-chip">
-              <strong>{detail.label}:</strong> {detail.value}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      <div className="games-generate-wrap">
-        <button
-          type="button"
-          className="primary games-generate-btn"
-          title={t("games.generate")}
-          aria-label={t("games.generate")}
-          onClick={onGenerate}
-          disabled={busy}
-        >
-          <EditorIcon name="preview" size={17} /> {t("games.generate")}
-        </button>
-      </div>
+      )}
     </>
   );
 }
@@ -400,13 +530,21 @@ function SeedInputRow({ state }: { state: SeedInputState }) {
               value={state.input}
               onChange={(e) => state.onInput(e.target.value)}
             />
-            <button type="button" className="games-seed-toggle" onClick={() => state.onToggle(false)}>
+            <button
+              type="button"
+              className="games-seed-toggle"
+              onClick={() => state.onToggle(false)}
+            >
               {t("games.maze.seedAuto")}
             </button>
           </div>
         </>
       ) : (
-        <button type="button" className="games-seed-toggle" onClick={() => state.onToggle(true)}>
+        <button
+          type="button"
+          className="games-seed-toggle"
+          onClick={() => state.onToggle(true)}
+        >
           {t("games.maze.seedManual")}
         </button>
       )}
@@ -414,27 +552,58 @@ function SeedInputRow({ state }: { state: SeedInputState }) {
   );
 }
 
-function ComplexityControl({ value, onChange, label }: { value: number; onChange: (v: number) => void; label: string }) {
+function ComplexityControl({
+  value,
+  onChange,
+  label,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  label: string;
+}) {
   return (
     <div className="games-setting-row">
       <span className="games-setting-label">{label}</span>
       <div className="games-seed-row games-complexity-row">
-        <input type="range" min="0" max="1" step="0.05" value={value} onChange={(e) => onChange(Number(e.target.value))} />
+        <input
+          type="range"
+          min="0"
+          max="1"
+          step="0.05"
+          value={value}
+          onChange={(e) => onChange(Number(e.target.value))}
+        />
         <span className="games-chip">{Math.round(value * 100)}%</span>
       </div>
     </div>
   );
 }
 
-function IntSliderControl(
-  { value, onChange, min, max, label }:
-  { value: number; onChange: (v: number) => void; min: number; max: number; label: string },
-) {
+function IntSliderControl({
+  value,
+  onChange,
+  min,
+  max,
+  label,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  min: number;
+  max: number;
+  label: string;
+}) {
   return (
     <div className="games-setting-row">
       <span className="games-setting-label">{label}</span>
       <div className="games-seed-row games-complexity-row">
-        <input type="range" min={min} max={max} step="1" value={value} onChange={(e) => onChange(Number(e.target.value))} />
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step="1"
+          value={value}
+          onChange={(e) => onChange(Number(e.target.value))}
+        />
         <span className="games-chip">{value}</span>
       </div>
     </div>
@@ -442,8 +611,18 @@ function IntSliderControl(
 }
 
 function SeedVisibilityToggle({
-  checked, onChange, label, onText, offText,
-}: { checked: boolean; onChange: (v: boolean) => void; label: string; onText: string; offText: string }) {
+  checked,
+  onChange,
+  label,
+  onText,
+  offText,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+  onText: string;
+  offText: string;
+}) {
   return (
     <div className="games-setting-row">
       <button
