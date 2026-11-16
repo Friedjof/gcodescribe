@@ -1,35 +1,12 @@
 import ProfileLibrary from "./ProfileLibrary";
-import EditorIcon from "../../components/editor/EditorIcon";
+import ProfileSettings from "./ProfileSettings";
 import { useEffect, useRef, useState } from "react";
 import { api, type Calibration, type CalibrationProfileSummary } from "../../api";
-import CommittedNumberField from "../../components/CommittedNumberField";
 import { useI18n } from "../../i18n";
 import { useConfirm } from "../../components/dialogs";
 import { useToasts } from "../../components/Toasts";
 import { useProjectCalibration } from "../../state/ProjectCalibrationContext";
 import { errorMessage, isAbortError } from "../../api/errors";
-
-const FIELDS: { key: keyof Calibration; labelKey: string; unit: string; groupKey: string }[] = [
-  { key: "bed_width", labelKey: "calibrate.bedWidth", unit: "mm", groupKey: "calibrate.groupMachine" },
-  { key: "bed_height", labelKey: "calibrate.bedHeight", unit: "mm", groupKey: "calibrate.groupMachine" },
-  { key: "z_max", labelKey: "calibrate.zMax", unit: "mm", groupKey: "calibrate.groupMachine" },
-  { key: "plot_width", labelKey: "calibrate.plotWidth", unit: "mm", groupKey: "calibrate.groupArea" },
-  { key: "plot_height", labelKey: "calibrate.plotHeight", unit: "mm", groupKey: "calibrate.groupArea" },
-  { key: "origin_x", labelKey: "calibrate.originX", unit: "mm", groupKey: "calibrate.groupArea" },
-  { key: "origin_y", labelKey: "calibrate.originY", unit: "mm", groupKey: "calibrate.groupArea" },
-  { key: "pen_up_z", labelKey: "calibrate.penUpZ", unit: "mm", groupKey: "calibrate.groupPen" },
-  { key: "pen_down_z", labelKey: "calibrate.penDownZ", unit: "mm", groupKey: "calibrate.groupPen" },
-  { key: "park_x", labelKey: "calibrate.parkX", unit: "mm", groupKey: "calibrate.groupPark" },
-  { key: "park_y", labelKey: "calibrate.parkY", unit: "mm", groupKey: "calibrate.groupPark" },
-  { key: "park_lift_z", labelKey: "calibrate.parkLiftZ", unit: "mm", groupKey: "calibrate.groupPark" },
-  { key: "calibration_x", labelKey: "calibrate.calibrationX", unit: "mm", groupKey: "calibrate.groupCalibrationPosition" },
-  { key: "calibration_y", labelKey: "calibrate.calibrationY", unit: "mm", groupKey: "calibrate.groupCalibrationPosition" },
-  { key: "travel_feed", labelKey: "calibrate.travelFeed", unit: "mm/s", groupKey: "calibrate.groupSpeed" },
-  { key: "draw_feed", labelKey: "calibrate.drawFeed", unit: "mm/s", groupKey: "calibrate.groupSpeed" },
-  { key: "z_feed", labelKey: "calibrate.zFeed", unit: "mm/s", groupKey: "calibrate.groupSpeed" },
-  { key: "z_max_feedrate", labelKey: "calibrate.zMaxFeedrate", unit: "mm/s", groupKey: "calibrate.groupSpeed" },
-  { key: "merge_tolerance", labelKey: "calibrate.mergeTolerance", unit: "mm", groupKey: "calibrate.groupOptimize" },
-];
 
 export default function Calibrate() {
   const { t } = useI18n();
@@ -38,7 +15,6 @@ export default function Calibrate() {
   const read = useRef<AbortController | null>(null);
   const draftRevision = useRef(0);
   const detailRef = useRef<HTMLElement>(null);
-  const [group, setGroup] = useState("calibrate.groupMachine");
   const [profiles, setProfiles] = useState<CalibrationProfileSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [cal, setCal] = useState<Calibration | null>(null);
@@ -98,8 +74,6 @@ export default function Calibrate() {
   const focusInvalidInput = () => {
     const input = detailRef.current?.querySelector<HTMLInputElement>('input[aria-invalid="true"]');
     if (input) {
-      const panel = input.closest<HTMLElement>("[data-profile-group]");
-      if (panel?.dataset.profileGroup) setGroup(panel.dataset.profileGroup);
       requestAnimationFrame(() => input.focus());
     }
     return !!input;
@@ -233,7 +207,6 @@ export default function Calibrate() {
     </label>
   );
 
-  const groups = [...new Set(FIELDS.map((f) => f.groupKey))];
   const visibleProfiles = profiles.filter((p) => showArchived || !p.archived);
   const archivedCount = profiles.filter((p) => p.archived).length;
 
@@ -276,84 +249,8 @@ export default function Calibrate() {
                 <p className="muted">{t("profiles.editingInactive")}</p>
               )}
             </div>
-            <div className="profile-settings-workspace">
-              <nav className="profile-group-nav" aria-label={t("calibrate.title")}>
-                {[...groups, "calibrate.layout"].map((g) => <button type="button" key={g} aria-pressed={group === g} onClick={() => setGroup(g)}><EditorIcon name={g === "calibrate.groupMachine" ? "settings" : g === "calibrate.groupArea" ? "pages" : g === "calibrate.groupPen" ? "draw" : g === "calibrate.layout" ? "group" : "measure"} size={16}/>{t(g)}</button>)}
-              </nav>
-              <div className="profile-field-panels">
-            {groups.map((g) => (
-              <div key={g} className="field-group profile-field-panel" hidden={group !== g} data-profile-group={g}>
-                <h3>
-                  {g === "calibrate.groupPark" ? "P · " : g === "calibrate.groupCalibrationPosition" ? "C · " : ""}
-                  {t(g)}
-                </h3>
-                <p className="calibration-group-hint">{t(`${g}Hint`)}</p>
-                <div className="fields">
-                  {FIELDS.filter((f) => f.groupKey === g).map((f) => (
-                    <CommittedNumberField key={f.key} label={t(f.labelKey)} unit={f.unit}
-                      value={cal[f.key] as number} min={0}
-                      onChange={(value) => set(f.key, value)} />
-                  ))}
-                </div>
-                {g === "calibrate.groupSpeed" && <div className="calibrate-speed-test">
-                  <div>
-                    <strong>{t("calibrate.speedTestTitle")}</strong>
-                    <p>{t("calibrate.speedTestHint")}</p>
-                    <small>{t("calibrate.speedTestFeeds", {
-                      travel: cal.travel_feed, z: cal.z_feed,
-                    })}</small>
-                    {(!selected?.active || dirty) && <small>{t("calibrate.speedTestNeedsSavedActive")}</small>}
-                  </div>
-                  <button type="button" className="primary" disabled={!selected?.active || dirty || speedTesting}
-                    onClick={runSpeedTest}>
-                    {speedTesting ? t("calibrate.speedTestRunning") : t("calibrate.speedTestButton")}
-                  </button>
-                </div>}
-              </div>
-            ))}
-            <div className="field-group profile-field-panel" hidden={group !== "calibrate.layout"} data-profile-group="calibrate.layout">
-              <h3>{t("calibrate.layout")}</h3>
-              <div className="layout-toggle-row">
-                <button
-                  type="button"
-                  className={"toggle-pill" + (cal.fit_to_area ? " on" : "")}
-                  aria-pressed={cal.fit_to_area}
-                  onClick={() => set("fit_to_area", !cal.fit_to_area)}
-                >
-                  <span>{t("calibrate.fitToArea")}</span>
-                  <i />
-                </button>
-                <button
-                  type="button"
-                  className={"toggle-pill" + (cal.flip_y ? " on" : "")}
-                  aria-pressed={cal.flip_y}
-                  onClick={() => set("flip_y", !cal.flip_y)}
-                >
-                  <span>{t("calibrate.flipY")}</span>
-                  <i />
-                </button>
-                <button
-                  type="button"
-                  className={"toggle-pill" + (cal.trust_axis_home ? " on" : "")}
-                  aria-pressed={cal.trust_axis_home}
-                  onClick={() => set("trust_axis_home", !cal.trust_axis_home)}
-                >
-                  <span>{t("calibrate.trustAxisHome")}</span>
-                  <i />
-                </button>
-                <button
-                  type="button"
-                  className={"toggle-pill" + (cal.park_after_plot ? " on" : "")}
-                  aria-pressed={cal.park_after_plot}
-                  onClick={() => set("park_after_plot", !cal.park_after_plot)}
-                >
-                  <span>{t("calibrate.parkAfterPlot")}</span>
-                  <i />
-                </button>
-              </div>
-            </div>
-              </div>
-            </div>
+            <ProfileSettings cal={cal} onChange={set} canTest={!!selected?.active && !dirty}
+              speedTesting={speedTesting} onSpeedTest={runSpeedTest}/>
             <div className="profile-actions">
               <div className="profile-actions-main">
                 <button className="primary" onClick={save}>

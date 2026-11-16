@@ -1,16 +1,19 @@
 .app.tab-calibrate > main { padding: 0; }
 .calibrate-profiles { height: 100%; min-height: 0; overflow: hidden; padding: 8px; }
-.profile-layout { height: 100%; min-height: 0; grid-template-columns: 260px minmax(0,1fr); gap: 8px; align-items: stretch; }
+.profile-layout { height: 100%; min-height: 0; grid-template-columns: 230px minmax(0,1fr); gap: 8px; align-items: stretch; }
 .profile-panel { max-height: none; padding: 10px; overflow: hidden; gap: 6px; }
 .profile-panel h2, .profile-detail h2 { font-size: 14px; margin: 0 0 6px; }
 .profile-list-scroll { flex: 1; overflow: hidden; padding: 0; gap: 5px; }
-.profile-item { min-height: 110px; max-height: 110px; padding: 7px; border-radius: 3px; gap: 4px; flex: 0 0 auto; cursor: auto; }
-.profile-select { display: flex; flex-direction: column; align-items: stretch; gap: 5px; background: transparent; border: 0; border-radius: 0; padding: 0; min-height: 0; width: 100%; font-size: 11px; text-align: left; }
-.profile-select > span { font-size: 10px; }
-.profile-item-info { font-size: 10px; }
-.profile-item-head strong { font-size: 12px; }
+.profile-item { height: 64px; min-height: 64px; max-height: 64px; padding: 6px; border-radius: 3px; gap: 4px; flex: 0 0 auto; cursor: auto; }
+.profile-select { display: flex; flex-direction: column; align-items: stretch; gap: 2px; background: transparent; border: 0; border-radius: 0; padding: 0; min-height: 0; width: 100%; font-size: 11px; text-align: left; }
+.profile-pen-status { display: block; font-size: 10px; line-height: 16px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.profile-item:has(.profile-activate) .profile-pen-status { padding-right: 76px; }
+.profile-item-info { font-size: 10px; line-height: 14px; }
+.profile-item-head { min-height: 17px; gap: 4px; }
+.profile-item-head strong { font-size: 12px; line-height: 17px; }
+.profile-item-head .pbadge { flex-shrink: 0; }
 .profile-item .pbadge { font-size: 9px; padding: 2px 4px; }
-.profile-activate { padding: 3px 6px; font-size: 10px; min-height: 22px; }
+.profile-activate { position: absolute; right: 5px; bottom: 4px; padding: 2px 6px; font-size: 10px; min-height: 22px; }
 .profile-list-actions { grid-template-columns: 1fr 1fr; gap: 5px; padding-top: 7px; margin-top: 2px; }
 .profile-list-actions button, .profile-list-actions .btn-link { padding: 5px; min-height: 30px; font-size: 10px; border-radius: 3px; text-align: center; }
 .profile-detail { display: flex; flex-direction: column; min-height: 0; padding: 10px 12px; overflow: hidden; }
@@ -19,23 +22,40 @@
 .profile-detail > .field-group .field { max-width: 400px; gap: 4px; }
 .profile-detail .field > span { font-size: 11px; }
 .profile-detail input { padding: 5px 7px; min-height: 29px; font-size: 12px; }
-.profile-settings-workspace { display: grid; grid-template-columns: 170px minmax(0,1fr); gap: 14px; min-height: 0; flex: 1; border-top: 1px solid var(--border); padding-top: 10px; }
-.profile-group-nav { display: flex; flex-direction: column; align-self: start; gap: 2px; }
-.profile-group-nav button { display: flex; justify-content: flex-start; align-items: center; gap: 7px; min-height: 33px; padding: 6px; font-size: 11px; text-align: left; background: transparent; border: 0; border-radius: 3px; }
-.profile-group-nav button svg { flex-shrink: 0; }
-.profile-group-nav button[aria-pressed="true"] { color: var(--accent); background: var(--active-bg); }
-.profile-field-panels { min-width: 0; min-height: 0; }
-.profile-field-panel[hidden] { display: none; }
-.profile-field-panels .field-group { margin: 0; padding: 0; border: 0; }
-.profile-field-panels h3 { font-size: 13px; margin: 0 0 7px; }
-.profile-field-panels .calibration-group-hint { font-size: 11px; line-height: 1.4; margin: 0 0 15px; }
-.profile-field-panels .fields { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
-.profile-field-panels .calibrate-speed-test { margin-top: 18px; padding: 10px; gap: 10px; }
-.profile-field-panels .calibrate-speed-test strong { font-size: 12px; }
-.profile-field-panels .calibrate-speed-test p, .profile-field-panels .calibrate-speed-test small { font-size: 11px; }
-.profile-field-panels .calibrate-speed-test button { font-size: 11px; padding: 5px 9px; }
-.profile-field-panels .layout-toggle-row { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
-.profile-field-panels .toggle-pill { min-height: 33px; font-size: 12px; border-radius: 3px; }
+.profile-settings-overview { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 20px; min-height: 0; flex: 1; border-top: 1px solid var(--border); padding-top: 12px; }
+.profile-settings-column { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.profile-settings-column + .profile-settings-column { border-left: 1px solid var(--border); padding-left: 16px; }
+.profile-settings-group { min-width: 0; }
+.profile-settings-group > header { display: flex; justify-content: space-between; align-items: center; gap: 4px; margin-bottom: 7px; }
+.profile-settings-group h3 { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 12px; line-height: 20px; }
+.profile-settings-group h3 svg { flex-shrink: 0; color: var(--accent); }
+.profile-detail .profile-settings-overview .fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px 9px; }
+.profile-settings-overview .field { min-width: 0; gap: 3px; }
+.profile-settings-overview .field > label { font-size: 11px; line-height: 14px; min-height: 28px; flex: 1; display: flex; align-items: end; }
+.profile-settings-overview .input-unit input { width: 100%; min-width: 0; padding: 4px 5px; min-height: 28px; }
+.profile-settings-overview .input-unit em { font-size: 10px; min-width: 25px; flex-shrink: 0; white-space: nowrap; }
+.profile-option { display: flex; align-items: flex-start; gap: 6px; margin-top: 8px; font-size: 11px; line-height: 15px; cursor: pointer; }
+.profile-detail .profile-option input { flex: 0 0 auto; width: 13px; height: 13px; min-height: 0; padding: 0; margin: 1px 0 0; accent-color: var(--accent); }
+.profile-group-help { position: relative; flex-shrink: 0; font-size: 10px; color: var(--muted); }
+.profile-group-help summary { cursor: pointer; list-style: none; display: flex; align-items: center; justify-content: center; min-width: 22px; min-height: 22px; border-radius: 3px; }
+.profile-group-help summary::-webkit-details-marker { display: none; }
+.profile-group-help summary:hover, .profile-group-help[open] summary { background: var(--panel-2); color: var(--accent); }
+.profile-group-help > p { position: absolute; right: 0; top: 100%; z-index: 20; width: 250px; max-width: 65vw; margin: 4px 0 0; padding: 10px; border: 1px solid var(--border); border-radius: 5px; background: var(--panel); color: var(--text); box-shadow: var(--elevation-menu); font-size: 12px; line-height: 1.5; }
+.profile-speed-test { border-top: 1px solid var(--border); padding-top: 8px; margin-top: 12px; display: flex; flex-direction: column; align-items: stretch; gap: 5px; }
+.profile-speed-test > p { margin: 0; font-size: 11px; line-height: 15px; }
+.profile-speed-test .profile-group-help { align-self: flex-end; }
+.profile-speed-test .profile-group-help summary { padding: 0 4px; }
+.profile-speed-test button { display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 11px; padding: 5px; min-height: 28px; }
+.profile-speed-test small { font-size: 10px; line-height: 14px; color: var(--muted); }
+@media (max-width: 1150px) {
+ .profile-layout { grid-template-columns: 210px minmax(0,1fr); }
+ .profile-settings-overview { gap: 12px; }
+ .profile-settings-column + .profile-settings-column { padding-left: 10px; }
+}
 .profile-detail .profile-actions { flex: 0 0 auto; padding-top: 8px; margin-top: 8px; border-top: 1px solid var(--border); gap: 6px; }
 .profile-actions-main, .profile-actions-secondary { gap: 5px; }
 .profile-actions button, .profile-actions .btn-link { font-size: 11px; min-height: 29px; padding: 4px 8px; border-radius: 3px; }
+
+.profile-detail > .field-group { display: flex; align-items: flex-end; gap: 12px; }
+.profile-detail > .field-group > .field { flex: 1; min-width: 0; }
+.profile-detail > .field-group > p { flex: 1; margin: 0 0 4px; font-size: 11px; line-height: 16px; }

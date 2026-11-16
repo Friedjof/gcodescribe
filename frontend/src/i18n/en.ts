@@ -1,4 +1,7 @@
 const en: Record<string, string> = {
+  "profiles.groupHelp": "Help for {group}",
+  "profiles.testDetails": "What will move?",
+
   "tour.menu": "Guided tour …",
   "tour.welcome.title": "Your first line starts here",
   "tour.studio": "Plotter Studio",
