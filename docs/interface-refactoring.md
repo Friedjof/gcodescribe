@@ -233,3 +233,25 @@ The 54 workspace/theme/viewport combinations were checked again with the new
 visual styles: no overflowing main panes or uncaught JavaScript errors.
 The previous Python/Ruff checks still apply because this pass changes only the
 frontend. Physical printer and installed DEB/Flatpak checks remain outstanding.
+
+### Zoom continuity follow-up
+
+Wheel zoom and panning previously forced the bounded loading sample even after
+the full vector path was ready. That sample skipped entire strokes above 1,000
+polylines and reduced points on detailed curves. Pending bitmap refreshes also
+selected that sample, causing visible detail loss during navigation.
+
+Navigation now reuses the complete cached vector path, including while a bitmap
+is being refreshed or replaced by vector detail. A gesture that starts before
+background preparation finishes builds and caches the complete path once. The
+bounded sample is reserved for initial loading before a gesture, never used to
+downgrade a prepared drawing. No geometry or undo entries are changed by zooming.
+
+Validation: 532 frontend tests passed and the production build passed. New
+regressions cover many separate strokes, detailed curves, repeated wheel events,
+panning and a gesture before worker completion. Firefox used real wheel and
+right-drag actions on 2,400 strokes and a 52,000-point/2,600-stroke drawing. Across
+167 captured animation frames there was no incomplete vector fallback, no
+uncaught JavaScript error and no write/motion request. Saved geometry stayed
+identical. Dense drawings are still constrained by available display pixels at
+fit-to-page scale; zoom reveals their full detail without deliberate omission.
