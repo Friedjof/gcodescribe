@@ -426,10 +426,6 @@ function Games({
   };
 
   const generateAction = () => {
-    if (selectedGame.id === "osmMap") {
-      return;
-      return;
-    }
     generatePreview();
   };
 
@@ -534,18 +530,12 @@ function Games({
             <div className="template-parameters">
               {supported && cal && autoTemplate && (
                 <GameSettingsPanel
-                  embedded
                   key={selectedGame.id}
                   selectedGameId={selectedGame.id}
-                  cal={cal}
-                  autoTemplate={autoTemplate}
-                  onGenerate={generateAction}
-                  busy={busy || generating}
                   dotsBoxes={{
                     density: dotsDensity,
                     jitter: dotsJitter,
                     playable: dotsPlayable,
-                    seed: seeds.controls("dotsBoxes"),
                     onDensity: (v) => {
                       setDotsDensity(v);
                       resetPreview();
@@ -567,7 +557,6 @@ function Games({
                   maze={{
                     size: mazeSize,
                     type: mazeType,
-                    seed: seeds.controls("maze"),
                     onSize: (v) => {
                       setMazeSize(v);
                       resetPreview();
@@ -579,7 +568,6 @@ function Games({
                   }}
                   sudoku={{
                     difficulty: sudokuDifficulty,
-                    seed: seeds.controls("sudoku"),
                     onDifficulty: (v) => {
                       setSudokuDifficulty(v);
                       resetPreview();
@@ -589,7 +577,6 @@ function Games({
                     mode: coloringMandalaMode,
                     complexity: coloringMandalaComplexity,
                     showSeed: coloringMandalaShowSeed,
-                    seed: seeds.controls("coloringMandala"),
                     onMode: (v) => {
                       setColoringMandalaMode(v);
                       resetPreview();
@@ -607,7 +594,6 @@ function Games({
                     mode: coloringPatternMode,
                     complexity: coloringPatternComplexity,
                     showSeed: coloringPatternShowSeed,
-                    seed: seeds.controls("coloringPattern"),
                     onMode: (v) => {
                       setColoringPatternMode(v);
                       resetPreview();
@@ -625,7 +611,6 @@ function Games({
                     curves: curveMorphCurves,
                     complexity: curveMorphComplexity,
                     snapToGrid: curveMorphSnap,
-                    seed: seeds.controls("curveMorph"),
                     onCurves: (v) => {
                       setCurveMorphCurves(v);
                       resetPreview();
@@ -645,7 +630,6 @@ function Games({
                     fill: noodlesFill,
                     rounded: noodlesRounded,
                     maxLength: noodlesMaxLength,
-                    seed: seeds.controls("noodles"),
                     onColumns: (v) => {
                       setNoodlesColumns(v);
                       resetPreview();

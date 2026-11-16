@@ -36,8 +36,8 @@ styles/
 │                     maze-type selector, coloring-pattern selector, visibility
 │                     toggle), chip grid, auto-fit panel, generate button
 │
-├── games-modal.css   Games preview modal, OSM map editor modal and its
-│                     controls/layer grid, responsive breakpoints for both
+├── template-controls.css   Shared paper preview and inline map control primitives.
+│                     Desktop workspace layout lives in editor-templates.css.
 │
 ├── paint.css         Drawing editor layout: page sidebar, editor area, toolbar,
 │                     grid/snap controls, split-button, profile banner, workspace

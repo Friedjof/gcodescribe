@@ -4,7 +4,7 @@ import {
   type SetupProgress,
 } from "./setupProgress";
 
-/** One local setup record per project, shared by the Start and Setup workspaces. */
+/** One local setup record per project, shared by the setup tasks. */
 export class SetupProgressStore {
   private cache = new Map<string, SetupProgress>();
   private listeners = new Set<() => void>();

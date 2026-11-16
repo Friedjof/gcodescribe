@@ -31,12 +31,5 @@ export function useTemplateSeeds() {
       set(id, String(seed));
       return seed;
     },
-    controls: (id: GameId) => ({
-      manual: true,
-      input: input(id),
-      seed: resolve(id) ?? 1,
-      onInput: (value: string) => set(id, value),
-      onToggle: () => {},
-    }),
   };
 }
