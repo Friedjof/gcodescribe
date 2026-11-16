@@ -11,6 +11,7 @@ vi.mock("../../../state/ProjectCalibrationContext", () => ({
 vi.mock("../../../i18n", () => ({
   useI18n: () => ({ t: (key: string) => key }),
 }));
+vi.mock("./SetupProjectSelect", () => ({ default: () => <div>Project selector</div> }));
 vi.mock("../../control/Paper", () => ({
   default: ({ visible }: { visible: boolean }) => (
     <div data-testid="calibration" data-active={visible}>

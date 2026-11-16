@@ -159,6 +159,8 @@ const en: Record<string, string> = {
   "setup.defaultProfile": "My plotter",
   "setup.defaultProject": "My first project",
   "setup.profileTitle": "1. Choose a profile and project",
+  "setup.projectSelect": "Project",
+  "setup.projectSelectHint": "Choose another project under “Project” on the left. Its pages, profile and setup progress will load with it.",
   "setup.profileIntro": "A profile contains the machine dimensions, paper area and pen heights. A project groups your pages and uses one profile.",
   "setup.useExisting": "Use this profile and project",
   "setup.createNew": "Create a new profile and project …",

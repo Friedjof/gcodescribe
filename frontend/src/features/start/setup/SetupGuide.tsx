@@ -12,6 +12,7 @@ import { useI18n } from "../../../i18n";
 import { isPrinterBusy } from "../../../lib/printerState";
 import { useProjectCalibration } from "../../../state/ProjectCalibrationContext";
 import Paper from "../../control/Paper";
+import SetupProjectSelect from "./SetupProjectSelect";
 import SetupProfileStep from "./SetupProfileStep";
 import SetupConnectionStep from "./SetupConnectionStep";
 import SetupDrawingStep from "./SetupDrawingStep";
@@ -64,6 +65,7 @@ export default function SetupGuide({
   const [step, setStep] = useState<SetupStep>(() =>
     nextSetupStep(progress, online, profile, drawing?.objectCount ?? 0),
   );
+  const [profileBusy, setProfileBusy] = useState(false);
   const [expanded, setExpanded] = useState(!progress.finished),
     [calibrationConfirmed, setCalibrationConfirmed] = useState(false);
   useEffect(() => setCalibrationConfirmed(false), [profile.fingerprint]);
@@ -125,7 +127,7 @@ export default function SetupGuide({
                 : "workspace.paper",
             )}
           </h2>
-          <small title={project.name}>{project.name}</small>
+          <SetupProjectSelect index={index} enabled={visible && !profileBusy && !isPrinterBusy(status)} />
         </div>
         {progress.finished && (
           <button
@@ -166,6 +168,7 @@ export default function SetupGuide({
               profile={profile}
               active={visible}
               locked={isPrinterBusy(status)}
+              onBusyChange={setProfileBusy}
               onUse={useExisting}
               onCreated={created}
             />

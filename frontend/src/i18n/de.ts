@@ -159,6 +159,8 @@ const de: Record<string, string> = {
   "setup.defaultProfile": "Mein Plotter",
   "setup.defaultProject": "Mein erstes Projekt",
   "setup.profileTitle": "1. Profil und Projekt wählen",
+  "setup.projectSelect": "Projekt",
+  "setup.projectSelectHint": "Ein anderes Projekt wählst du links unter „Projekt“. Seine Seiten, sein Profil und der Einrichtungsfortschritt werden mitgeladen.",
   "setup.profileIntro": "Ein Profil enthält Maschinenmaße, Papierfläche und Stifthöhen. Ein Projekt bündelt deine Seiten und verwendet ein Profil.",
   "setup.useExisting": "Dieses Profil und Projekt verwenden",
   "setup.createNew": "Neues Profil und Projekt anlegen …",

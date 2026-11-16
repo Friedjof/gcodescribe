@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, type CalibrationProfile, type PageIndex } from "../../../api";
 import { flushEdits } from "../../../api/pageEdits";
 import { useI18n } from "../../../i18n";
@@ -9,6 +9,7 @@ export default function SetupProfileStep({
   profile,
   active,
   locked,
+  onBusyChange,
   onUse,
   onCreated,
 }: {
@@ -16,6 +17,7 @@ export default function SetupProfileStep({
   profile: CalibrationProfile;
   active: boolean;
   locked: boolean;
+  onBusyChange?: (busy: boolean) => void;
   onUse: () => void;
   onCreated: (index: PageIndex) => void;
 }) {
@@ -29,6 +31,7 @@ export default function SetupProfileStep({
     [creating, setCreating] = useState(false);
   const created = useRef<CalibrationProfile | null>(null),
     task = useSetupTask(index.project!.id, active && !locked);
+  useEffect(() => { onBusyChange?.(task.busy); return () => onBusyChange?.(false); }, [task.busy, onBusyChange]);
   const valid =
     [width, height].every(
       (value) =>
@@ -81,9 +84,9 @@ export default function SetupProfileStep({
       <p className="setup-lead">{t("setup.profileIntro")}</p>
       {!creating && <div data-tour="setup-profile-choice" className="setup-existing">
         <div>
-          <strong>{profile.name}</strong>
+          <strong>{index.project?.name}</strong>
           <span>
-            {index.project?.name} · {profile.calibration.bed_width} ×{" "}
+            {profile.name} · {profile.calibration.bed_width} ×{" "}
             {profile.calibration.bed_height} mm
           </span>
         </div>
@@ -96,6 +99,7 @@ export default function SetupProfileStep({
           {t("setup.useExisting")}
         </button>
       </div>}
+      <p className="setup-note">{t("setup.projectSelectHint")}</p>
       <button
         className="ghost setup-create-toggle"
         aria-expanded={creating}
