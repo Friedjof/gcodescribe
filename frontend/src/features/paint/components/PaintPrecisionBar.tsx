@@ -7,16 +7,17 @@ import { objectMeasurements } from "../lib/objectMeasurements";
 import { sourcePageFrame } from "../lib/sourcePage";
 
 /** Optional exact placement. Draft fields are scoped to the selected object. */
-export default function PaintPrecisionBar({ objects, ops, sizeLinked, onSizeLinkedToggle, disabled = false }: {
+export default function PaintPrecisionBar({ objects, ops, sizeLinked, onSizeLinkedToggle, disabled = false, open: controlledOpen, showToggle = true }: {
   objects: SceneObject[];
   ops: Pick<ObjectOps, "setSelectedObjectPosition" | "setSelectedObjectSize" | "setSelectedObjectRotation">;
-  sizeLinked: boolean; onSizeLinkedToggle: () => void; disabled?: boolean;
+  sizeLinked: boolean; onSizeLinkedToggle: () => void; disabled?: boolean; open?: boolean; showToggle?: boolean;
 }) {
   const { t } = useI18n();
   const id = useId();
-  const [open, setOpen] = useState(() => {
+  const [storedOpen, setOpen] = useState(() => {
     try { return localStorage.getItem("paint-precision-open") === "1"; } catch { return false; }
   });
+  const open = controlledOpen ?? storedOpen;
   const object = objects.length === 1 ? objects[0] : null;
   const size = object && objectMeasurements(object);
   const aspectLocked = !!object && !!sourcePageFrame(object);
@@ -25,8 +26,8 @@ export default function PaintPrecisionBar({ objects, ops, sizeLinked, onSizeLink
     return !previous;
   });
   return <div className={`paint-precision-bar${open ? " open" : ""}`}>
-    <button type="button" className="ghost precision-toggle" aria-expanded={open} aria-controls={id}
-      onClick={changeOpen}><span aria-hidden="true">{open ? "▾" : "▸"}</span> {t("paint.measure.title")}</button>
+    {showToggle && <button type="button" className="ghost precision-toggle" aria-expanded={open} aria-controls={id}
+      onClick={changeOpen}><span aria-hidden="true">{open ? "▾" : "▸"}</span> {t("paint.measure.title")}</button>}
     <div id={id} className="precision-body" hidden={!open}>
       {open && <>
       {object && size ? <div className="precision-fields" key={object.id}>

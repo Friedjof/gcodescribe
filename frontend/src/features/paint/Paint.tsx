@@ -6,6 +6,8 @@ import { discardEdits, flushEdits, queueObjects, rememberPage } from "../../api/
 import type { PrinterStatus } from "../../api/types/printer";
 import PanelResizeHandle from "../../components/editor/PanelResizeHandle";
 import { useInterface } from "../../interface/InterfaceProvider";
+import PaintEmptyState from "./components/PaintEmptyState";
+import PaintDocumentStatus from "./components/PaintDocumentStatus";
 import PaintCommandBar from "./components/PaintCommandBar";
 import PaintLayoutControls from "./components/PaintLayoutControls";
 import DelayedLoading from "../../components/DelayedLoading";
@@ -80,6 +82,13 @@ export default function Paint({
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [movePageId, setMovePageId] = useState<string | null>(null);
   const [viewRotation, setViewRotation] = useState<ViewRotation>(0);
+  const [measurementsOpen, setMeasurementsOpen] = useState(() => {
+    try { return localStorage.getItem("paint-precision-open") === "1"; } catch { return false; }
+  });
+  const toggleMeasurements = () => setMeasurementsOpen(current => {
+    try { localStorage.setItem("paint-precision-open", current ? "0" : "1"); } catch { /* Keep working without storage. */ }
+    return !current;
+  });
   const [sizeLinked, setSizeLinked] = useState(true);
   const [infoOpen, setInfoOpen] = useState(false);
   const { preferences, update: updateInterface } = useInterface();
@@ -127,6 +136,11 @@ export default function Paint({
   const { handleBucketFill, handleAreaFill, fitDrawing, updateObject, updateObjects, addTextObject } = usePaintCanvasActions({
     page, cal, pageBlocked, fillStyle, ops, setPage, persist, setPlotError, defaultText, warnMissingGlyphs, fail,
   });
+
+  const insertText = (at: Pt) => {
+    updateInterface(p => ({ ...p, propertiesPanel: { ...p.propertiesPanel, open: true } }));
+    addTextObject(at);
+  };
 
   const live = useLiveStream("designer", () => {
     if (!cal || !page) return null;
@@ -254,7 +268,7 @@ export default function Paint({
     onEditStart: ops.remember,
     onContextMenuSelection: (ids: string[], x: number, y: number) => { setSelectedIds(ids); setMenu({ ids, x, y }); },
     onImageDrop: openImageImport,
-    onTextAdd: addTextObject, onBucketFill: handleBucketFill, onAreaFill: handleAreaFill, onErase: ops.eraseAcrossObjects,
+    onTextAdd: insertText, onBucketFill: handleBucketFill, onAreaFill: handleAreaFill, onErase: ops.eraseAcrossObjects,
   });
   if (calibrationError) return <div className="card banner err" role="alert">
     <strong>Projektkalibrierung konnte nicht geladen werden</strong><p>{calibrationError}</p>
@@ -313,13 +327,13 @@ export default function Paint({
       {!pagesCollapsed && <PanelResizeHandle label={t("interface.resizePages")} width={pagesWidth} min={180} max={400}
         onChange={setPagesWidth} onCommit={width => updateInterface(p => ({ ...p, pagesPanel: { ...p.pagesPanel, width } }))} />}
       <section className="card paint-editor">
-        <div className="paint-document-menu">
-          <PaintCommandBar ops={ops} selected={selectedObjects} visible={visible}
-            onText={() => { void addTextObject([cal.plot_width / 2, cal.plot_height / 2]); setTool("select"); }}
-            onGallery={() => setGalleryOpen(true)} onMarkdown={() => setMdOpen(true)} onImage={pickImage} />
-          <PaintLayoutControls />
-        </div>
         <PaintToolbar
+          commands={<PaintCommandBar ops={ops} selected={selectedObjects} visible={visible}
+            onText={() => { insertText([cal.plot_width / 2, cal.plot_height / 2]); setTool("select"); }}
+            onGallery={() => setGalleryOpen(true)} onMarkdown={() => setMdOpen(true)} onImage={pickImage} />}
+          viewControls={<PaintLayoutControls visible={visible} measurementsOpen={measurementsOpen} onToggleMeasurements={toggleMeasurements} />}
+          guided={preferences.experience === "guided"}
+          visible={visible}
           page={page}
           desktop={desktop}
           liveState={live.state}
@@ -345,12 +359,6 @@ export default function Paint({
           onOpenInfo={() => setInfoOpen(true)}
         />
 
-        <p className="paint-profile-context muted">
-          Projektprofil: <strong>{renderProfile?.name ?? "wird geladen …"}</strong>
-          {renderProfile && <> · Ursprung X {cal.origin_x.toFixed(1)}, Y {cal.origin_y.toFixed(1)} mm
-            · Fläche {cal.plot_width.toFixed(1)} × {cal.plot_height.toFixed(1)} mm</>}
-        </p>
-
         {saveState.error && <div className="banner err save-status" role="alert">
           <span>{saveState.conflict ? t("save.conflict") : t("save.failed")}</span>
           <button onClick={() => flushEdits(page.id, !!saveState.conflict).catch(fail)}>{t(saveState.conflict ? "save.keepLocal" : "save.retry")}</button>
@@ -366,19 +374,17 @@ export default function Paint({
         </div>}
         {ops.processing && <span className="geometry-status" role="status">{t("paint.processingGeometry")}</span>}
 
-        <PaintPrecisionBar key={page.id} objects={selectedObjects} ops={ops} sizeLinked={sizeLinked}
-          onSizeLinkedToggle={() => setSizeLinked(value => !value)} disabled={pageBlocked || ops.processing} />
+        {measurementsOpen && <PaintPrecisionBar open showToggle={false} key={page.id} objects={selectedObjects} ops={ops} sizeLinked={sizeLinked}
+          onSizeLinkedToggle={() => setSizeLinked(value => !value)} disabled={pageBlocked || ops.processing} />}
 
         <div className="paint-workspace">
           <PaintToolRail tool={tool} onToolChange={selectTool} guided={preferences.experience === "guided"} visible={visible} />
           <div className="paint-canvas-wrap">
-            {page.objects.length === 0 && (
-              <div className="paint-empty-hint">
-                <strong>{t("paint.emptyHint")}</strong>
-                <button className="ghost" onClick={() => setGalleryOpen(true)}>▦ {t("gallery.button")}</button>
-              </div>
-            )}
+            {page.objects.length === 0 && tool === "select" && <PaintEmptyState
+              onText={() => { insertText([cal.plot_width / 2, cal.plot_height / 2]); setTool("select"); }}
+              onDraw={() => selectTool("pen")} onImage={pickImage} />}
             <PaintCanvas
+              statusContent={<PaintDocumentStatus page={page} profile={renderProfile} pending={saveState.pending} error={saveState.error} selection={selectedIds.length} />}
               visible={visible}
               gridVisible={preferences.canvas.gridVisible}
               showRulers={preferences.canvas.rulers}

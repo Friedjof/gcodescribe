@@ -37,9 +37,9 @@ export default function PaintCommandBar({ ops, selected, visible, onText, onGall
     <button type="button" className="icon-button" title={t("paint.undo")} aria-label={t("paint.undo")} disabled={ops.history.undo === 0} onClick={ops.undo}><EditorIcon name="undo" size={17} /></button>
     <button type="button" className="icon-button" title={t("paint.redo")} aria-label={t("paint.redo")} disabled={ops.history.redo === 0} onClick={ops.redo}><EditorIcon name="redo" size={17} /></button>
     <span className="toolbar-divider" />
-    <EditorMenu label={t("interface.edit")} items={edit} active={visible} />
-    <EditorMenu label={t("paint.section.insert")} items={insert} active={visible} />
-    <EditorMenu label={t("paint.section.arrange")} items={arrange} active={visible} />
+    <EditorMenu label={t("interface.edit")} items={edit} active={visible} className="toolbar-icon-menu"><EditorIcon name="paste" size={18}/></EditorMenu>
+    <EditorMenu label={t("paint.section.insert")} items={insert} active={visible} className="toolbar-icon-menu"><EditorIcon name="image" size={18}/></EditorMenu>
+    <EditorMenu label={t("paint.section.arrange")} items={arrange} active={visible} className="toolbar-icon-menu"><EditorIcon name="group" size={18}/></EditorMenu>
     <input type="file" accept="image/*" hidden ref={input} onChange={event => { onImage(event.currentTarget.files?.[0]); event.currentTarget.value = ""; }} />
   </div>;
 }

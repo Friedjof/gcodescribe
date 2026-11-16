@@ -136,7 +136,7 @@ function AdminApp() {
       <header className="app-titlebar">
         <h1 className="app-brand"><EditorIcon name="draw" size={20} />GCodeScribe</h1>
         <div className="app-main-menu">
-          <button type="button" className="app-menu-button" onClick={() => setTab("start")}><EditorIcon name="home" size={16} />{t("workspace.start")}</button>
+          <button type="button" className="app-menu-button icon-only" aria-label={t("workspace.start")} title={t("workspace.start")} onClick={() => setTab("start")}><EditorIcon name="home" size={17} /></button>
           <InterfaceMenu onCustomize={() => setTabSettingsOpen(true)} />
         </div>
         <div className="header-actions">

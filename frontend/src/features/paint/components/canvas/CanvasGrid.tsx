@@ -10,6 +10,7 @@ export default function CanvasGrid({
   step,
   major,
   gridVisible = true,
+  showOrientation = true,
 }: {
   W: number;
   H: number;
@@ -18,6 +19,7 @@ export default function CanvasGrid({
   step: number;
   major: number;
   gridVisible?: boolean;
+  showOrientation?: boolean;
 }) {
   const { t } = useI18n();
   return (
@@ -37,10 +39,10 @@ export default function CanvasGrid({
         stroke="var(--paper-border)" strokeWidth={0.6} />
       {gridVisible && <rect x={0} y={0} width={W} height={H} fill="url(#pc-grid-major)" />}
       {pad > 0 && <g pointerEvents="none" aria-hidden="true">
-        <g className="canvas-orientation-marker">
+        {showOrientation && <g className="canvas-orientation-marker">
           <path d={`M ${W / 2 - S * 0.055} ${-pad * 0.45} L ${W / 2} ${-pad * 0.7} L ${W / 2 + S * 0.055} ${-pad * 0.45}`} />
           <text x={W / 2} y={-pad * 0.14} textAnchor="middle">{t("paint.orientationTop")}</text>
-        </g>
+        </g>}
         <text x={W / 2} y={H + pad * 0.7} fontSize={S * 0.022}
           fill="var(--muted)" textAnchor="middle">
           {W.toFixed(0)} × {H.toFixed(0)} mm

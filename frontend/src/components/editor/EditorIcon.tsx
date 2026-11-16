@@ -1,4 +1,5 @@
 const PATHS = {
+  plug: "M8 2v5M16 2v5M5 7h14v4a7 7 0 0 1-14 0V7ZM12 18v4",
   copy: "M8 3h13v13H8V3ZM3 8v13h13",
   cut: "m8 8 12 12M8 16 20 4M9 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0ZM9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0",
   paste: "M9 5H5v16h14V5h-4M9 3h6v4H9V3Z",
@@ -27,6 +28,6 @@ const PATHS = {
 } as const;
 export type EditorIconName = keyof typeof PATHS;
 export default function EditorIcon({ name, size = 18 }: { name: EditorIconName; size?: number }) {
-  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
+  return <svg className="editor-icon" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
     strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d={PATHS[name]} /></svg>;
 }

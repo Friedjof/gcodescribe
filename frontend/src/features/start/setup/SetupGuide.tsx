@@ -4,7 +4,9 @@ import type {
   PageIndex,
   PrinterStatus,
 } from "../../../api";
-import EditorIcon from "../../../components/editor/EditorIcon";
+import EditorIcon, {
+  type EditorIconName,
+} from "../../../components/editor/EditorIcon";
 import { useI18n } from "../../../i18n";
 import { isPrinterBusy } from "../../../lib/printerState";
 import { useProjectCalibration } from "../../../state/ProjectCalibrationContext";
@@ -21,6 +23,14 @@ import {
 } from "./setupProgress";
 import { useSetupProgress } from "./useSetupProgress";
 import type { WorkspaceId } from "../../../interface/workspaces";
+
+const STEP_ICONS: Record<SetupStep, EditorIconName> = {
+  profile: "settings",
+  connection: "plug",
+  calibration: "measure",
+  drawing: "draw",
+  preview: "preview",
+};
 
 /** The guide composes existing profile, connection, calibration and document APIs. */
 export default function SetupGuide({
@@ -132,9 +142,11 @@ export default function SetupGuide({
               onClick={() => choose(id)}
             >
               <span className="setup-step-number">
-                {completed[id] ? <EditorIcon name="check" size={15} /> : i + 1}
+                {completed[id] ? <EditorIcon name="check" size={17} /> : <EditorIcon name={STEP_ICONS[id]} size={18} />}
               </span>
-              <span>{t(`setup.step.${id}`)}</span>
+              <span>
+                {i + 1}. {t(`setup.step.${id}`)}
+              </span>
             </button>
           </li>
         ))}

@@ -1,13 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import EditorMenu from "../../../components/editor/EditorMenu";
 import { useI18n } from "../../../i18n";
 
-/** Direct-plot split button with its dropdown (plot selection / coloring).
- * Owns the open state and the outside-click/Escape dismissal. */
+/** Explicit plot action plus related commands in the shared, viewport-safe menu. */
 export default function PlotActionsMenu({
   busy,
   sending,
   printerBusy,
   printerOnline,
+  emphasis = true,
+  visible = true,
   pageBlocked,
   hasSelection,
   hasObjects,
@@ -19,6 +20,8 @@ export default function PlotActionsMenu({
   sending: boolean;
   printerBusy: boolean;
   printerOnline: boolean;
+  emphasis?: boolean;
+  visible?: boolean;
   pageBlocked: boolean;
   hasSelection: boolean;
   hasObjects: boolean;
@@ -27,67 +30,54 @@ export default function PlotActionsMenu({
   onOpenColoring: () => void;
 }) {
   const { t } = useI18n();
-  const [open, setOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: PointerEvent) => {
-      if (!menuRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    window.addEventListener("pointerdown", onDown);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("pointerdown", onDown);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
-  const disabled = busy || sending || printerBusy || pageBlocked;
-  const plotDisabled = disabled || printerBusy || !printerOnline;
+  const disabled = busy || sending || printerBusy || pageBlocked,
+    plotDisabled = disabled || !printerOnline;
   return (
-    <div className="split-button" ref={menuRef}>
+    <div className="split-button">
       <button
-        className="primary split-main"
+        type="button"
+        className={`${emphasis ? "primary " : ""}split-main`}
         disabled={plotDisabled || !hasObjects}
-        title={!printerOnline ? t("paint.printerUnavailable") : pageBlocked ? t("paint.gcodeBlocked") : ""}
+        title={
+          !printerOnline
+            ? t("paint.printerUnavailable")
+            : pageBlocked
+              ? t("paint.gcodeBlocked")
+              : ""
+        }
         onClick={onDirectPlot}
       >
-        {busy ? t("paint.generating") : sending ? t("paint.starting") : t("paint.directPlot")}
+        {t(
+          busy
+            ? "paint.generating"
+            : sending
+              ? "paint.starting"
+              : "paint.directPlot",
+        )}
       </button>
-      <button
-        className="primary split-toggle"
-        disabled={disabled}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label={t("paint.plotSelection")}
-        onClick={() => setOpen((v) => !v)}
+      <EditorMenu
+        label={t("paint.plotOptions")}
+        active={visible && !disabled}
+        className={`${emphasis ? "primary " : ""}split-toggle`}
+        items={[
+          {
+            id: "selection",
+            label: t("paint.plotSelection"),
+            disabled: plotDisabled || !hasSelection,
+            icon: "select",
+            action: onPlotSelection,
+          },
+          {
+            id: "coloring",
+            label: t("paint.coloring"),
+            disabled: disabled || !hasObjects,
+            icon: "bucket",
+            action: onOpenColoring,
+          },
+        ]}
       >
-        ▾
-      </button>
-      {open && (
-        <div className="split-menu" role="menu">
-          <button
-            role="menuitem"
-            disabled={plotDisabled || !hasSelection}
-            title={!hasSelection ? t("paint.noSelection") : pageBlocked ? t("paint.gcodeBlocked") : t("paint.plotSelectionHint")}
-            onClick={() => { setOpen(false); onPlotSelection(); }}
-          >
-            {t("paint.plotSelection")}
-          </button>
-          <button
-            role="menuitem"
-            disabled={disabled || !hasObjects}
-            title={!hasObjects ? t("paint.emptyHint") : pageBlocked ? t("paint.gcodeBlocked") : t("paint.coloringHint")}
-            onClick={() => { setOpen(false); onOpenColoring(); }}
-          >
-            {t("paint.coloring")}
-          </button>
-        </div>
-      )}
+        <span className="sr-only">{t("paint.plotOptions")}</span>
+      </EditorMenu>
     </div>
   );
 }

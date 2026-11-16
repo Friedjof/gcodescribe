@@ -21,8 +21,8 @@ const boolean = (value: unknown, fallback: boolean) => typeof value === "boolean
 const ids = (value: unknown, fallback: readonly WorkspaceId[]) => Array.isArray(value) ? [...new Set(value.filter(isWorkspaceId))] : [...fallback];
 export function defaultInterfacePreferences(): InterfacePreferences {
   return { version: 1, theme: "light", density: "comfortable", experience: "guided", workspaceOrder: [...WORKSPACE_IDS],
-    visibleWorkspaces: [...DEFAULT_VISIBLE], pagesPanel: { open: true, width: 220 }, propertiesPanel: { open: true, width: 260 },
-    canvas: { rulers: true, gridVisible: true, padding: 32 } };
+    visibleWorkspaces: [...DEFAULT_VISIBLE], pagesPanel: { open: true, width: 220 }, propertiesPanel: { open: false, width: 260 },
+    canvas: { rulers: true, gridVisible: false, padding: 32 } };
 }
 /** Corrupt storage and future schemas can never remove access to the editor. */
 export function normalizeInterfacePreferences(value: unknown): InterfacePreferences {
@@ -36,8 +36,8 @@ export function normalizeInterfacePreferences(value: unknown): InterfacePreferen
     workspaceOrder: [...order, ...WORKSPACE_IDS.filter(id => !order.includes(id))],
     visibleWorkspaces: visible.length ? visible : [...DEFAULT_VISIBLE],
     pagesPanel: { open: boolean(pages.open, true), width: number(pages.width, 220, 180, 400) },
-    propertiesPanel: { open: boolean(properties.open, true), width: number(properties.width, 260, 240, 400) },
-    canvas: { rulers: boolean(canvas.rulers, true), gridVisible: boolean(canvas.gridVisible, true), padding: number(canvas.padding, 32, 0, 72) } };
+    propertiesPanel: { open: boolean(properties.open, false), width: number(properties.width, 260, 240, 400) },
+    canvas: { rulers: boolean(canvas.rulers, true), gridVisible: boolean(canvas.gridVisible, false), padding: number(canvas.padding, 32, 0, 72) } };
 }
 export function readInterfacePreferences(storage?: Pick<Storage, "getItem">): InterfacePreferences {
   try { return normalizeInterfacePreferences(JSON.parse(storage?.getItem(INTERFACE_STORAGE_KEY) ?? "null")); }

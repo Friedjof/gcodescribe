@@ -4,6 +4,7 @@ import { usableWorkspace, visibleWorkspaces } from "./workspaces";
 it("starts with a light guided interface and five practical workspaces", () => {
   const defaults = defaultInterfacePreferences();
   expect(defaults.theme).toBe("light");
+  expect(defaults.propertiesPanel.open).toBe(false);
   expect(defaults.visibleWorkspaces).toEqual(["start", "paint", "games", "convert", "paper"]);
 });
 it("repairs unavailable, duplicated and empty preference data", () => {

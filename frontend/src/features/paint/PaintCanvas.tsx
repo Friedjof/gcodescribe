@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Calibration, Page, SceneObject } from "../../api";
 import {
   type Pt,
@@ -74,6 +74,7 @@ const ERASER_RADIUS = 2.5;
 
 function PaintCanvas({
   visible = true,
+  statusContent,
   gridVisible = true,
   showRulers = true,
   padding = 32,
@@ -99,6 +100,7 @@ function PaintCanvas({
   eraserIsPoint = false,
 }: {
   visible?: boolean;
+  statusContent?: ReactNode;
   gridVisible?: boolean;
   showRulers?: boolean;
   padding?: number;
@@ -733,6 +735,7 @@ function PaintCanvas({
   return (
     <div className="paint-canvas">
       <div className="paint-zoom-controls">
+        {statusContent}
         <button className="ghost tiny" type="button" onClick={() => { cancelGesture(); fitPage(); }} title={t("interface.fitPage")}>{t("interface.fitPage")}</button>
         <button className="ghost tiny" type="button" aria-label={t("paint.zoomOut")} title={t("paint.zoomOut")} onClick={() => zoomAt(1 / 1.2)}>−</button>
         <span>{t("paint.zoomLevel", { pct: String(Math.round(zoom * 100)) })}</span>
@@ -764,7 +767,7 @@ function PaintCanvas({
         onDrop={onDrop}
       >
         <g transform={canvasRotationTransform}>
-        <CanvasGrid W={W} H={H} S={S} pad={pad} step={step} major={major} gridVisible={gridVisible} />
+        <CanvasGrid W={W} H={H} S={S} pad={pad} step={step} major={major} gridVisible={gridVisible} showOrientation={viewRotation !== 0} />
 
         <ObjectsLayer objects={objectsByZ} selectedIds={selectedIds} stroke={LINE_STROKE} active={visible} interactive={previewTransforms.size > 0 || panning || zooming} />
 

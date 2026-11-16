@@ -269,56 +269,13 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.paint-grid-ctl {
-  display: flex;
-  align-items: center;
-  gap: 10px 14px;
-  flex-wrap: nowrap;
-  flex: 0 0 auto;
-  min-width: 0;
-  justify-content: flex-end;
-}
-/* Progressively compact the toolbar as the editor column narrows (e.g. with
-   the pages sidebar open) instead of wrapping onto a second line. */
-@container (max-width: 1240px) {
-  .paint-grid-ctl > .muted,
-  .paint-grid-ctl .switch-label > .muted,
-  .paint-grid-ctl .seg em.muted { display: none; }
-}
-@container (max-width: 1020px) {
-  .paint-toolbar { gap: 8px; }
-  .paint-grid-ctl { gap: 8px; }
-  .paint-job-actions { gap: 5px; }
-}
-@container (max-width: 940px) {
-  .paint-job-actions button { padding: 8px 9px; font-size: 12px; }
-  .paint-grid-ctl .seg button { padding: 6px 8px; }
-}
-/* On the single-column mobile layout wrapping is fine again. */
-@media (max-width: 820px) {
-  .paint-toolbar { flex-wrap: wrap; }
-  .paint-grid-ctl { flex-wrap: wrap; }
-  .paint-toolbar h2 { flex-basis: 100%; }
-}
-.paint-grid-ctl > * { flex: 0 0 auto; }
-.paint-grid-ctl .seg { width: auto; margin-bottom: 0; }
-.paint-grid-ctl .switch-label { margin-left: 0; }
-.paint-job-actions { display: inline-flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
+.paint-document-title { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+.paint-document-title h2 { flex: 0 1 auto; min-width: 60px; max-width: 45vw; }
+.paint-document-title > button { background: var(--panel-2); }
+.paint-job-actions { display: inline-flex; align-items: center; gap: 7px; flex-wrap: wrap; justify-content: flex-end; }
 .paint-job-actions button { white-space: nowrap; }
-.paint-job-actions .paint-calibration-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 34px;
-  width: 34px;
-  height: 34px;
-  padding: 0;
-  color: var(--muted);
-}
-.paint-calibration-btn:hover { color: var(--text); }
-.paint-calibration-btn[aria-busy="true"] { cursor: progress; }
-.paint-info-btn { font-size: 16px; line-height: 1; padding: 6px 8px; color: var(--muted); }
-.paint-info-btn:hover { color: var(--text); }
+.paint-preview-button { gap: 6px; }
+@media (max-width: 820px) { .paint-toolbar { flex-wrap: wrap; } .paint-document-title { flex-basis: 100%; } }
 
 /* Shortcut/gesture reference modal */
 .paint-info-modal { max-width: 720px; }
@@ -362,31 +319,7 @@
   border-left: 1px solid rgba(0, 0, 0, 0.25);
   font-size: 10px;
 }
-.split-button .split-toggle[aria-expanded="true"] { background: var(--accent-hover); }
-.split-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 100;
-  display: flex;
-  flex-direction: column;
-  min-width: 100%;
-  padding: 6px;
-  background: rgba(28, 28, 30, 0.96);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(18px);
-}
-.split-menu button {
-  width: 100%;
-  justify-content: flex-start;
-  white-space: nowrap;
-  border-color: transparent;
-  background: transparent;
-  border-radius: 8px;
-}
-.split-menu button:hover:not(:disabled) { background: var(--panel-2); }
+.split-button .split-toggle[aria-expanded="true"] { background: var(--active-bg); color: var(--accent); }
 .paint-profile { margin: -2px 0 8px; font-size: 12px; }
 .profile-banner {
   display: flex;
