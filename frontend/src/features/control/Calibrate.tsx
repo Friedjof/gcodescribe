@@ -1,3 +1,5 @@
+import ProfileLibrary from "./ProfileLibrary";
+import EditorIcon from "../../components/editor/EditorIcon";
 import { useEffect, useRef, useState } from "react";
 import { api, type Calibration, type CalibrationProfileSummary } from "../../api";
 import CommittedNumberField from "../../components/CommittedNumberField";
@@ -36,6 +38,7 @@ export default function Calibrate() {
   const read = useRef<AbortController | null>(null);
   const draftRevision = useRef(0);
   const detailRef = useRef<HTMLElement>(null);
+  const [group, setGroup] = useState("calibrate.groupMachine");
   const [profiles, setProfiles] = useState<CalibrationProfileSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [cal, setCal] = useState<Calibration | null>(null);
@@ -94,7 +97,11 @@ export default function Calibrate() {
 
   const focusInvalidInput = () => {
     const input = detailRef.current?.querySelector<HTMLInputElement>('input[aria-invalid="true"]');
-    input?.focus();
+    if (input) {
+      const panel = input.closest<HTMLElement>("[data-profile-group]");
+      if (panel?.dataset.profileGroup) setGroup(panel.dataset.profileGroup);
+      requestAnimationFrame(() => input.focus());
+    }
     return !!input;
   };
 
@@ -236,54 +243,8 @@ export default function Calibrate() {
       <div className="profile-layout">
         <aside className="card profile-panel">
           <h2>{t("profiles.title")}</h2>
-          <div className="profile-list-scroll">
-            {visibleProfiles.map((p) => (
-              <div
-                key={p.id}
-                className={
-                  "profile-item" +
-                  (p.id === selectedId ? " selected" : "") +
-                  (p.active ? " active" : "") +
-                  (p.archived ? " archived" : "")
-                }
-                onClick={() => select(p.id)}
-              >
-                <div className="profile-item-head">
-                  <strong>{p.name}</strong>
-                  {p.active && <span className="pbadge pbadge-active">{t("profiles.activeBadge")}</span>}
-                  {p.archived && <span className="pbadge pbadge-muted">{t("profiles.archivedBadge")}</span>}
-                </div>
-                <div className="profile-item-info">
-                  {p.plot_width.toFixed(0)} × {p.plot_height.toFixed(0)} mm · @{" "}
-                  {p.origin_x.toFixed(0)}/{p.origin_y.toFixed(0)}
-                  {p.paper_margin > 0 && <> · {t("profiles.margin")} {p.paper_margin.toFixed(0)} mm</>}
-                </div>
-                <div className="profile-item-info">
-                  <span className={p.pen_calibrated ? "pen-ok" : "pen-missing"}>
-                    {p.pen_calibrated ? t("profiles.penOk") : t("profiles.penMissing")}
-                  </span>
-                </div>
-                {!p.active && !p.archived && (
-                  <button
-                    className="profile-activate"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      activate(p.id);
-                    }}
-                  >
-                    {t("profiles.activate")}
-                  </button>
-                )}
-              </div>
-            ))}
-            {archivedCount > 0 && (
-              <button className="link-button" onClick={() => setShowArchived(!showArchived)}>
-                {showArchived
-                  ? t("profiles.hideArchived")
-                  : t("profiles.showArchived", { count: String(archivedCount) })}
-              </button>
-            )}
-          </div>
+          <ProfileLibrary profiles={visibleProfiles} selectedId={selectedId} onSelect={select} onActivate={activate}/>
+          {archivedCount > 0 && <button className="link-button" onClick={() => setShowArchived(!showArchived)}>{showArchived ? t("profiles.hideArchived") : t("profiles.showArchived", { count: String(archivedCount) })}</button>}
           <div className="profile-list-actions">
             <button onClick={createProfile}>{t("profiles.new")}</button>
             {filePicker(t("profiles.importProfile"), ".json,application/json", importProfileFile)}
@@ -315,8 +276,13 @@ export default function Calibrate() {
                 <p className="muted">{t("profiles.editingInactive")}</p>
               )}
             </div>
+            <div className="profile-settings-workspace">
+              <nav className="profile-group-nav" aria-label={t("calibrate.title")}>
+                {[...groups, "calibrate.layout"].map((g) => <button type="button" key={g} aria-pressed={group === g} onClick={() => setGroup(g)}><EditorIcon name={g === "calibrate.groupMachine" ? "settings" : g === "calibrate.groupArea" ? "pages" : g === "calibrate.groupPen" ? "draw" : g === "calibrate.layout" ? "group" : "measure"} size={16}/>{t(g)}</button>)}
+              </nav>
+              <div className="profile-field-panels">
             {groups.map((g) => (
-              <div key={g} className="field-group">
+              <div key={g} className="field-group profile-field-panel" hidden={group !== g} data-profile-group={g}>
                 <h3>
                   {g === "calibrate.groupPark" ? "P · " : g === "calibrate.groupCalibrationPosition" ? "C · " : ""}
                   {t(g)}
@@ -345,7 +311,7 @@ export default function Calibrate() {
                 </div>}
               </div>
             ))}
-            <div className="field-group">
+            <div className="field-group profile-field-panel" hidden={group !== "calibrate.layout"} data-profile-group="calibrate.layout">
               <h3>{t("calibrate.layout")}</h3>
               <div className="layout-toggle-row">
                 <button
@@ -384,6 +350,8 @@ export default function Calibrate() {
                   <span>{t("calibrate.parkAfterPlot")}</span>
                   <i />
                 </button>
+              </div>
+            </div>
               </div>
             </div>
             <div className="profile-actions">

@@ -1,0 +1,41 @@
+.app.tab-calibrate > main { padding: 0; }
+.calibrate-profiles { height: 100%; min-height: 0; overflow: hidden; padding: 8px; }
+.profile-layout { height: 100%; min-height: 0; grid-template-columns: 260px minmax(0,1fr); gap: 8px; align-items: stretch; }
+.profile-panel { max-height: none; padding: 10px; overflow: hidden; gap: 6px; }
+.profile-panel h2, .profile-detail h2 { font-size: 14px; margin: 0 0 6px; }
+.profile-list-scroll { flex: 1; overflow: hidden; padding: 0; gap: 5px; }
+.profile-item { min-height: 110px; max-height: 110px; padding: 7px; border-radius: 3px; gap: 4px; flex: 0 0 auto; cursor: auto; }
+.profile-select { display: flex; flex-direction: column; align-items: stretch; gap: 5px; background: transparent; border: 0; border-radius: 0; padding: 0; min-height: 0; width: 100%; font-size: 11px; text-align: left; }
+.profile-select > span { font-size: 10px; }
+.profile-item-info { font-size: 10px; }
+.profile-item-head strong { font-size: 12px; }
+.profile-item .pbadge { font-size: 9px; padding: 2px 4px; }
+.profile-activate { padding: 3px 6px; font-size: 10px; min-height: 22px; }
+.profile-list-actions { grid-template-columns: 1fr 1fr; gap: 5px; padding-top: 7px; margin-top: 2px; }
+.profile-list-actions button, .profile-list-actions .btn-link { padding: 5px; min-height: 30px; font-size: 10px; border-radius: 3px; text-align: center; }
+.profile-detail { display: flex; flex-direction: column; min-height: 0; padding: 10px 12px; overflow: hidden; }
+.profile-detail .calibration-intro { margin: 0 0 7px; font-size: 11px; }
+.profile-detail > .field-group { padding: 0 0 8px; margin: 0; flex: 0 0 auto; }
+.profile-detail > .field-group .field { max-width: 400px; gap: 4px; }
+.profile-detail .field > span { font-size: 11px; }
+.profile-detail input { padding: 5px 7px; min-height: 29px; font-size: 12px; }
+.profile-settings-workspace { display: grid; grid-template-columns: 170px minmax(0,1fr); gap: 14px; min-height: 0; flex: 1; border-top: 1px solid var(--border); padding-top: 10px; }
+.profile-group-nav { display: flex; flex-direction: column; align-self: start; gap: 2px; }
+.profile-group-nav button { display: flex; justify-content: flex-start; align-items: center; gap: 7px; min-height: 33px; padding: 6px; font-size: 11px; text-align: left; background: transparent; border: 0; border-radius: 3px; }
+.profile-group-nav button svg { flex-shrink: 0; }
+.profile-group-nav button[aria-pressed="true"] { color: var(--accent); background: var(--active-bg); }
+.profile-field-panels { min-width: 0; min-height: 0; }
+.profile-field-panel[hidden] { display: none; }
+.profile-field-panels .field-group { margin: 0; padding: 0; border: 0; }
+.profile-field-panels h3 { font-size: 13px; margin: 0 0 7px; }
+.profile-field-panels .calibration-group-hint { font-size: 11px; line-height: 1.4; margin: 0 0 15px; }
+.profile-field-panels .fields { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
+.profile-field-panels .calibrate-speed-test { margin-top: 18px; padding: 10px; gap: 10px; }
+.profile-field-panels .calibrate-speed-test strong { font-size: 12px; }
+.profile-field-panels .calibrate-speed-test p, .profile-field-panels .calibrate-speed-test small { font-size: 11px; }
+.profile-field-panels .calibrate-speed-test button { font-size: 11px; padding: 5px 9px; }
+.profile-field-panels .layout-toggle-row { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
+.profile-field-panels .toggle-pill { min-height: 33px; font-size: 12px; border-radius: 3px; }
+.profile-detail .profile-actions { flex: 0 0 auto; padding-top: 8px; margin-top: 8px; border-top: 1px solid var(--border); gap: 6px; }
+.profile-actions-main, .profile-actions-secondary { gap: 5px; }
+.profile-actions button, .profile-actions .btn-link { font-size: 11px; min-height: 29px; padding: 4px 8px; border-radius: 3px; }

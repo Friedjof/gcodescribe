@@ -37,7 +37,8 @@ beforeEach(() => {
 
 it("starts the pen-up movement test only with saved active settings", async () => {
   render(<Calibrate />);
-  const button = await screen.findByRole("button", { name: "calibrate.speedTestButton" });
+  fireEvent.click(await screen.findByRole("button", { name: "calibrate.groupSpeed" }));
+  const button = screen.getByRole("button", { name: "calibrate.speedTestButton" });
   expect((button as HTMLButtonElement).disabled).toBe(false);
   fireEvent.click(button);
   await waitFor(() => expect(mocks.speedTest).toHaveBeenCalledWith("active"));
@@ -70,6 +71,7 @@ it("keeps invalid numeric edits out of saves and physical movement tests", async
   fireEvent.change(input, { target: { value: "" } });
   fireEvent.blur(input);
   fireEvent.click(screen.getByRole("button", { name: "common.save" }));
+  fireEvent.click(screen.getByRole("button", { name: "calibrate.groupSpeed" }));
   fireEvent.click(screen.getByRole("button", { name: "calibrate.speedTestButton" }));
   expect(mocks.saveProfile).not.toHaveBeenCalled();
   expect(mocks.speedTest).not.toHaveBeenCalled();
@@ -113,4 +115,17 @@ it("does not replace edits made while an earlier save is still pending", async (
   await waitFor(() => expect(mocks.success).toHaveBeenCalledWith("profiles.saved"));
   expect((name as HTMLInputElement).value).toBe("Newer draft");
   expect((screen.getByRole("button", { name: /common.save/ }) as HTMLButtonElement).disabled).toBe(false);
+});
+
+
+it("preserves invalid drafts across property groups and returns focus before saving", async () => {
+  render(<Calibrate />);
+  const input = await screen.findByRole("spinbutton", { name: "calibrate.bedWidth" });
+  fireEvent.change(input, { target: { value: "" } }); fireEvent.blur(input);
+  fireEvent.click(screen.getByRole("button", { name: "calibrate.groupPen" }));
+  expect(screen.queryByRole("spinbutton", { name: "calibrate.bedWidth" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "common.save" }));
+  expect(mocks.saveProfile).not.toHaveBeenCalled();
+  expect(screen.getByRole("spinbutton", { name: "calibrate.bedWidth" })).toBe(input);
+  expect((input as HTMLInputElement).value).toBe("");
 });
