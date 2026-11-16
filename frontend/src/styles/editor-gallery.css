@@ -1,0 +1,14 @@
+.gallery-page { height: 100%; min-height: 0; }
+.gallery-page > .gallery-card { height: 100%; min-height: 0; display: flex; flex-direction: column; padding: 10px; }
+.gallery-head { flex: 0 0 auto; align-items: center; }
+.gallery-head h2 { font-size: 14px; }
+.gallery-head p { font-size: 11px; margin: 0 0 8px; }
+.gallery-head .gallery-archived-toggle { font-size: 11px; }
+.gallery-controls { flex: 0 0 auto; gap: 6px; margin-bottom: 8px; }
+.gallery-controls button, .gallery-controls input { min-height: 29px; padding: 5px 8px; font-size: 11px; border-radius: 3px; }
+.gallery-controls .seg button { font-size: 11px; }
+.paged-grid-cell > .gallery-item { width: 100%; height: 100%; border-radius: 3px; min-height: 0; }
+.paged-grid-cell .gallery-thumb { flex: 1; min-height: 0; width: 100%; aspect-ratio: auto; }
+.paged-grid-cell .gallery-item-meta { flex: 0 0 61px; min-height: 0; padding: 7px; gap: 4px; }
+.paged-grid-cell .gallery-item-meta strong { font-size: 12px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.paged-grid-cell .gallery-item-meta > span { font-size: 10px; }

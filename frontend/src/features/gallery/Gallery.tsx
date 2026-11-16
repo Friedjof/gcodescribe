@@ -7,7 +7,7 @@ import GalleryAccessDialog from "./GalleryAccessDialog";
 import GalleryDetail from "./GalleryDetail";
 import StlEditor from "../stl/StlEditor";
 import { useLiveRegistryState } from "../stream/lib/liveRegistry";
-import GalleryGrid from "./GalleryGrid";
+import PagedGrid from "../../components/paging/PagedGrid";
 import LazyThumbnail from "./LazyThumbnail";
 import XoppImportDialog from "./XoppImportDialog";
 import { startImport } from "../../api/assetTasks";
@@ -172,7 +172,7 @@ export default function Gallery({ visible = true, initialItemId, onOpenPaint, on
 
         {visibleItems.length === 0 && <p className="muted">{t("gallery.empty")}</p>}
 
-        <GalleryGrid className="gallery-scroll" items={visibleItems} renderItem={(item) =>
+        <PagedGrid label={t("gallery.title")} resetKey={`${query}/${showArchived}/${uploaderFilter}`} items={visibleItems} itemKey={(item) => item.id} renderItem={(item) =>
           <GalleryCard active={visible} item={item} lang={lang} onOpen={() => setSelectedId(item.id)} />
         } />
 
