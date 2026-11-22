@@ -9,6 +9,7 @@ export interface AppSettings {
     default_backend: string;
   };
   ai: {
+    provider?: "api" | "codex";
     enabled: boolean;
     fake: boolean;
     api_key_configured: boolean;

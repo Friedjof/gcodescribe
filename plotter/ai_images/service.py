@@ -126,7 +126,10 @@ class AiImageService:
 
         ai_meta = {
             "kind": "generated-image",
-            "provider": "fake" if self.config.fake else "openai",
+            "provider": (
+                "fake" if self.config.fake else "codex" if self.config.provider == "codex"
+                else "openai"
+            ),
             "model": output.model,
             "apiMode": self.config.api_mode,
             "variantId": variant_id,

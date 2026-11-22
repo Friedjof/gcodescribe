@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useAssetTasks, watchAssetTasks, taskAction } from "../api/assetTasks";
+import { useAssetTasks, watchAssetTasks, taskAction, dismissAllTasks } from "../api/assetTasks";
 import { useI18n } from "../i18n";
 import { useToasts } from "./Toasts";
 
@@ -9,6 +9,7 @@ export default function BackgroundTasks({ onOpenResult }: { onOpenResult: (id: s
   const toast = useToasts();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState(false);
+  const [closing, setClosing] = useState(false);
   useEffect(() => watchAssetTasks((problem) => setError(!!problem)), []);
   const active = tasks.filter((task) => ["uploading", "queued", "running"].includes(task.state)).length;
   const failed = tasks.some((task) => ["failed", "interrupted"].includes(task.state));
@@ -19,6 +20,12 @@ export default function BackgroundTasks({ onOpenResult }: { onOpenResult: (id: s
       {t("tasks.title")} · {active || tasks.length}
     </button>
     {open && <div className="tasks-list">
+      {tasks.length > 0 && <div className="tasks-list-actions"><button className="ghost tiny" disabled={closing}
+        title={t("tasks.dismissAllHint")} onClick={() => {
+          if (closing) return;
+          setClosing(true);
+          dismissAllTasks().catch(error => toast.error(String(error.message ?? error))).finally(() => setClosing(false));
+        }}>{t("tasks.dismissAll")}</button></div>}
       {error && <p className="muted">{t("tasks.reconnecting")}</p>}
       {tasks.map((task) => <div className="task-row" key={task.id}>
         <strong title={task.filename}>{task.filename}</strong>

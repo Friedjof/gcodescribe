@@ -5,6 +5,7 @@ import { useObjectOps } from "./useObjectOps";
 import { cachedPage, queueObjects, rememberPage, retainPage } from "../../../api/pageEdits";
 import { api, type Calibration, type Page, type SceneObject } from "../../../api";
 import { DEFAULT_VECTOR_STYLE } from "../lib/styling";
+import { computeGeometry } from "../lib/geometryWork";
 const geometry = vi.hoisted(() => vi.fn());
 vi.mock("../lib/geometryTasks", () => ({ geometryTask: geometry }));
 vi.mock("../../../i18n", () => ({ useI18n: () => ({ t: (key: string) => key }) }));
@@ -18,6 +19,39 @@ function setup(page: Page, sizeLinked = true, cal: Calibration | null = null) {
   const setPage = vi.fn(), fail = vi.fn();
   return { setPage, fail, ...renderHook(({ page }) => useObjectOps(page, cal, ["image"], setPage, vi.fn(), queueObjects, fail, vi.fn(), "Text", sizeLinked), { initialProps: { page } }) };
 }
+
+it("clips to the plot, preserves pressure and feeds, removes outside objects and supports undo", async () => {
+  const source = [[[-5, 5], [5, 5], [15, 5]]];
+  const image = { ...original, cachedPolylines: source, cachedFeeds: [[1, 2, 4]], data: {
+    basePolylines: source, baseSegmentPressures: [[0.2, 0.8]], pressureEnabled: true, strokeOrder: "source" } };
+  const outside = { ...original, id: "outside", transform: { ...original.transform!, x: 50 } };
+  const plotted = { ...outside, id: "plotted", plotted: true };
+  const page = { ...makePage(), objects: [image, outside, plotted] };
+  const hook = setup(page, true, { plot_width: 10, plot_height: 10 } as Calibration);
+  geometry.mockImplementation(async request => computeGeometry(request));
+  await act(async () => { expect(await hook.result.current.clipToPlot()).toBe(true); });
+  const clipped = hook.setPage.mock.calls[0][0] as Page;
+  expect(clipped.objects.map(object => object.id)).toEqual(["image", "plotted"]);
+  expect(clipped.objects[0].cachedPolylines).toEqual([[[0, 5], [5, 5], [10, 5]]]);
+  expect(clipped.objects[0].data?.baseSegmentPressures).toEqual([[0.2, 0.8]]);
+  expect(clipped.objects[0].cachedFeeds).toEqual([[1.5, 2, 3]]);
+  hook.rerender({ page: clipped });
+  act(() => hook.result.current.undo());
+  expect(hook.setPage.mock.calls[1][0].objects).toEqual(page.objects);
+});
+
+it("does not overwrite a newer transform when clipping finishes late", async () => {
+  const page = makePage(), hook = setup(page, true, { plot_width: 10, plot_height: 10 } as Calibration);
+  let finish!: (value: unknown) => void;
+  geometry.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+  let operation!: Promise<boolean>;
+  act(() => { operation = hook.result.current.clipToPlot(); });
+  const changed = { ...page, objects: [{ ...original, transform: { ...original.transform!, x: 3 } }] };
+  queueObjects(page.id, changed.objects); hook.rerender({ page: changed });
+  await act(async () => { finish({ lines: [[[0, 0], [10, 0]]], changed: true }); await operation; });
+  expect(hook.setPage).not.toHaveBeenCalled();
+  expect(hook.fail).toHaveBeenCalled();
+});
 it("uses the complete Xournal++ page for size and keeps its aspect ratio", () => {
   const base = makePage();
   const page = { ...base, objects: [{ ...original, data: { ...original.data, sourcePage: { width: 210, height: 148 } } }] };

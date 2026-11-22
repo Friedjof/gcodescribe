@@ -186,3 +186,33 @@ it("does not switch to manual control while a movement test is pending", async (
   finish();
   await waitFor(() => expect(screen.getByRole("button", { name: "profiles.visual" })).toBeEnabled());
 });
+
+it("renames directly in Visual without overwriting calibration and offers profile and XML exports", async () => {
+  const original = await mocks.getProfile();
+  let current = original;
+  mocks.getProfile.mockImplementation(async () => current);
+  mocks.saveProfile.mockImplementation(async (_, updates) => {
+    current = { ...current, ...updates }; return current;
+  });
+  render(<Calibrate />);
+  fireEvent.click(await screen.findByRole("button", { name: "profiles.rename" }));
+  const input = screen.getByRole("textbox", { name: "profiles.name" });
+  fireEvent.change(input, { target: { value: "  New pen profile  " } });
+  expect(screen.getByRole("link", { name: "profiles.exportProfile" })).toHaveAttribute("aria-disabled", "true");
+  fireEvent.click(screen.getByRole("button", { name: "common.save" }));
+  await waitFor(() => expect(mocks.saveProfile).toHaveBeenCalledExactlyOnceWith("active", { name: "New pen profile" }));
+  expect(current.calibration).toEqual(original.calibration);
+  expect(screen.getByRole("button", { name: "profiles.visual" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("link", { name: "profiles.exportProfile" })).toHaveAttribute("href", "/api/profiles/active/export");
+  expect(screen.getByRole("link", { name: "common.exportXml" })).toHaveAttribute("href", "/api/calibration/export?profile_id=active");
+});
+
+it("keeps the saved profile name on Escape and rejects an empty visual name", async () => {
+  render(<Calibrate />);
+  fireEvent.click(await screen.findByRole("button", { name: "profiles.rename" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "profiles.name" }), { target: { value: "   " } });
+  expect(screen.getByRole("button", { name: "common.save" })).toBeDisabled();
+  fireEvent.keyDown(screen.getByRole("textbox", { name: "profiles.name" }), { key: "Escape" });
+  expect(screen.getByRole("heading", { name: "Standard" })).toBeInTheDocument();
+  expect(mocks.saveProfile).not.toHaveBeenCalled();
+});

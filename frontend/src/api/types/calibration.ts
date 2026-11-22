@@ -41,6 +41,8 @@ export interface Calibration {
   /** Positions explicitly set in this profile, excluding automatic defaults. */
   defined_positions?: PositionKind[];
   paper_corners: Record<string, [number, number]>;
+  paper_diagonal?: "bl-tr" | "tl-br" | null;
+  paper_generated_corners?: string[];
   paper_margin: number;
   obstacles: Obstacle[];
   merge_tolerance: number;

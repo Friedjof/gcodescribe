@@ -342,17 +342,18 @@ def test_profile_visual_edits_and_details_share_the_selected_profile(profile_edi
         ("home-and-move-to-position", {"kind": "calibration"}),
     ],
 )
-def test_inactive_profile_cannot_move_the_machine(profile_editor_context, endpoint, body):
-    client, selected, _, controller = profile_editor_context
+def test_archived_profile_cannot_move_the_machine(profile_editor_context, endpoint, body):
+    client, selected, profiles, controller = profile_editor_context
+    profiles.archive(selected["id"])
     response = client.post(f"/api/printer/{endpoint}", json={**body, "profileId": selected["id"]})
     assert response.status_code == 409
     controller.client.gcode.assert_not_called()
     controller.client.home.assert_not_called()
 
 
-def test_active_profile_motion_and_captures_use_explicit_profile(profile_editor_context):
+def test_profile_motion_and_captures_work_without_global_activation(profile_editor_context):
     client, selected, profiles, controller = profile_editor_context
-    profiles.activate(selected["id"])
+    global_id = profiles.active_id()
     response = client.post("/api/printer/pen", json={"down": False, "profileId": selected["id"]})
     assert response.status_code == 200
     assert response.json()["position"]["z"] == 13
@@ -373,6 +374,7 @@ def test_active_profile_motion_and_captures_use_explicit_profile(profile_editor_
         == 200
     )
     assert profiles.get(selected["id"])["calibration"]["paper_corners"]["bl"] == [83, 94]
+    assert profiles.active_id() == global_id
 
 
 def test_profile_pattern_has_the_selected_profile_snapshot(profile_editor_context):
@@ -384,6 +386,34 @@ def test_profile_pattern_has_the_selected_profile_snapshot(profile_editor_contex
     assert meta["calibrationSnapshot"]["calibration"] == selected["calibration"]
     assert "project_id" not in meta["source"]
     controller.client.gcode.assert_not_called()
+
+
+def test_selected_profile_pattern_can_be_sent_without_global_activation(profile_editor_context):
+    client, selected, profiles, controller = profile_editor_context
+    global_id = profiles.active_id()
+    controller.client.upload.return_value = {"ok": True}
+    job = client.post("/api/testpattern/frame", params={"profile_id": selected["id"]}).json()
+    response = client.post("/api/printer/send", json={"filename": job["filename"], "start": True})
+    assert response.status_code == 200, response.text
+    controller.client.upload.assert_called_once()
+    assert profiles.active_id() == global_id
+
+
+def test_selected_profile_pattern_rejects_a_changed_snapshot_before_moving(profile_editor_context):
+    import json
+
+    from plotter.core.jobmeta import job_meta_path
+
+    client, selected, _, controller = profile_editor_context
+    job = client.post("/api/testpattern/frame", params={"profile_id": selected["id"]}).json()
+    path = jobs_dir() / job["filename"]
+    meta = read_job_meta(path)
+    meta["calibrationSnapshot"]["calibration"]["pen_down_z"] = 7
+    job_meta_path(path).write_text(json.dumps(meta))
+    response = client.post("/api/printer/send", json={"filename": job["filename"], "start": True})
+    assert response.status_code == 409
+    controller.client.upload.assert_not_called()
+    controller.client.home.assert_not_called()
 
 
 def test_inactive_profile_preview_is_one_coherent_snapshot(profile_editor_context):

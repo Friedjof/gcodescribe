@@ -93,9 +93,7 @@ class SerialWorker:
         self._control_in_progress = False
 
         self._running = True
-        self._thread = threading.Thread(
-            target=self._run, name="serial-worker", daemon=True
-        )
+        self._thread = threading.Thread(target=self._run, name="serial-worker", daemon=True)
         self._thread.start()
 
     # -- public API (called from request threads) --------------------------
@@ -120,10 +118,16 @@ class SerialWorker:
                     "job": {"file": {"name": self._job_name}},
                 }
             return {
-                "configured": True, "backend": "serial", "online": True,
-                "job": job, "last_job": self._last_job, "error": self._last_error,
-                "motion_locked": self._state == PRINTING or self._park_requested
-                or self._resume_requested or self._control_in_progress,
+                "configured": True,
+                "backend": "serial",
+                "online": True,
+                "job": job,
+                "last_job": self._last_job,
+                "error": self._last_error,
+                "motion_locked": self._state == PRINTING
+                or self._park_requested
+                or self._resume_requested
+                or self._control_in_progress,
             }
 
     def upload(self, gcode_path: Path, *, start: bool = False) -> dict:
@@ -171,9 +175,7 @@ class SerialWorker:
             cmd = "G28"
         self._submit([cmd], wait=True)
 
-    def jog(
-        self, x: float = 0.0, y: float = 0.0, z: float = 0.0, speed: int | None = None
-    ) -> None:
+    def jog(self, x: float = 0.0, y: float = 0.0, z: float = 0.0, speed: int | None = None) -> None:
         move = "G1"
         if x:
             move += f" X{x:.3f}"
@@ -360,8 +362,12 @@ class SerialWorker:
             self._control_in_progress = True
             generation = self._job_generation
             cal = self._job_calibration
-            log.info("Parking %s at line %s, saved %s",
-                     self._job_name, self._job_index, self._resume_position)
+            log.info(
+                "Parking %s at line %s, saved %s",
+                self._job_name,
+                self._job_index,
+                self._resume_position,
+            )
         return Command(self._park_lines(cal), purpose="park", generation=generation)
 
     def _take_pending_resume_command(self) -> Command | None:
@@ -377,8 +383,9 @@ class SerialWorker:
             generation = self._job_generation
             cal = self._job_calibration
             log.info("Restoring %s at line %s to %s", self._job_name, self._job_index, position)
-        return Command(self._return_from_pause_lines(position, cal),
-                       purpose="resume", generation=generation)
+        return Command(
+            self._return_from_pause_lines(position, cal), purpose="resume", generation=generation
+        )
 
     def _record_job_result(self, outcome: JobOutcome) -> None:
         # Called under _lock. Keep the terminal result after the job disappears,
@@ -609,6 +616,8 @@ def get_worker(
     with _worker_lock:
         if _worker is None:
             _worker = SerialWorker(port, baud, transport_factory)
+        elif (_worker.port, _worker.baud) != (port, baud):
+            raise PrinterError("Ein anderer serieller Drucker ist noch verbunden.")
         return _worker
 
 
@@ -631,6 +640,16 @@ def reset_worker() -> None:
             _worker = None
 
 
-def shutdown_worker() -> None:
+def shutdown_worker(
+    port: str | None = None, baud: int | None = None, *, expected: SerialWorker | None = None
+) -> None:
     """Stop the worker on app shutdown so the port is released."""
-    reset_worker()
+    global _worker
+    with _worker_lock:
+        if (
+            _worker is not None
+            and (expected is None or _worker is expected)
+            and (port is None or (_worker.port, _worker.baud) == (port, baud))
+        ):
+            _worker.shutdown()
+            _worker = None

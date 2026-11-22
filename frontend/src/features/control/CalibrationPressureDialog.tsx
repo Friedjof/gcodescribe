@@ -143,13 +143,13 @@ export default function CalibrationPressureDialog({ canMove, onClose, onBusyChan
         <p className="muted">{t("paper.pressure.manual")}</p>
         {!atC && <div className="pressure-goto">
           <span className="muted">{t("paper.pressure.needC")}</span>
-          <button disabled={!canMove || busy} title={t("paper.positions.homeHint", { marker: "C" })}
+          <button disabled={!canMove || busy} title={t("paper.positions.homeHint", { marker: t("calibrate.groupCalibrationPosition") })}
             onClick={() => run(async isCurrent => {
-              const result = await (projectId ? api.homeAndMoveToPosition("calibration", projectId)
-                : api.homeAndMoveToPosition("calibration"));
+              const result = await (projectId ? api.homeAndMoveToPosition("calibration", projectId, true)
+                : api.homeAndMoveToPosition("calibration", profileId ? { profileId } : undefined, true));
               if (isCurrent()) moved(result.position);
             }, true)}>
-            {t("paper.positions.homeVisit", { marker: "C" })}
+            {t("paper.positions.homeVisit", { marker: t("calibrate.groupCalibrationPosition") })}
           </button>
         </div>}
       </>}

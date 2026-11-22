@@ -265,5 +265,7 @@ def make_test_pattern(
     source = {"kind": "testpattern", "name": name}
     if project_id is not None:
         source["project_id"] = project_id
+    elif profile_id is not None:
+        source["profile_id"] = profile_id
     write_job_meta(out, source=source, profile=active, calibration_snapshot=snapshot)
     return _job_info(out, active_profile=active, profiles={active["id"]: active}).model_dump()

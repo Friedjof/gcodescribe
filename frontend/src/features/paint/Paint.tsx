@@ -11,6 +11,8 @@ import PaintEmptyState from "./components/PaintEmptyState";
 import PaintDocumentStatus from "./components/PaintDocumentStatus";
 import PaintCommandBar from "./components/PaintCommandBar";
 import PaintLayoutControls from "./components/PaintLayoutControls";
+import BacksideDialog from "./components/BacksideDialog";
+import { useBacksideReference } from "./hooks/useBacksideReference";
 import DelayedLoading from "../../components/DelayedLoading";
 import type { Gcode3DView } from "../../components/Gcode3D";
 import Gcode3DOverlay from "../../components/Gcode3DOverlay";
@@ -69,9 +71,17 @@ export default function Paint({
   const defaultText = t("paint.text");
   const { index, setIndex, profile, agentRevision, loading: calibrationLoading, error: calibrationError, refresh } = useProjectCalibration();
   const [page, setPage] = useState<Page | null>(null);
+  const [loadingPageId, setLoadingPageId] = useState<string | null>(null);
+  const [backsideOpen, setBacksideOpen] = useState(false);
+  const backside = useBacksideReference(index?.project?.id, page?.id, index?.order ?? [], visible);
+  useEffect(() => { setBacksideOpen(false); }, [page?.id, index?.project?.id, visible]);
   const projectMatches = !!page && page.projectId === index?.project?.id;
   const renderProfile = projectMatches && !calibrationLoading ? profile : null;
-  const cal = projectMatches ? profile?.calibration ?? null : null;
+  const currentCal = projectMatches ? profile?.calibration ?? null : null;
+  const lastCal = useRef(currentCal);
+  if (currentCal) lastCal.current = currentCal;
+  // Keep the editor shell and previous sheet mounted while the next context loads.
+  const cal = currentCal ?? lastCal.current;
   const [tool, setTool] = useState<Tool>("select");
   const [eraserBrush, setEraserBrush] = useState<EraserBrush>("small");
   const [fillStyle, setFillStyle] = useState<FillStyle>({ ...DEFAULT_VECTOR_STYLE.fill, enabled: true });
@@ -137,7 +147,7 @@ export default function Paint({
     });
   const printerBusy = calibrating || isPrinterBusy(status);
 
-  const pageBlocked = !renderProfile;
+  const pageBlocked = !renderProfile || !!loadingPageId;
   const { handleBucketFill, handleAreaFill, fitDrawing, updateObject, updateObjects, addTextObject } = usePaintCanvasActions({
     page, cal, pageBlocked, fillStyle, ops, setPage, persist, setPlotError, defaultText, warnMissingGlyphs, fail,
   });
@@ -193,6 +203,7 @@ export default function Paint({
     ops,
     reloadIndex,
     navigation,
+    onLoadingChange: setLoadingPageId,
     confirm,
     prompt,
     fail,
@@ -266,7 +277,7 @@ export default function Paint({
   // Keyboard shortcuts — only active when this tab is visible and no modal
   // is open (otherwise Escape would also reset tool/selection).
   usePaintShortcuts({
-    active: visible && !coloringOpen && !infoOpen && !imageImport && !projectsOpen,
+    active: visible && !pageBlocked && !coloringOpen && !infoOpen && !imageImport && !projectsOpen,
     tool,
     setTool,
     selectedIds,
@@ -319,6 +330,7 @@ export default function Paint({
 
       )}
       <ProjectPagePanel
+        loadingPageId={loadingPageId}
         index={index}
         activePageId={page.id}
         onOpenProjects={() => setProjectsOpen(true)}
@@ -341,13 +353,17 @@ export default function Paint({
       {!pagesCollapsed && <PanelResizeHandle label={t("interface.resizePages")} width={pagesWidth} min={180} max={400}
         onChange={setPagesWidth} onCommit={width => updateInterface(p => ({ ...p, pagesPanel: { ...p.pagesPanel, width } }))} />}
       <section className="card paint-editor">
-        <PaintToolbar
-          commands={<PaintCommandBar ops={ops} selected={selectedObjects} visible={visible}
+        <fieldset disabled={pageBlocked} className="paint-toolbar-fieldset"><PaintToolbar
+          commands={<PaintCommandBar ops={ops} selected={selectedObjects} visible={visible && !pageBlocked}
             onText={() => { insertText([cal.plot_width / 2, cal.plot_height / 2]); setTool("select"); }}
             onGallery={() => setGalleryOpen(true)} onMarkdown={() => setMdOpen(true)} onImage={pickImage} />}
-          viewControls={<PaintLayoutControls visible={visible} measurementsOpen={measurementsOpen} onToggleMeasurements={toggleMeasurements} />}
+          viewControls={<PaintLayoutControls visible={visible && !pageBlocked} measurementsOpen={measurementsOpen} onToggleMeasurements={toggleMeasurements}
+            onBackside={() => setBacksideOpen(true)} backsideConfigured={!!backside.settings}
+            backsideActive={!!backside.settings?.enabled} onToggleBackside={() => {
+              if (backside.settings) backside.save({ ...backside.settings, enabled: !backside.settings.enabled });
+            }} />}
           guided={preferences.experience === "guided"}
-          visible={visible}
+          visible={visible && !pageBlocked}
           page={page}
           desktop={desktop}
           liveState={live.state}
@@ -371,7 +387,7 @@ export default function Paint({
           onOpenColoring={() => setColoringOpen(true)}
           onOpenFullscreen={openFullscreen}
           onOpenInfo={() => setInfoOpen(true)}
-        />
+        /></fieldset>
 
         {saveState.error && <div className="banner err save-status" role="alert">
           <span>{saveState.conflict ? t("save.conflict") : t("save.failed")}</span>
@@ -380,8 +396,11 @@ export default function Paint({
         </div>}
         {plotError && <div className="banner err paint-plot-error" role="alert">
           <div><strong>Plotprüfung fehlgeschlagen</strong><p>{plotError}</p></div>
-          {plotError.includes("außerhalb der aktuellen Projektfläche") &&
-            <button disabled={pageBlocked} onClick={fitDrawing}>Zeichnung proportional einpassen</button>}
+          {plotError.includes("außerhalb der aktuellen Projektfläche") && <>
+            <button disabled={pageBlocked || ops.processing} onClick={fitDrawing}>Zeichnung proportional einpassen</button>
+            <button disabled={pageBlocked || ops.processing} title={t("paint.clipHint")} onClick={() => {
+              void ops.clipToPlot().then(ok => { if (ok) setPlotError(null); });
+            }}>{t("paint.clipToPlot")}</button></>}
           {/kalibrierung|profil|papier/i.test(plotError) &&
             <button onClick={() => { reloadIndex(); setProjectsOpen(true); }}>Projektprofil prüfen</button>}
           <button className="ghost" aria-label="Plot-Hinweis schließen" onClick={() => setPlotError(null)}>×</button>
@@ -393,13 +412,18 @@ export default function Paint({
 
         <div className="paint-workspace">
           <PaintToolRail tool={tool} onToolChange={selectTool} guided={preferences.experience === "guided"} visible={visible} />
-          <div className="paint-canvas-wrap">
-            {page.objects.length === 0 && tool === "select" && <PaintEmptyState
+          <div className="paint-canvas-wrap" aria-busy={pageBlocked}>
+            {pageBlocked && <div className="paint-slide-loading" role="status">{t("paint.loadingSlide")}</div>}
+            {page.objects.length === 0 && tool === "select" && !backside.enabled && <PaintEmptyState
               onText={() => { insertText([cal.plot_width / 2, cal.plot_height / 2]); setTool("select"); }}
               onDraw={() => selectTool("pen")} onImage={pickImage} />}
             <PaintCanvas
-              statusContent={<PaintDocumentStatus page={page} profile={renderProfile} pending={saveState.pending} error={saveState.error} selection={selectedIds.length} />}
-              visible={visible}
+              statusContent={<><PaintDocumentStatus page={page} profile={renderProfile} pending={saveState.pending} error={saveState.error} selection={selectedIds.length} />
+                {backside.settings && <button type="button" className="backside-status-chip" onClick={() => setBacksideOpen(true)}
+                  title={t("backside.viewOnly")}>{t(backside.missing || backside.error ? "backside.missingSource" : backside.settings.enabled ? "backside.active" : "backside.hidden", { name: backside.source?.name ?? "" })}</button>}</>}
+              backsideReference={backside.enabled && backside.page && backside.settings
+                ? { page: backside.page, edge: backside.settings.edge, opacity: backside.settings.opacity } : undefined}
+              visible={visible && !pageBlocked}
               gridVisible={preferences.canvas.gridVisible}
               showRulers={preferences.canvas.rulers}
               padding={preferences.canvas.padding}
@@ -420,7 +444,7 @@ export default function Paint({
           {preferences.propertiesPanel.open && <>
           <PanelResizeHandle label={t("interface.resizeProperties")} width={propertiesWidth} min={240} max={400} direction={-1}
             onChange={setPropertiesWidth} onCommit={width => updateInterface(p => ({ ...p, propertiesPanel: { ...p.propertiesPanel, width } }))} />
-          <PaintContextPanel key={page.id}
+          <fieldset disabled={pageBlocked} className="paint-context-fieldset"><PaintContextPanel
             tool={tool}
             activeToolLabel={activeToolMeta ? activeToolMeta.label : ""}
             ops={ops}
@@ -435,7 +459,7 @@ export default function Paint({
             eraserRadius={eraserRadius}
             fillStyle={fillStyle}
             onFillStyleChange={(patch) => setFillStyle((f) => ({ ...f, ...patch }))}
-          />
+          /></fieldset>
           </>}
         </div>
 
@@ -452,6 +476,8 @@ export default function Paint({
         </p>
       </section>
       {infoOpen && <PaintInfoModal onClose={() => setInfoOpen(false)} />}
+      {visible && backsideOpen && <BacksideDialog key={`${index.project?.id}:${page.id}`} page={page} pages={index.order}
+        cal={cal} settings={backside.settings} onApply={backside.save} onClose={() => setBacksideOpen(false)}/>}
       {visible && pressureOpen && <CalibrationPressureDialog
         projectId={index.project?.id} profileId={index.project?.profileId}
         canMove={!!status?.online && !busy && !sending && !isPrinterBusy(status)}

@@ -80,13 +80,13 @@ it.each(["-4", "4", ""])("blocks out-of-range or empty input: %s", async (value)
   expect(mocks.calibrationHeight).not.toHaveBeenCalled();
 });
 
-it("requires C first and labels the homing trip explicitly", async () => {
+it("requires the setup position first and labels the homing trip explicitly", async () => {
   head = { ...head, x: 10, y: 20, homed: false };
   mocks.homeAndMoveToPosition.mockResolvedValue({ position: { ...head, x: 40, y: 60, homed: true } });
   await setup();
   expect(screen.getByRole("button", { name: "paper.pressure.apply" })).toBeDisabled();
-  fireEvent.click(screen.getByRole("button", { name: "paper.positions.homeVisit C" }));
-  await waitFor(() => expect(mocks.homeAndMoveToPosition).toHaveBeenCalledWith("calibration"));
+  fireEvent.click(screen.getByRole("button", { name: "paper.positions.homeVisit calibrate.groupCalibrationPosition" }));
+  await waitFor(() => expect(mocks.homeAndMoveToPosition).toHaveBeenCalledWith("calibration", undefined, true));
   await waitFor(() => expect(screen.getByRole("button", { name: "paper.pressure.apply" })).toBeEnabled());
   expect(mocks.calibrationHeight).not.toHaveBeenCalled();
 });

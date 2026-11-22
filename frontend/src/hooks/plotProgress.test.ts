@@ -2,6 +2,13 @@ import type { PrinterStatus } from "../api/types/printer";
 import { expect, it } from "vitest";
 import { newPlotTracker, plotNotices } from "./plotProgress";
 
+it("does not announce an old completion after switching between two serial printers", () => {
+  const tracker = newPlotTracker();
+  plotNotices(tracker, { configured: true, online: true, backend: "serial", printer_id: "left" });
+  expect(plotNotices(tracker, { configured: true, online: true, backend: "serial", printer_id: "right",
+    last_job: { id: "old", filename: "old.gcode", outcome: "completed" } })).toEqual([]);
+});
+
 const status = (pct: number, state = "Printing", id?: string): PrinterStatus => ({ configured: true, online: true, backend: "serial",
   job: { id, state, progress: { completion: pct }, job: { file: { name: "drawing.gcode" } } } });
 

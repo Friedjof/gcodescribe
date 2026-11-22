@@ -18,7 +18,7 @@ export function useSpecialPositions({ active, cal, pos, profileId, projectId, ta
 }) {
   const { t } = useI18n();
   const requestTarget = scopeTarget ?? projectId;
-  const [kind, setKind] = useState<PositionKind>("park");
+  const [kind, setKind] = useState<PositionKind>("calibration");
   const [target, setTarget] = useState<PositionTarget | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -52,7 +52,7 @@ export function useSpecialPositions({ active, cal, pos, profileId, projectId, ta
   const move = (xy: { x: number; y: number }) => run(async () => {
     const token = generation.current;
     setTarget({ kind, ...xy });
-    const result = await (requestTarget ? api.moveToPosition(kind, xy, requestTarget) : api.moveToPosition(kind, xy));
+    const result = await (requestTarget ? api.moveToPosition(kind, xy, requestTarget, true) : api.moveToPosition(kind, xy, undefined, true));
     if (token === generation.current) {
       onPosition(result.position);
       setTarget({ kind, x: result.position.x, y: result.position.y });
@@ -66,13 +66,13 @@ export function useSpecialPositions({ active, cal, pos, profileId, projectId, ta
     if (token !== generation.current) return;
     onCalibration(updated);
     setTarget(null);
-    setMessage(t("paper.positions.saved", { marker: positionDefinition(kind).marker }));
+    setMessage(t("paper.positions.saved", { marker: t(positionDefinition(kind).label) }));
   });
 
   const homeAndVisit = () => run(async () => {
     const token = generation.current;
     setTarget(null);
-    const result = await (requestTarget ? api.homeAndMoveToPosition(kind, requestTarget) : api.homeAndMoveToPosition(kind));
+    const result = await (requestTarget ? api.homeAndMoveToPosition(kind, requestTarget, true) : api.homeAndMoveToPosition(kind, undefined, true));
     if (token === generation.current) {
       onPosition(result.position);
       setMessage(t("paper.positions.commandSent"));

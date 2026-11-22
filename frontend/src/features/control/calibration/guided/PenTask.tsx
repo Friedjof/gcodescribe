@@ -13,6 +13,8 @@ export default function PenTask({ controls: c }: Props) {
     [which, setWhich] = useState<"down" | "up">("down");
   return (
     <div className="calibration-task">
+      <p>{t("paper.penLocation", { x: cal.calibration_x.toFixed(1), y: cal.calibration_y.toFixed(1) })}</p>
+      <button type="button" disabled={!c.canMove || !c.homed} onClick={c.preparePen}>{t("paper.preparePen")}</button>
       <p title={t("paper.step2Hint")}>{t("calibration.penHint")}</p>
       <div className="calibration-task-tabs">
         <button
@@ -64,17 +66,17 @@ export default function PenTask({ controls: c }: Props) {
             }))}
             suffix={<em>mm</em>}
           />
-          <div className="calibration-z-controls">
+          <div className="calibration-z-controls calibration-jog-scope" ref={c.jogScope} tabIndex={0} role="group" aria-label={t("paper.keyboardZ")} onClickCapture={() => c.jogScope.current?.focus({ preventScroll: true })}>
             <button
               type="button"
-              disabled={!c.canMove || !c.homed}
+              disabled={!c.canMove || !c.homed || !c.atPenPosition}
               onClick={() => c.jogZ(1)}
             >
               ↑ Z + {c.zStep}
             </button>
             <button
               type="button"
-              disabled={!c.canMove || !c.homed}
+              disabled={!c.canMove || !c.homed || !c.atPenPosition}
               onClick={() => c.jogZ(-1)}
             >
               ↓ Z − {c.zStep}
@@ -83,7 +85,7 @@ export default function PenTask({ controls: c }: Props) {
           <div className="calibration-save-height">
             <button
               type="button"
-              disabled={!c.canMove || !c.homed}
+              disabled={!c.canMove || !c.homed || !c.atPenPosition}
               onClick={() =>
                 void c.savePenHeight(which).then((saved) => {
                   if (saved && which === "down") setWhich("up");
@@ -139,13 +141,13 @@ export default function PenTask({ controls: c }: Props) {
             {
               id: "down",
               label: t("paper.testLower"),
-              disabled: !c.canMove || !c.homed || !c.heightSaved,
+              disabled: !c.canMove || !c.homed || !c.atPenPosition || !c.heightSaved,
               action: () => c.testPen(true),
             },
             {
               id: "up",
               label: t("paper.testRaise"),
-              disabled: !c.canMove || !c.homed || !c.heightSaved,
+              disabled: !c.canMove || !c.homed || !c.atPenPosition || !c.heightSaved,
               action: () => c.testPen(false),
             },
           ]}

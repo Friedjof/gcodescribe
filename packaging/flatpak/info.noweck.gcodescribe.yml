@@ -90,6 +90,28 @@ modules:
       - type: file
         path: ../../pyproject.toml
 
+  # Managed ChatGPT sign-in runs inside the sandbox, using a private CODEX_HOME.
+  # Pin the app-server version verified by the image-provider integration.
+  - name: codex
+    buildsystem: simple
+    build-commands:
+      - mkdir -p /app/lib /app/bin
+      - cp -a vendor/${FLATPAK_ARCH}-unknown-linux-musl /app/lib/codex
+      - ln -s ../lib/codex/bin/codex /app/bin/codex
+      - install -Dm644 LICENSE /app/share/licenses/codex/LICENSE
+    sources:
+      - type: archive
+        url: https://registry.npmjs.org/@openai/codex/-/codex-0.165.0-linux-x64.tgz
+        sha256: f997cd6ef5987126e19cd3c82e847a4a6461270f32f97340c5e99a65fb6f9b8a
+        only-arches: [x86_64]
+      - type: archive
+        url: https://registry.npmjs.org/@openai/codex/-/codex-0.165.0-linux-arm64.tgz
+        sha256: c9955808e3598198afe1b8525b5864c0e3f2477339d26e91924e95ed45473baf
+        only-arches: [aarch64]
+      - type: file
+        url: https://raw.githubusercontent.com/openai/codex/rust-v0.165.0/LICENSE
+        sha256: d17f227e4df5da1600391338865ce0f3055211760a36688f816941d58232d8dc
+
   # ── gcodescribe application ───────────────────────────────────────────────
   - name: gcodescribe
     buildsystem: simple

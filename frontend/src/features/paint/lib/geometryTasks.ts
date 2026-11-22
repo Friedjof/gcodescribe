@@ -1,10 +1,12 @@
 import { cachedGeometryPath, cacheGeometryPath, cacheGeometryHull, toMultiPath, type Pt, type Transform } from "./geometry";
 import { packLines } from "./geometryTransfer";
 import type { VectorStyle } from "./styling";
+import type { SegmentPressures } from "./pressure";
 
 export type GeometryRequest =
   | { kind: "path"; lines: Pt[][] }
   | { kind: "style"; lines: Pt[][]; style: VectorStyle }
+  | { kind: "clip"; lines: Pt[][]; transform: Transform; width: number; height: number; pressures?: SegmentPressures; feeds?: number[][] }
   | { kind: "raster"; lines: Pt[][]; stroke: number }
   | { kind: "erase"; lines: Pt[][]; path: Pt[]; mode: "free" | "line"; radius: number; transform?: Transform; preview?: boolean };
 let worker: Worker | null = null;

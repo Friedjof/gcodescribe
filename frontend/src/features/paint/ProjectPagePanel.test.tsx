@@ -20,13 +20,15 @@ it("shows the active project's folder tree and opens the project popup", () => {
     onCreateGroup={vi.fn()} onRenameGroup={vi.fn()} onDeleteGroup={vi.fn()}
     onSetPageGroup={vi.fn()} onSetGroupParent={vi.fn()} onMove={vi.fn()} onToggleSidebar={vi.fn()} />);
   expect(screen.getByRole("button", { name: "Entwürfe" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: /Briefe/ }).getAttribute("aria-haspopup")).toBe("dialog");
+  expect(screen.getByRole("button", { name: /Briefe/ }).textContent).not.toContain("⌄");
   fireEvent.click(screen.getByRole("button", { name: /Briefe/ }));
   expect(openProjects).toHaveBeenCalledOnce();
   fireEvent.click(screen.getByRole("button", { name: "Slide A" }));
   expect(openPage).toHaveBeenCalledWith("a");
 });
 
-it("opens slide and folder actions outside the clipped sidebar", () => {
+it("offers direct slide actions and opens folder actions outside the clipped sidebar", () => {
   const onDuplicate = vi.fn();
   const onCreateGroup = vi.fn();
   const index: PageIndex = {
@@ -39,10 +41,7 @@ it("opens slide and folder actions outside the clipped sidebar", () => {
     onCreateGroup={onCreateGroup} onRenameGroup={vi.fn()} onDeleteGroup={vi.fn()}
     onSetPageGroup={vi.fn()} onSetGroupParent={vi.fn()} onMove={vi.fn()} onToggleSidebar={vi.fn()} />);
 
-  fireEvent.click(screen.getByRole("button", { name: "Aktionen für Slide A" }));
-  const slideMenu = screen.getByRole("menu");
-  expect(slideMenu.parentElement).toBe(document.body);
-  const duplicate = within(slideMenu).getByRole("menuitem", { name: "Duplizieren" });
+  const duplicate = screen.getByRole("button", { name: "Duplizieren: Slide A" });
   fireEvent.pointerDown(duplicate);
   fireEvent.click(duplicate);
   expect(onDuplicate).toHaveBeenCalledWith("a");

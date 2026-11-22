@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 
 from .prompts import ASPECT_PROMPTS, EFFECT_PROMPTS, STYLE_PROMPTS, TEXT_PROMPTS
@@ -20,22 +19,6 @@ DEFAULT_TIMEOUT_SECONDS = 90
 ALLOWED_RENDER_MODES = ("edges", "handwriting", "trace")
 DEFAULT_RENDER_MODE = "edges"
 
-_TRUE = {"1", "true", "yes", "on"}
-
-
-def _env(name: str, default: str = "") -> str:
-    return (os.environ.get(name) or "").strip() or default
-
-
-def _int_env(name: str, default: int) -> int:
-    raw = _env(name)
-    if not raw:
-        return default
-    try:
-        return max(1, int(raw))
-    except ValueError:
-        return default
-
 
 @dataclass(frozen=True)
 class AiImageConfig:
@@ -48,6 +31,7 @@ class AiImageConfig:
     quality: str
     max_input_mb: int
     timeout_seconds: int
+    provider: str = "api"
 
     def status(self) -> dict:
         """The safe subset exposed to the frontend for feature gating.
@@ -56,7 +40,7 @@ class AiImageConfig:
         """
         if not self.enabled:
             return {"enabled": False}
-        return {
+        status = {
             "enabled": True,
             "model": self.model,
             "apiMode": self.api_mode,
@@ -72,25 +56,39 @@ class AiImageConfig:
             "textPrompts": TEXT_PROMPTS,
             "aspectPrompts": ASPECT_PROMPTS,
         }
+        if self.provider == "codex" and not self.fake:
+            from .codex import get_codex
+
+            access = get_codex().status()
+            status.update(
+                provider="codex",
+                model="Codex image generation",
+                apiMode="codex",
+                ready=bool(access.get("authenticated") and access.get("imageGeneration")),
+            )
+        return status
 
 
 def load_config() -> AiImageConfig:
-    """Read the AI-designer configuration from the environment.
+    """Read the same saved/environment settings as the settings UI.
 
-    The feature is enabled when a real ``OPENAI_API_KEY`` is present, or when
-    ``AI_IMAGE_FAKE`` is set — the latter drives the cost-free fake client used
-    for local development and tests.
+    API access requires a configured key. Selecting Codex enables its sign-in
+    flow; account readiness is checked separately. ``AI_IMAGE_FAKE`` selects
+    the cost-free development/test client.
     """
-    api_key = _env("OPENAI_API_KEY")
-    fake = _env("AI_IMAGE_FAKE").lower() in _TRUE
+    from plotter.core.config import load_settings
+    from plotter.services.settings_store import load_saved
+
+    ai = load_settings(load_saved()).ai
     return AiImageConfig(
-        enabled=bool(api_key) or fake,
-        fake=fake,
-        api_key=api_key,
-        model=_env("OPENAI_IMAGE_MODEL", DEFAULT_MODEL),
-        api_mode=_env("OPENAI_IMAGE_API_MODE", DEFAULT_API_MODE),
-        size=_env("AI_IMAGE_SIZE", DEFAULT_SIZE),
-        quality=_env("AI_IMAGE_QUALITY", DEFAULT_QUALITY),
-        max_input_mb=_int_env("AI_IMAGE_MAX_INPUT_MB", DEFAULT_MAX_INPUT_MB),
-        timeout_seconds=_int_env("AI_IMAGE_TIMEOUT_SECONDS", DEFAULT_TIMEOUT_SECONDS),
+        enabled=ai.enabled,
+        fake=ai.fake,
+        api_key=ai.api_key,
+        provider=ai.provider,
+        model=ai.model,
+        api_mode="codex" if ai.provider == "codex" else ai.api_mode,
+        size=ai.size,
+        quality=ai.quality,
+        max_input_mb=ai.max_input_mb,
+        timeout_seconds=ai.timeout_seconds,
     )

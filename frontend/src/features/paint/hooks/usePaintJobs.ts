@@ -24,8 +24,9 @@ export function usePaintJobs({ page, profile, projectId, visible, status, printe
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [plotError, setPlotError] = useState<string | null>(null);
   const pending = useRef(false);
-  const readiness = useRef({ online: !!status?.online, backend: status?.backend, busy: printerBusy, calibrating });
-  readiness.current = { online: !!status?.online, backend: status?.backend, busy: printerBusy, calibrating };
+  const printerId = status?.printer_id ?? status?.backend;
+  const readiness = useRef({ online: !!status?.online, backend: printerId, busy: printerBusy, calibrating });
+  readiness.current = { online: !!status?.online, backend: printerId, busy: printerBusy, calibrating };
   const previewSequence = useRef(0);
   const scopeKey = JSON.stringify([page?.id, projectId, profile?.id, profile?.fingerprint, visible]);
   const scope = useRef({ key: scopeKey });
@@ -68,7 +69,7 @@ export function usePaintJobs({ page, profile, projectId, visible, status, printe
     const objects = selection ? page!.objects.filter((object) => ids.includes(object.id)) : undefined;
     if (selection && !objects?.length) return;
     const session = scope.current;
-    const backend = status?.backend;
+    const backend = printerId;
     pending.current = true; setPlotError(null);
     const release = page ? retainPage(page) : () => { };
     try {

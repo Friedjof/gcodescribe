@@ -2,9 +2,15 @@ import { targetBody, type CalibrationTarget } from "../calibrationTarget";
 import { req } from "./req";
 import type { Position, SerialPortCandidate } from "../types/jobs";
 import type { PositionKind } from "../types/calibration";
-import type { PrinterStatus, PrinterBackendId, PrinterBackendInfo, OctoPrintCheckResult } from "../types/printer";
+import type { PrinterStatus, PrinterBackendId, PrinterBackendInfo, OctoPrintCheckResult, PrinterConnection, PrinterConnectionInput } from "../types/printer";
 
 export const printerClient = {
+  printerConnections: () => req<PrinterConnection[]>("/api/printer/connections"),
+  savePrinterConnection: (data: PrinterConnectionInput, id?: string) =>
+    req<PrinterConnection>(`/api/printer/connections${id ? `/${encodeURIComponent(id)}` : ""}`, {
+      method: id ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data),
+    }),
+  deletePrinterConnection: (id: string) => req(`/api/printer/connections/${encodeURIComponent(id)}`, { method: "DELETE" }),
   octoStatus: () => req<PrinterStatus>("/api/printer/status"),
   octoprintCheck: () =>
     req<OctoPrintCheckResult>(
@@ -42,11 +48,11 @@ export const printerClient = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ command }),
     }),
-  jog: (x: number, y: number, z: number, opts?: { speed?: number; limit?: "bed" | "plot"; projectId?: string; profileId?: string }) =>
+  jog: (x: number, y: number, z: number, opts?: { speed?: number; limit?: "bed" | "plot"; projectId?: string; profileId?: string; pen_up_first?: boolean }) =>
     req("/api/printer/jog", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ x, y, z, speed: opts?.speed, limit: opts?.limit ?? "bed", projectId: opts?.projectId, profileId: opts?.profileId }),
+      body: JSON.stringify({ x, y, z, speed: opts?.speed, limit: opts?.limit ?? "bed", projectId: opts?.projectId, profileId: opts?.profileId, pen_up_first: opts?.pen_up_first }),
     }),
   home: (axes?: string[], projectId?: CalibrationTarget) =>
     req("/api/printer/home", {
@@ -59,6 +65,16 @@ export const printerClient = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ down, ...targetBody(projectId) }),
+    }),
+  testDot: (target?: CalibrationTarget) =>
+    req<{ ok: boolean; position: Position }>("/api/printer/test-dot", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(targetBody(target)),
+    }),
+  raisePen: (target?: CalibrationTarget) =>
+    req<{ ok: boolean; position: Position }>("/api/printer/raise-pen", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(targetBody(target)),
     }),
   speedTest: (profileId: string) =>
     req<{ ok: boolean; size: number; travelFeed: number; position: Position }>("/api/printer/speed-test", {
@@ -77,11 +93,11 @@ export const printerClient = {
     req<{ ok: boolean; position: Position }>("/api/printer/move-to-calibration", {
       method: "POST",
     }),
-  homeAndMoveToPosition: (kind: PositionKind, projectId?: CalibrationTarget) =>
+  homeAndMoveToPosition: (kind: PositionKind, projectId?: CalibrationTarget, liftOnly = false) =>
     req<{ ok: boolean; position: Position }>("/api/printer/home-and-move-to-position", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ kind, ...targetBody(projectId) }),
+      body: JSON.stringify({ kind, lift_only: liftOnly, ...targetBody(projectId) }),
     }),
   calibrationHeight: (profileId: string, offset: number, projectId?: string) =>
     req<{ ok: boolean; position: Position }>("/api/printer/calibration-height", {
@@ -89,11 +105,11 @@ export const printerClient = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ profile_id: profileId, offset, project_id: projectId }),
     }),
-  moveToPosition: (kind: PositionKind, target?: { x: number; y: number }, projectId?: CalibrationTarget) =>
+  moveToPosition: (kind: PositionKind, target?: { x: number; y: number }, projectId?: CalibrationTarget, liftOnly = false) =>
     req<{ ok: boolean; position: Position }>("/api/printer/move-to-position", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ kind, ...target, ...targetBody(projectId) }),
+      body: JSON.stringify({ kind, ...target, lift_only: liftOnly, ...targetBody(projectId) }),
     }),
   moveToCorner: (corner: string, target: "paper" | "plot" = "paper", projectId?: CalibrationTarget) =>
     req<{ ok: boolean; position: Position }>("/api/printer/move-to-corner", {

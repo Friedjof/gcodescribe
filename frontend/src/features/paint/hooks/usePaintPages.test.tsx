@@ -59,6 +59,23 @@ it("cancels an older open when the user returns to the already displayed page", 
   expect(hook.result.current.page?.id).toBe("a");
   expect(activate.mock.calls.map(([id]) => id)).toEqual(["b", "a"]);
 });
+it("waits for saved edits before reading a slide when returning during navigation", async () => {
+  const save = deferred<void>();
+  let saved = false;
+  vi.mocked(flushEdits).mockReturnValue(save.promise);
+  vi.spyOn(api, "activatePage").mockImplementation(async id => index(id));
+  const read = vi.spyOn(api, "getPage").mockImplementation(async id => ({
+    ...page(id), name: saved ? "Saved drawing" : "Old drawing",
+  }));
+  const hook = setup();
+  let first!: Promise<void>, second!: Promise<void>;
+  act(() => { first = hook.result.current.openPage("b"); });
+  act(() => { second = hook.result.current.openPage("a"); });
+  expect(read).not.toHaveBeenCalled();
+  await act(async () => { saved = true; save.resolve(); await first; await second; });
+  expect(hook.result.current.page?.id).toBe("a");
+  expect(hook.result.current.page?.name).toBe("Saved drawing");
+});
 it.each(["new", "duplicate"])("does not let %s overtake a later open while autosave is pending", async action => {
   const save = deferred<void>();
   vi.mocked(flushEdits).mockReturnValue(save.promise);
@@ -146,7 +163,8 @@ it.each(["project", "hidden", "unmount"])("ignores pending replies after %s", as
   if (change === "unmount") hook.unmount();
   else hook.rerender({ projectId: change === "project" ? "other" : "project", visible: change !== "hidden" });
   await act(async () => { activation.resolve(index("b")); await pending; });
-  expect(read).not.toHaveBeenCalled();
+  expect(read).toHaveBeenCalledOnce();
+  expect(read.mock.calls[0][1]?.aborted).toBe(true);
   expect(hook.resetHistory).not.toHaveBeenCalled();
   expect(hook.fail).not.toHaveBeenCalled();
 });

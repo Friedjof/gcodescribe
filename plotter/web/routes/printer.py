@@ -12,10 +12,11 @@ from plotter.core.storage import jobs_dir
 from plotter.gcode.pressure import job_uses_pressure
 from plotter.gcode.safety import GcodeSafetyChecker, SafetyViolation
 from plotter.web.deps import printer_controller, profile_service
-from plotter.web.project_context import project_calibration
+from plotter.web.project_context import calibration_profile, project_calibration
 
 from ...printer.manager import BackendBusyError, BackendUnavailableError
 from ...services import PrinterController
+from ...services.printer_connections import ConnectionInput
 from ...services.profiles import profile_meta
 from ...services.project_render import ProjectJobError
 from ...services.project_render import project_job_calibration as _project_job_calibration
@@ -78,7 +79,57 @@ def octoprint_check() -> dict:
 
 
 class BackendSelect(BaseModel):
-    id: str  # octoprint | serial
+    id: str
+
+
+@router.get("/printer/connections")
+def list_connections() -> list[dict]:
+    from ...services.printer_connections import connection_snapshot, public_connection
+    from ...services.printer_runtime import printer_settings
+
+    return [public_connection(item) for item in connection_snapshot(printer_settings())]
+
+
+@router.post("/printer/connections", status_code=201)
+def create_connection(req: ConnectionInput) -> dict:
+    return _save_connection(req)
+
+
+@router.put("/printer/connections/{printer_id}")
+def update_connection(printer_id: str, req: ConnectionInput) -> dict:
+    _check_connection_edit(printer_id)
+    return _save_connection(req, printer_id)
+
+
+def _check_connection_edit(printer_id: str) -> None:
+    client = controller().client
+    if getattr(client, "active_id", None) == printer_id and client.job_active():
+        raise HTTPException(409, "Bitte den laufenden oder pausierten Plot zuerst beenden.")
+
+
+def _save_connection(req: ConnectionInput, printer_id: str | None = None) -> dict:
+    from ...services.printer_connections import save_connection
+    from ...services.printer_runtime import printer_settings
+
+    try:
+        return save_connection(req, printer_settings(), printer_id)
+    except KeyError as exc:
+        raise HTTPException(404, "Drucker nicht gefunden") from exc
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@router.delete("/printer/connections/{printer_id}")
+def remove_connection(printer_id: str) -> dict:
+    from ...services.printer_connections import delete_connection
+    from ...services.printer_runtime import printer_settings
+
+    _check_connection_edit(printer_id)
+    try:
+        delete_connection(printer_id, printer_settings())
+    except KeyError as exc:
+        raise HTTPException(404, "Drucker nicht gefunden") from exc
+    return {"ok": True}
 
 
 @router.post("/printer/backend")
@@ -186,7 +237,35 @@ def _validated_job_calibration(path: Path) -> Calibration:
         except ProjectJobError as exc:
             _refuse_print(path.name, "project-job", str(exc))
     else:
-        active = service.active()
+        # A calibration test explicitly targets the profile being edited.
+        # It does not require changing any project's profile or legacy default.
+        scoped_profile_id = (
+            source.get("profile_id") if source.get("kind") == "testpattern" else None
+        )
+        if scoped_profile_id:
+            if scoped_profile_id != (meta.get("profile") or {}).get("id"):
+                _refuse_print(
+                    path.name, "profile-scope", "Die Profilangaben des Tests passen nicht."
+                )
+            profiles = {p["id"]: p for p in service.list(include_archived=True)}
+            if scoped_profile_id not in profiles:
+                _refuse_print(
+                    path.name, "missing-profile", "Das Profil des Tests existiert nicht mehr."
+                )
+            active = service.get(scoped_profile_id)
+            snapshot = meta.get("calibrationSnapshot") or {}
+            snapshot_matches = (
+                isinstance(snapshot, dict)
+                and snapshot.get("profileId") == scoped_profile_id
+                and snapshot.get("fingerprint") == active["fingerprint"]
+                and snapshot.get("calibration") == active["calibration"]
+            )
+            if not snapshot_matches:
+                _refuse_print(
+                    path.name, "profile-snapshot", "Bitte den Kalibriertest neu erzeugen."
+                )
+        else:
+            active = service.active()
         profiles = {p["id"]: p for p in service.list(include_archived=True)}
         _require_profile_match(path, profile_meta(active), profiles)
         cal = Calibration.from_dict(active["calibration"])
@@ -252,6 +331,7 @@ class JogRequest(BaseModel):
     limit: str = "bed"  # bed | plot
     projectId: str | None = None
     profileId: str | None = None
+    pen_up_first: bool = False
 
 
 @router.post("/printer/jog")
@@ -265,6 +345,7 @@ def octo_jog(req: JogRequest) -> dict:
             req.speed,
             limit=req.limit,
             cal=project_calibration(req.projectId, req.profileId),
+            pen_up_first=req.pen_up_first,
         ),
     }
 
@@ -275,10 +356,8 @@ class SpeedTestRequest(BaseModel):
 
 @router.post("/printer/speed-test")
 def speed_test(req: SpeedTestRequest) -> dict:
-    active = profile_service().active()
-    if active["id"] != req.profile_id:
-        raise HTTPException(409, "Das aktive Profil hat sich geändert. Bitte neu öffnen.")
-    cal = Calibration.from_dict(active["calibration"])
+    profile = calibration_profile(None, req.profile_id, motion=True)
+    cal = Calibration.from_dict(profile["calibration"])
     return {"ok": True, **controller().speed_test(cal=cal)}
 
 
@@ -331,6 +410,7 @@ def move_to_calibration(project_id: str | None = None) -> dict:
 
 class PositionMoveRequest(BaseModel):
     kind: PositionKind
+    lift_only: bool = False
     x: float | None = None
     y: float | None = None
     projectId: str | None = None
@@ -342,13 +422,15 @@ def move_to_position(req: PositionMoveRequest) -> dict:
     return {
         "ok": True,
         "position": controller().move_to_position(
-            req.kind, req.x, req.y, cal=project_calibration(req.projectId, req.profileId)
+            req.kind, req.x, req.y, cal=project_calibration(req.projectId, req.profileId),
+            lift_only=req.lift_only,
         ),
     }
 
 
 class PositionVisitRequest(BaseModel):
     kind: PositionKind
+    lift_only: bool = False
     projectId: str | None = None
     profileId: str | None = None
 
@@ -360,7 +442,9 @@ def _active_project_calibration(project_id: str, profile_id: str | None = None) 
 @router.post("/printer/home-and-move-to-position")
 def home_and_move_to_position(req: PositionVisitRequest) -> dict:
     cal = project_calibration(req.projectId, req.profileId)
-    return {"ok": True, "position": controller().home_and_move_to_position(req.kind, cal=cal)}
+    return {"ok": True, "position": controller().home_and_move_to_position(
+        req.kind, cal=cal, lift_only=req.lift_only
+    )}
 
 
 class CalibrationHeightRequest(BaseModel):
@@ -374,10 +458,8 @@ def calibration_height(req: CalibrationHeightRequest) -> dict:
     if req.project_id:
         cal = _active_project_calibration(req.project_id, req.profile_id)
     else:
-        active = profile_service().active()
-        if active["id"] != req.profile_id:
-            raise HTTPException(409, "Das aktive Profil hat sich geändert. Bitte neu öffnen.")
-        cal = Calibration.from_dict(active["calibration"])
+        profile = calibration_profile(None, req.profile_id, motion=True)
+        cal = Calibration.from_dict(profile["calibration"])
     return {"ok": True, "position": controller().calibration_height(req.offset, cal=cal)}
 
 
@@ -408,6 +490,20 @@ def octo_pen(req: PenRequest) -> dict:
     """Raise or lower the pen using the calibrated Z heights."""
     result = controller().pen(req.down, cal=project_calibration(req.projectId, req.profileId))
     return {"ok": True, **result}
+
+
+@router.post("/printer/test-dot")
+def test_dot(req: HomeRequest) -> dict:
+    return {"ok": True, "position": controller().test_dot(
+        cal=project_calibration(req.projectId, req.profileId)
+    )}
+
+
+@router.post("/printer/raise-pen")
+def raise_pen(req: HomeRequest) -> dict:
+    return {"ok": True, "position": controller().raise_pen(
+        cal=project_calibration(req.projectId, req.profileId)
+    )}
 
 
 class GcodeRequest(BaseModel):

@@ -2,12 +2,15 @@ import { settingsGroups } from "./settingsGroups";
 import PaginationBar from "../../components/paging/PaginationBar";
 import { useFitListPage } from "../../components/paging/useFitListPage";
 import { useEffect, useRef, useState } from "react";
-import type { ConfigSource, OctoPrintCheckResult, SettingsSection, SettingsPatch, SettingValue } from "../../api";
+import type { ConfigSource, SettingsSection, SettingsPatch, SettingValue } from "../../api";
 import { errorMessage } from "../../api/errors";
-import { api, type EffectiveSettings, type FontItem, type SerialPortCandidate } from "../../api";
+import { api, type EffectiveSettings, type FontItem } from "../../api";
 import Modal from "../../components/Modal";
 import { useI18n } from "../../i18n";
 import { fontLabel, useTextFonts } from "../paint/hooks/useTextFonts";
+import PrintersPanel from "./PrintersPanel";
+import CodexConnection from "./CodexConnection";
+import type { PrinterStatus } from "../../api";
 
 type Section = Exclude<SettingsSection, "gallery"> | "fonts";
 type DisplaySource = ConfigSource | "pending";
@@ -27,9 +30,11 @@ const SECRET_KEY_MAP: Record<string, string> = {
 export default function SettingsDialog({
   onClose,
   onSaved,
+  status = null,
 }: {
   onClose: () => void;
   onSaved?: (settings: EffectiveSettings) => void;
+  status?: PrinterStatus | null;
 }) {
   const { t } = useI18n();
   const [section, setSection] = useState<Section>("printer");
@@ -38,7 +43,9 @@ export default function SettingsDialog({
   const [pending, setPending] = useState<SettingsPatch>({});
   const [saving, setSaving] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
-  const close = () => { if (!saving) { if (Object.keys(pending).length) setDiscardOpen(true); else onClose(); } };
+  const [printerBusy, setPrinterBusy] = useState(false);
+  const [printerDirty, setPrinterDirty] = useState(false);
+  const close = () => { if (!saving && !printerBusy) { if (Object.keys(pending).length || printerDirty) setDiscardOpen(true); else onClose(); } };
 
   const isDirty = Object.keys(pending).length > 0;
 
@@ -101,12 +108,12 @@ export default function SettingsDialog({
 
   return (
     <>
-    <Modal title={t("settings.title")} onClose={close} className="settings-modal" footer={footer}>
+    <Modal title={t("settings.title")} onClose={close} className="settings-modal" footer={section === "printer" ? undefined : footer}>
       <nav className="settings-nav">
         {SECTIONS.map((s) => (
           <button
             key={s}
-            disabled={saving}
+            disabled={saving || printerBusy || printerDirty}
             className={`settings-nav-item${section === s ? " active" : ""}`}
             onClick={() => setSection(s)}
           >
@@ -115,10 +122,12 @@ export default function SettingsDialog({
         ))}
       </nav>
 
-      <fieldset className="settings-content" disabled={saving}>
+      <fieldset className="settings-content" disabled={saving || printerBusy}>
+        <div hidden={section !== "printer"}><PrintersPanel status={status} onBusyChange={setPrinterBusy} onDirtyChange={setPrinterDirty}
+          onChanged={() => { api.getEffectiveSettings().then(next => { setData(next); onSaved?.(next); }).catch(error => setErr(errorMessage(error))); }} /></div>
         {!data && !err && <p className="muted">{t("common.loading")}</p>}
         {err && <p className="settings-err">{err}</p>}
-        {data && (
+        {data && section !== "printer" && (
           <SectionView
             key={section}
             section={section}
@@ -158,7 +167,7 @@ function SectionView({
   const rawSection = data[section] as SettingsPatch;
   const groups = settingsGroups(section, rawSection);
   const group = groups.find((item) => item.id === groupId) ?? groups[0];
-  const printerDirty = Object.keys(pending).some((key) => key.startsWith("printer."));
+  const aiProvider = pending["ai.provider"] ?? data.ai.provider ?? "api";
 
   return (
     <section className="settings-section">
@@ -167,6 +176,7 @@ function SectionView({
       <dl className="settings-rows">
         {group.fields.map(([field, value]) => {
           const key = `${section}.${field}`;
+          if (section === "ai" && aiProvider === "codex" && ["api_key_configured", "model", "api_mode", "quality"].includes(field)) return null;
           const label = t(`settings.${section}.${field}`);
 
           // Secret field: show stars + overwrite input
@@ -194,24 +204,6 @@ function SectionView({
             );
           }
 
-          // Special: serial port with USB scan picker
-          if (key === "printer.serial_port") {
-            const fieldSource = key in pending ? "pending" : data.sources[section]?.[field];
-            const effectiveValue = (key in pending ? pending[key] : value) as string;
-            return (
-              <SerialPortRow
-                key={field}
-                label={label}
-                value={effectiveValue}
-                source={fieldSource}
-                onChange={(v) => onChange(key, v)}
-                onReset={fieldSource === "saved" || fieldSource === "pending"
-                  ? () => onReset(section, field)
-                  : undefined}
-              />
-            );
-          }
-
           // Normal editable field
           const fieldSource = key in pending ? "pending" : data.sources[section]?.[field];
           const effectiveValue = key in pending ? pending[key] : value;
@@ -220,7 +212,7 @@ function SectionView({
               key={field}
               label={label}
               value={effectiveValue}
-              options={key === "printer.default_backend" ? [{ value: "", label: t("settings.backend.auto") }, { value: "serial", label: "USB / Serial" }, { value: "octoprint", label: "OctoPrint" }] : undefined}
+              options={key === "ai.provider" ? [{ value: "api", label: t("codex.apiOption") }, { value: "codex", label: t("codex.subscriptionOption") }] : undefined}
               source={fieldSource}
               onChange={(v) => onChange(key, v)}
               onReset={fieldSource === "saved" || fieldSource === "pending"
@@ -231,7 +223,11 @@ function SectionView({
         })}
       </dl>
 
-      {section === "printer" && group.id === "octoprint" && <OctoPrintCheckSection key={JSON.stringify(data.printer) + String(printerDirty)} dirty={printerDirty} />}
+      {section === "ai" && aiProvider === "codex" && group.id === "access" && <CodexConnection onChanged={() => {
+        api.getEffectiveSettings().then(onSettingsChange).catch(() => {});
+      }} />}
+      {section === "ai" && aiProvider === "codex" && group.id === "output" && <p className="muted">{t("codex.managedModel")}</p>}
+
       {section === "mcp" && <McpTokenSection onSettingsChange={onSettingsChange} />}
     </section>
   );
@@ -577,115 +573,5 @@ function SourceBadge({ source }: { source: DisplaySource }) {
     <span className={`settings-source settings-source-${source}`}>
       {t(`settings.source.${source}`)}
     </span>
-  );
-}
-
-// ── Serial port picker ────────────────────────────────────────────────────────
-
-function SerialPortRow({
-  label, value, source, onChange, onReset,
-}: {
-  label: string;
-  value: string;
-  source?: DisplaySource;
-  onChange: (v: string) => void;
-  onReset?: () => void;
-}) {
-  const { t } = useI18n();
-  const [ports, setPorts] = useState<SerialPortCandidate[] | null>(null);
-  const [scanning, setScanning] = useState(false);
-
-  const scan = () => {
-    setScanning(true);
-    api.listSerialPorts()
-      .then(setPorts)
-      .catch(() => setPorts([]))
-      .finally(() => setScanning(false));
-  };
-
-  const select = (device: string) => {
-    onChange(device);
-    setPorts(null);
-  };
-
-  return (
-    <>
-      <dt className="settings-label">{label}</dt>
-      <dd className="settings-value settings-serial-dd">
-        <div className="settings-serial-row">
-          <input
-            type="text"
-            className="settings-input settings-serial-input"
-            value={value}
-            aria-label={label}
-            placeholder="/dev/ttyUSB0"
-            onChange={(e) => onChange(e.target.value)}
-          />
-          <button
-            className="settings-serial-scan"
-            disabled={scanning}
-            onClick={scan}
-          >
-            {scanning ? t("settings.printer.scanning") : t("settings.printer.scanPorts")}
-          </button>
-          {(source === "saved" || source === "pending") && onReset && (
-            <button className="settings-reset ghost" onClick={onReset} title={t("settings.resetField")}>↺</button>
-          )}
-          {source && source !== "pending" && <SourceBadge source={source} />}
-          {source === "pending" && <SourceBadge source="pending" />}
-        </div>
-        {ports !== null && (
-          <ul className="settings-serial-list">
-            {ports.length === 0 ? (
-              <li className="settings-serial-empty">{t("serial.noPorts")}</li>
-            ) : (
-              ports.map((p) => (
-                <li key={p.device} className="settings-serial-port" onClick={() => select(p.device)}>
-                  <code>{p.device}</code>
-                  {p.description && <span className="settings-serial-desc">{p.description}</span>}
-                  {p.likelyPrinter && (
-                    <span className="settings-serial-badge">{t("serial.likelyPrinter")}</span>
-                  )}
-                </li>
-              ))
-            )}
-          </ul>
-        )}
-      </dd>
-    </>
-  );
-}
-
-// ── OctoPrint connection check ────────────────────────────────────────────────
-
-function OctoPrintCheckSection({ dirty }: { dirty: boolean }) {
-  const { t } = useI18n();
-  const [result, setResult] = useState<OctoPrintCheckResult | null>(null);
-  const [checking, setChecking] = useState(false);
-
-  const check = () => {
-    if (dirty || checking) return;
-    setChecking(true);
-    setResult(null);
-    api.octoprintCheck()
-      .then(setResult)
-      .catch((e: unknown) => setResult({ ok: false, error: errorMessage(e) }))
-      .finally(() => setChecking(false));
-  };
-
-  return (
-    <div className="settings-octo-check">
-      <button onClick={check} disabled={checking || dirty} className="settings-octo-btn">
-        {checking ? t("settings.printer.checking") : t("settings.printer.checkConnection")}
-      </button>
-      {dirty && <p className="muted">{t("settings.printer.saveBeforeTest")}</p>}
-      {!dirty && result && (
-        <span className={`settings-octo-result ${result.ok ? "ok" : "err"}`}>
-          {result.ok
-            ? t("settings.printer.checkOk", { version: result.version ?? "?" })
-            : (result.error ?? t("settings.printer.checkFail"))}
-        </span>
-      )}
-    </div>
   );
 }

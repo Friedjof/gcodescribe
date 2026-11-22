@@ -8,7 +8,7 @@ import type { ObjectOps } from "./useObjectOps";
 
 /** Sidebar actions share the document loader's navigation and write ordering. */
 export function usePaintPages({ page, setPage, setIndex, setSelectedIds, ops, reloadIndex,
-  confirm, prompt, fail, navigation }: {
+  confirm, prompt, fail, navigation, onLoadingChange }: {
   page: Page | null;
   setPage: React.Dispatch<React.SetStateAction<Page | null>>;
   setIndex: (idx: PageIndex) => void;
@@ -19,9 +19,11 @@ export function usePaintPages({ page, setPage, setIndex, setSelectedIds, ops, re
   prompt: (message: string, defaultValue?: string) => Promise<string | null>;
   fail: (error: unknown) => void;
   navigation: PageNavigation;
+  onLoadingChange?: (pageId: string | null) => void;
 }) {
   const { t } = useI18n();
   const latestPage = useRef(page); latestPage.current = page;
+  const loadSequence = useRef(0);
   const report = (error: unknown, current: () => boolean) => {
     if (current() && !isAbortError(error)) fail(error);
   };
@@ -36,14 +38,20 @@ export function usePaintPages({ page, setPage, setIndex, setSelectedIds, ops, re
   const openPage = async (id: string) => {
     if (id === latestPage.current?.id && !navigation.pending) return;
     const request = navigation.begin();
+    const sequence = ++loadSequence.current;
+    onLoadingChange?.(id);
+    // Fetch alongside activation, but only after the target's queued edits.
+    // Returning to the displayed slide during a switch must read its saved state.
+    const read = flushEdits(id).then(() => api.getPage(id, request.signal));
+    void read.catch(() => {});
     try {
       await flushCurrent();
       const index = await navigation.enqueue(request.current, () => api.activatePage(id));
       if (!index || !request.current()) return;
-      const next = await api.getPage(id, request.signal);
+      const next = await read;
       publish(request, next, index);
     } catch (error) { report(error, request.current); }
-    finally { request.finish(); }
+    finally { if (sequence === loadSequence.current) onLoadingChange?.(null); request.finish(); }
   };
   const newPage = async (folderId?: string | null) => {
     // Claim the intent before awaiting autosave, so a later click supersedes it.

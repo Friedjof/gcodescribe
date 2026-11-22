@@ -76,9 +76,13 @@ def reset_manager() -> None:
 
 
 def serial_enabled() -> bool:
+    from plotter.services.printer_connections import connection_snapshot
     from plotter.services.printer_runtime import printer_settings
 
-    return printer_settings().serial_enabled
+    cfg = printer_settings()
+    return cfg.serial_enabled or any(
+        item["transport"] == SERIAL for item in connection_snapshot(cfg)
+    )
 
 
 def use_serial() -> bool:
@@ -86,7 +90,13 @@ def use_serial() -> bool:
 
 
 def octoprint_configured() -> bool:
+    from plotter.services.printer_connections import connection_snapshot
     from plotter.services.printer_runtime import printer_settings
 
     cfg = printer_settings()
-    return bool(cfg.octoprint_url and cfg.octoprint_api_key)
+    return any(
+        item["transport"] == OCTOPRINT
+        and item.get("octoprint_api_key")
+        and item.get("octoprint_url")
+        for item in connection_snapshot(cfg)
+    )

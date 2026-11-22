@@ -380,6 +380,12 @@ function Games({
     if (preview) generatePreview(preview.gameId);
   };
 
+  useEffect(() => {
+    if (!visible || selected !== "sudoku" || !cal || seeds.resolve("sudoku") === null) return;
+    const timer = window.setTimeout(() => { void generatePreview("sudoku", sudokuSeed); }, 150);
+    return () => { clearTimeout(timer); generationSequence.current++; };
+  }, [visible, selected, profileLoading, profile?.fingerprint, index?.project?.id, sudokuDifficulty, seeds.input("sudoku")]);
+
   const createPageFromTemplate = (gameId: GameId, template: TemplateSpec) => {
     if (!index?.project) return;
     setBusy(true);
@@ -665,7 +671,7 @@ function Games({
                 onRandomize={() => {
                   const seed = seeds.randomize(selected);
                   resetPreview();
-                  generatePreview(selected, seed);
+                  if (selected !== "sudoku") generatePreview(selected, seed);
                 }}
               />
             )}

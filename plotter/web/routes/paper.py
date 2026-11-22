@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
@@ -24,6 +26,8 @@ def get_paper(project_id: str | None = None, profile_id: str | None = None) -> d
 
 class CornerRequest(BaseModel):
     corner: str  # bl | br | tr | tl
+    mode: Literal["manual", "diagonal"] | None = None
+    diagonal: Literal["bl-tr", "tl-br"] = "bl-tr"
 
 
 class CornerAtRequest(BaseModel):
@@ -36,7 +40,9 @@ def set_paper_corner(
     req: CornerRequest, project_id: str | None = None, profile_id: str | None = None
 ) -> dict:
     """Store the current head position as one of the paper corners."""
-    return _paper_service(project_id, profile_id, capture=True).capture(req.corner)
+    return _paper_service(project_id, profile_id, capture=True).capture(
+        req.corner, mode=req.mode, diagonal=req.diagonal
+    )
 
 
 @router.put("/paper/corner/{corner}")

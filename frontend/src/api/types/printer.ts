@@ -1,4 +1,5 @@
-export type PrinterBackendId = "octoprint" | "serial";
+export type PrinterTransport = "octoprint" | "serial";
+export type PrinterBackendId = string;
 
 /** Shared subset of OctoPrint's job payload and the serial worker snapshot. */
 export interface PrinterJob {
@@ -17,7 +18,8 @@ export interface PrinterJobResult {
 /** Unconfigured/offline backends omit fields they cannot determine. */
 export interface PrinterStatus {
   configured: boolean;
-  backend?: PrinterBackendId;
+  backend?: PrinterTransport;
+  printer_id?: string;
   online?: boolean;
   url?: string;
   connection?: { state?: string | null } | null;
@@ -33,6 +35,24 @@ export interface PrinterBackendInfo {
   configured: boolean;
   online: boolean;
   active: boolean;
+  name?: string;
+  transport?: PrinterTransport;
+  available?: boolean;
+  busy?: boolean;
+}
+
+export interface PrinterConnectionInput {
+  name: string;
+  transport: PrinterTransport;
+  serial_port: string;
+  serial_baud: number;
+  octoprint_url: string;
+  octoprint_api_key?: string;
+  octoprint_verify_ssl: boolean;
+}
+export interface PrinterConnection extends Omit<PrinterConnectionInput, "octoprint_api_key"> {
+  id: string;
+  octoprint_api_key_configured: boolean;
 }
 
 export interface OctoPrintCheckResult {

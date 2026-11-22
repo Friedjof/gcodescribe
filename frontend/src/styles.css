@@ -35,3 +35,6 @@
 @import "./styles/editor-ai.css";
 @import "./styles/editor-finish.css";
 @import "./styles/app-tour.css";
+
+@import "./styles/backside.css";
+@import "./styles/printers.css";

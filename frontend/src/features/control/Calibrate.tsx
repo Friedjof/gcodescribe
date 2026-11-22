@@ -25,6 +25,7 @@ export default function Calibrate({ status = null, visible = true, onAction = no
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
   const handledRequest = useRef("");
+  const initialProjectChosen = useRef(false);
   const read = useRef<AbortController | null>(null);
   const draftRevision = useRef(0);
   const detailRef = useRef<HTMLElement>(null);
@@ -32,6 +33,9 @@ export default function Calibrate({ status = null, visible = true, onAction = no
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [cal, setCal] = useState<Calibration | null>(null);
   const [name, setName] = useState("");
+  const [renaming, setRenaming] = useState(false);
+  const [renameDraft, setRenameDraft] = useState("");
+  useEffect(() => { setRenaming(false); }, [selectedId, mode, visible]);
   const [dirty, setDirty] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [speedTesting, setSpeedTesting] = useState(false);
@@ -60,11 +64,18 @@ export default function Calibrate({ status = null, visible = true, onAction = no
     let cancelled = false;
     loadProfiles().then(list => {
       if (cancelled) return;
-      const active = list.find(p => p.id === index?.project?.profileId) ?? list.find(p => p.active) ?? list[0];
+      const active = list.find(p => p.id === index?.project?.profileId) ?? list.find(p => !p.archived) ?? list[0];
       if (active) return openProfile(active.id);
     }).catch(fail);
     return () => { cancelled = true; read.current?.abort(); };
   }, []);
+
+  useEffect(() => {
+    const projectProfile = index?.project?.profileId;
+    if (!projectProfile || !selectedId || initialProjectChosen.current || motionBusy || speedTesting || saving) return;
+    initialProjectChosen.current = true;
+    if (!dirty && selectedId !== projectProfile) void openProfile(projectProfile).catch(fail);
+  }, [index?.project?.profileId, selectedId, motionBusy, speedTesting, saving]);
 
   // Persisted changes are shared; the editor's unsaved draft remains local.
   useEffect(() => {
@@ -86,6 +97,7 @@ export default function Calibrate({ status = null, visible = true, onAction = no
     const token = tourProfile ? `tour:${tour?.request}:${id}` : `request:${request?.nonce}:${id}`;
     if (!id || !cal || !visible || motionBusy || speedTesting || saving || handledRequest.current === token) return;
     handledRequest.current = token;
+    initialProjectChosen.current = true;
     void (async () => {
       if (dirty && (!await confirm(t("profiles.saveBeforeVisual")) || !await save())) return;
       if (focusInvalidInput()) return;
@@ -107,7 +119,7 @@ export default function Calibrate({ status = null, visible = true, onAction = no
   };
 
   const runSpeedTest = async () => {
-    if (!selectedId || !selected?.active || dirty || speedTesting || focusInvalidInput()) return;
+    if (!selectedId || selected?.archived || dirty || speedTesting || focusInvalidInput()) return;
     setSpeedTesting(true);
     try {
       await api.speedTest(selectedId);
@@ -123,6 +135,7 @@ export default function Calibrate({ status = null, visible = true, onAction = no
 
   const select = async (id: string) => {
     if (motionBusy || speedTesting || saving || id === selectedId || !await confirmDiscard()) return;
+    initialProjectChosen.current = true;
     openProfile(id).catch(fail);
   };
 
@@ -146,22 +159,25 @@ export default function Calibrate({ status = null, visible = true, onAction = no
     } catch (error) { fail(error); return false; }
     finally { savingRef.current = false; setSaving(false); }
   };
+  const renameProfile = async () => {
+    const nextName = renameDraft.trim();
+    if (!selectedId || !nextName || savingRef.current || motionBusy || speedTesting) return;
+    savingRef.current = true; setSaving(true);
+    try {
+      // Visual calibration saves independently: never send its potentially stale snapshot.
+      const updated = await api.saveProfile(selectedId, { name: nextName });
+      setName(updated.name); setRenaming(false);
+      profileChanged(updated.id); toast.success(t("profiles.saved"));
+      await loadProfiles();
+    } catch (error) { fail(error); }
+    finally { savingRef.current = false; setSaving(false); }
+  };
   const changeMode = async (next: "visual" | "details") => {
     if (mode === next || motionBusy || speedTesting || saving || focusInvalidInput()) return;
     if (dirty && (!await confirm(t("profiles.saveBeforeVisual")) || !await save())) return;
     if (selectedId) await openProfile(selectedId);
     setMode(next);
   };
-
-  const activate = (id: string) =>
-    api
-      .activateProfile(id)
-      .then((p) => {
-        profileChanged(p.id);
-        toast.success(t("profiles.activated", { name: p.name }));
-        return loadProfiles();
-      })
-      .catch(fail);
 
   const createProfile = async () => {
     if (motionBusy || speedTesting || saving || !await confirmDiscard()) return;
@@ -244,7 +260,7 @@ export default function Calibrate({ status = null, visible = true, onAction = no
       <div className="profile-layout">
         <aside className="card profile-panel">
           <h2>{t("profiles.title")}</h2>
-          <ProfileLibrary profiles={visibleProfiles} selectedId={selectedId} onSelect={select} onActivate={activate} disabled={motionBusy || speedTesting || saving}/>
+          <ProfileLibrary profiles={visibleProfiles} selectedId={selectedId} onSelect={select} projectProfileId={index?.project?.profileId} disabled={motionBusy || speedTesting || saving}/>
           {archivedCount > 0 && <button className="link-button" onClick={() => setShowArchived(!showArchived)}>{showArchived ? t("profiles.hideArchived") : t("profiles.showArchived", { count: String(archivedCount) })}</button>}
           <div className="profile-list-actions">
             <button disabled={motionBusy || speedTesting || saving} onClick={createProfile}>{t("profiles.new")}</button>
@@ -258,15 +274,33 @@ export default function Calibrate({ status = null, visible = true, onAction = no
 
         <section ref={detailRef} className={`card profile-detail${mode === "visual" ? " profile-detail-visual" : ""}`}>
           <header className="profile-editor-heading">
-            <h2 title={name}>{name}</h2>
+            {mode === "visual" && renaming ? <form className="profile-heading-name" onSubmit={event => { event.preventDefault(); void renameProfile(); }}>
+              <input autoFocus aria-label={t("profiles.name")} value={renameDraft} disabled={saving}
+                aria-invalid={!renameDraft.trim()} onChange={event => setRenameDraft(event.target.value)}
+                onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setRenaming(false); } }} />
+              <button type="submit" disabled={saving || !renameDraft.trim()} aria-label={t("common.save")} title={t("common.save")}><EditorIcon name="check" size={16}/></button>
+              <button type="button" disabled={saving} onClick={() => setRenaming(false)} aria-label={t("common.cancel")} title={t("common.cancel")}><EditorIcon name="close" size={16}/></button>
+            </form> : <div className="profile-heading-name"><h2 title={name}>{name}</h2>
+              {mode === "visual" && <button type="button" disabled={motionBusy || speedTesting || saving}
+                aria-label={t("profiles.rename")} title={t("profiles.rename")}
+                onClick={() => { setRenameDraft(name); setRenaming(true); }}><EditorIcon name="text" size={15}/>{t("profiles.renameAction")}</button>}
+            </div>}
+            {mode === "visual" && selectedId && <div className="profile-heading-export">
+              <a className="btn-link" href={`/api/profiles/${encodeURIComponent(selectedId)}/export`} download
+                aria-disabled={renaming || saving} onClick={event => { if (renaming || saving) event.preventDefault(); }}>{t("profiles.exportProfile")}</a>
+              <a className="btn-link" href={`/api/calibration/export?profile_id=${encodeURIComponent(selectedId)}`} download
+                aria-label={t("common.exportXml")} title={t("common.exportXml")}
+                aria-disabled={renaming || saving} onClick={event => { if (renaming || saving) event.preventDefault(); }}>XML</a>
+            </div>}
             <div className="profile-view-toggle" role="group" aria-label={t("profiles.viewMode")}>
               <button aria-pressed={mode === "visual"} disabled={motionBusy || speedTesting || saving} onClick={() => void changeMode("visual").catch(fail)}><EditorIcon name="preview" size={15}/>{t("profiles.visual")}</button>
               <button aria-pressed={mode === "details"} disabled={motionBusy || speedTesting || saving} onClick={() => void changeMode("details").catch(fail)}><EditorIcon name="settings" size={15}/>{t("profiles.details")}</button>
             </div>
             {onSetup && request && <button className="ghost profile-setup-return" onClick={onSetup}>{t("profiles.backToSetup")}</button>}
           </header>
-          {mode === "visual" && selectedId && selected ? <ProfileVisualEditor profileId={selectedId} active={selected.active} archived={selected.archived}
-            visible={visible} status={status} onAction={onAction} onSettings={onSettings} onActivate={() => void activate(selectedId)} onBusyChange={setMotionBusy}/> : <>
+          <p className="profile-project-context">{t("profiles.projectContext")}{index?.project && <> {t("profiles.currentProject", { name: index.project.name, profile: profiles.find(p => p.id === index?.project?.profileId)?.name ?? "—" })}</>}</p>
+          {mode === "visual" && selectedId && selected ? <ProfileVisualEditor profileId={selectedId} archived={selected.archived}
+            visible={visible} status={status} onAction={onAction} onSettings={onSettings} onBusyChange={setMotionBusy}/> : <>
           <p className="calibration-intro">{t("profiles.detailsHint")}</p>
             <div className="field-group">
               <label className="field">
@@ -282,11 +316,8 @@ export default function Calibrate({ status = null, visible = true, onAction = no
                   }}
                 />
               </label>
-              {selected && !selected.active && (
-                <p className="muted">{t("profiles.editingInactive")}</p>
-              )}
             </div>
-            <ProfileSettings cal={cal} onChange={set} canTest={!!selected?.active && !dirty}
+            <ProfileSettings cal={cal} onChange={set} canTest={!!selected && !selected.archived && !dirty}
               speedTesting={speedTesting} onSpeedTest={runSpeedTest}/>
             <div className="profile-actions">
               <div className="profile-actions-main">
@@ -294,11 +325,8 @@ export default function Calibrate({ status = null, visible = true, onAction = no
                   {t("common.save")}
                   {dirty ? " *" : ""}
                 </button>
-                {selected && !selected.active && !selected.archived && (
-                  <button onClick={() => activate(selected.id)}>{t("profiles.activate")}</button>
-                )}
                 <button onClick={duplicate}>{t("profiles.duplicate")}</button>
-                {selected && !selected.archived && !selected.active && (
+                {selected && !selected.archived && selected.id !== index?.project?.profileId && !selected.active && (
                   <button onClick={() => setArchived(true)}>{t("profiles.archive")}</button>
                 )}
                 {selected?.archived && (

@@ -5,7 +5,7 @@ interface CommandSession {
   canMove: () => boolean;
   sameCalibration: () => boolean;
 }
-interface Options { motion?: boolean; needsHome?: boolean }
+interface Options { motion?: boolean; needsHome?: boolean; notify?: boolean }
 
 /** Serialize user commands and invalidate continuations when their view changes. */
 export function useCalibrationCommands(input: {
@@ -41,7 +41,7 @@ export function useCalibrationCommands(input: {
     try {
       const result = await action(session);
       if (!isCurrent() || result === false) return false;
-      current.current.onAction();
+      if (options.notify !== false) current.current.onAction();
       return true;
     } catch (error) {
       if (isCurrent()) current.current.onError(error);

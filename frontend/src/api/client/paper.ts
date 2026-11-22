@@ -6,11 +6,11 @@ import type { Obstacle } from "../types/calibration";
 
 export const paperClient = {
   paper: (projectId?: CalibrationTarget, signal?: AbortSignal) => req<PaperState>(`/api/paper${targetQuery(projectId)}`, { signal }),
-  setCorner: (corner: string, projectId?: CalibrationTarget) =>
+  setCorner: (corner: string, projectId?: CalibrationTarget, capture?: { mode: "manual" | "diagonal"; diagonal: "bl-tr" | "tl-br" }) =>
     req<PaperState>(`/api/paper/corner${targetQuery(projectId)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ corner }),
+      body: JSON.stringify({ corner, ...capture }),
     }),
   setCornerAt: (corner: string, x: number, y: number, projectId?: CalibrationTarget) =>
     req<PaperState>(`/api/paper/corner/${corner}${targetQuery(projectId)}`, {

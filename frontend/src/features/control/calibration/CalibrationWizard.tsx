@@ -97,7 +97,7 @@ export default function CalibrationWizard({
             </button>
             {active === step.id && !step.locked && (
               <div className="wstep-body">
-                <StepContent id={step.id} controls={controls} />
+                <StepContent key={controls.profileId} id={step.id} controls={controls} />
               </div>
             )}
           </div>
@@ -125,7 +125,7 @@ export default function CalibrationWizard({
       </nav>
       <section className="calibration-current-step">
         <h3>{t(current.titleKey)}</h3>
-        {!current.locked && <GuidedCalibrationStep key={current.id} id={current.id} controls={controls} />}
+        {!current.locked && <GuidedCalibrationStep key={`${current.id}:${controls.profileId}`} id={current.id} controls={controls} />}
       </section>
       <div className="calibration-optional-tools">
         <EditorMenu

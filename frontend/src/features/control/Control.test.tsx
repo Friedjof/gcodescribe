@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   listBackends: vi.fn(), error: vi.fn(),
 }));
 vi.mock("../../api", () => ({ api: mocks }));
+vi.mock("../../state/ProjectCalibrationContext", () => ({ useProjectCalibration: () => ({ index: { project: { id: "project" } }, loading: false, error: null }) }));
 vi.mock("../../i18n", () => ({ useI18n: () => ({ t: (key: string) => key }) }));
 vi.mock("../../components/Toasts", () => ({ useToasts: () => ({ error: mocks.error }) }));
 
@@ -51,7 +52,7 @@ describe("manual motion during a print", () => {
     render(<Control status={{ configured: true, online: true, job: { state: "Paused" } }} onAction={vi.fn()} />);
     expect(screen.getByRole("button", { name: "control.penUp" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "control.penUp" }));
-    expect(mocks.pen).toHaveBeenCalledWith(false);
+    expect(mocks.pen).toHaveBeenCalledWith(false, "project");
   });
 
   it.each(["Starting", "Pausing", "Resuming", "Finishing", "Cancelling"])(

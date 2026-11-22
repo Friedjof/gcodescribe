@@ -1,3 +1,4 @@
+import XYJogPad from "./XYJogPad";
 import { useState } from "react";
 import PaginationBar from "../../../components/paging/PaginationBar";
 import { useI18n } from "../../../i18n";
@@ -7,13 +8,13 @@ import { XY_STEPS } from "./steps";
 
 type Controls = Pick<CalibrationController,
   "obsCaptureActive" | "obsCaptureCorner1" | "obstacles" | "deleteObstacle" | "xyStep" |
-  "setXyStep" | "canMove" | "canEdit" | "jogXY" | "kbd" | "homed" | "pos" | "startObstacleCapture" |
+  "jogScope" | "rehome" | "setXyStep" | "canMove" | "canEdit" | "jogXY" | "kbd" | "homed" | "pos" | "startObstacleCapture" |
   "captureObstacleCorner" | "cancelObstacleCapture" | "setActive">;
 
 export default function ObstaclesStep({ controls }: { controls: Controls }) {
   const { t } = useI18n();
   const [requested, setPage] = useState(0);
-  const { obsCaptureActive, obsCaptureCorner1, obstacles, deleteObstacle, xyStep, setXyStep, canMove, canEdit, jogXY, kbd, homed, pos, startObstacleCapture, captureObstacleCorner, cancelObstacleCapture, setActive } = controls;
+  const { obsCaptureActive, obsCaptureCorner1, obstacles, deleteObstacle, xyStep, setXyStep, canMove, canEdit, homed, pos, startObstacleCapture, captureObstacleCorner, cancelObstacleCapture, setActive } = controls;
   const pages = Math.max(1, Math.ceil(obstacles.length / 4));
   const page = Math.min(requested, pages - 1);
   return (
@@ -64,15 +65,7 @@ export default function ObstaclesStep({ controls }: { controls: Controls }) {
             options={XY_STEPS.map((st) => ({ value: st, label: st }))}
             suffix={<em className="muted">mm</em>}
           />
-          <div className="jog compact">
-            <div className="xy">
-              <button disabled={!canMove} onClick={() => jogXY(0, 1)} className={"up" + kbd("up")}>↑</button>
-              <button disabled={!canMove} onClick={() => jogXY(-1, 0)} className={"left" + kbd("left")}>←</button>
-              <span className="pad-center" />
-              <button disabled={!canMove} onClick={() => jogXY(1, 0)} className={"right" + kbd("right")}>→</button>
-              <button disabled={!canMove} onClick={() => jogXY(0, -1)} className={"down" + kbd("down")}>↓</button>
-            </div>
-          </div>
+          <XYJogPad controls={controls} />
           <p className="muted kbd-hint">
             {t("common.keyboard")}: <kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> {t("control.kbdMove")}
           </p>

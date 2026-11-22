@@ -1,4 +1,9 @@
 .project-overview-popup { height: min(720px,92vh); max-height: min(720px,92vh); }
+.project-overview-popup.project-mode-create { height: auto; width: min(520px, 94vw); }
+.project-mode-create .project-overview-body { overflow: auto; }
+.project-mode-create .project-create-form { width: 100%; align-content: start; gap: 14px; }
+.project-mode-create .project-create-form label { align-content: start; }
+.project-mode-create .project-create-form input, .project-mode-create .project-create-form select { height: 32px; min-height: 32px; padding: 5px 8px; }
 .project-overview-popup .project-overview-body { display: flex; flex-direction: column; overflow: hidden; padding: 12px; gap: 9px; }
 .project-overview-intro { margin: 0; gap: 12px; flex: 0 0 auto; }
 .project-overview-intro strong { font-size: 14px; }
@@ -45,3 +50,14 @@ section.project-settings-section { padding: 10px; gap: 8px; border-radius: 3px; 
 .project-pages-tools button, .project-pages-controls input, .project-pages-controls select { min-height: 28px; font-size: 11px; padding: 4px 5px; border-radius: 3px; }
 .project-pages.collapsed .pagination-bar { gap: 0; padding-inline: 0; }
 .project-pages.collapsed .pagination-bar > span { display: none; }
+.project-slide { position: relative; }
+.project-slide-actions { position: absolute; right: 3px; bottom: 2px; display: flex; gap: 1px; background: var(--panel); border-radius: 3px; opacity: 0; pointer-events: none; }
+.project-slide:hover .project-slide-actions, .project-slide:focus-within .project-slide-actions, .project-slide.active .project-slide-actions { opacity: 1; pointer-events: auto; }
+.project-slide-actions > button { width: 22px; height: 22px; min-height: 22px; padding: 3px; border: 0; background: transparent; }
+.project-slide-actions > button:hover { background: var(--panel-2); }
+.project-slide:not(.loading):hover .project-slide-info small, .project-slide:not(.loading):focus-within .project-slide-info small, .project-slide.active:not(.loading) .project-slide-info small { visibility: hidden; }
+.project-slide.loading .project-slide-actions { visibility: hidden; }
+@media (hover: none) { .project-slide-actions { opacity: 1; pointer-events: auto; } .project-slide:not(.loading) .project-slide-info small { visibility: hidden; } }
+.project-slide.loading { box-shadow: inset 2px 0 0 var(--accent); }
+.paint-slide-loading { position: absolute; inset: 0; z-index: 6; display: flex; align-items: flex-start; justify-content: center; padding: 12px; background: color-mix(in srgb, var(--panel) 30%, transparent); color: var(--muted); font-size: 12px; cursor: progress; }
+.paint-context-fieldset, .paint-toolbar-fieldset { display: contents; border: 0; padding: 0; margin: 0; }

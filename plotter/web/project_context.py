@@ -33,6 +33,6 @@ def calibration_profile(
     if project_id is not None:
         return active_project_profile(project_id, profile_id)
     profile = profile_service().get(profile_id) if profile_id else profile_service().active()
-    if motion and (profile["archived"] or profile_service().active()["id"] != profile["id"]):
-        raise HTTPException(409, "Zum Bewegen bitte zuerst dieses Profil aktivieren.")
+    if motion and profile["archived"]:
+        raise HTTPException(409, "Mit einem archivierten Profil kann nicht bewegt werden.")
     return profile

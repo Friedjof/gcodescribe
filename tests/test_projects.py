@@ -285,10 +285,11 @@ def test_project_slide_job_uses_project_layout_when_reference_profile_differs(wo
         sent = client.post("/api/printer/send", json={"filename": filename})
     assert sent.status_code == 200
 
-    # The reference paper outline does not limit the project, but a smaller
-    # physical machine travel limit still does.
+    # Neither the paper outline nor physical limits of an unrelated legacy
+    # default profile can override the profile assigned to this project.
     service.update(other["id"], calibration={"bed_width": 45})
-    assert client.post("/api/printer/send", json={"filename": filename}).status_code == 422
+    with patch.object(op.OctoPrintClient, "upload", return_value={"done": True}):
+        assert client.post("/api/printer/send", json={"filename": filename}).status_code == 200
     service.update(other["id"], calibration={"bed_width": cal.bed_width})
 
     service.update(index["project"]["profileId"], calibration={"draw_feed": 17})

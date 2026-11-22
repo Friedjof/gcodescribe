@@ -9,3 +9,29 @@ it("never turns keyboard navigation in controls into machine movements",()=>{
  for(const target of [screen.getByText("Tool"),screen.getByText("Tab"),screen.getByText("Command"),screen.getByText("Resize"),screen.getByLabelText("Step"),screen.getByText("Modal")])fireEvent.keyDown(target,{key:"ArrowRight"});
  expect(right).not.toHaveBeenCalled();fireEvent.keyDown(screen.getByText("Canvas"),{key:"ArrowRight"});expect(right).toHaveBeenCalledOnce();
 });
+
+it("owns arrow keys on focused jog buttons inside a dialog, including repeats and busy requests", async () => {
+  const { createRef } = await import("react");
+  const scope = createRef<HTMLDivElement>();
+  const up = vi.fn();
+  function Harness({ moving = false }: { moving?: boolean }) {
+    useArrowKeys({ up }, true, { scope, motionEnabled: !moving });
+    return <div role="dialog"><div ref={scope} tabIndex={0}>
+      <button>Jog up</button><input aria-label="Value" />
+      <div role="dialog"><button>Nested modal</button></div>
+    </div><button>Other command</button></div>;
+  }
+  const view = render(<Harness />);
+  const button = screen.getByRole("button", { name: "Jog up" });
+  expect(fireEvent.keyDown(button, { key: "ArrowUp", cancelable: true })).toBe(false);
+  expect(up).toHaveBeenCalledOnce();
+  expect(fireEvent.keyDown(button, { key: "ArrowUp", repeat: true, cancelable: true })).toBe(false);
+  expect(up).toHaveBeenCalledOnce();
+  view.rerender(<Harness moving />);
+  expect(fireEvent.keyDown(button, { key: "ArrowUp", cancelable: true })).toBe(false);
+  expect(up).toHaveBeenCalledOnce();
+  for (const target of [screen.getByLabelText("Value"), screen.getByText("Other command"), screen.getByText("Nested modal")]) {
+    expect(fireEvent.keyDown(target, { key: "ArrowUp", cancelable: true })).toBe(true);
+  }
+  expect(up).toHaveBeenCalledOnce();
+});

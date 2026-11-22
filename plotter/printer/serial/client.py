@@ -21,13 +21,15 @@ class SerialClient:
         self.port = port
         self.baud = baud
         self._transport_factory = transport_factory
+        self._owned_worker: SerialWorker | None = None
 
     @property
     def configured(self) -> bool:
         return bool(self.port)
 
     def _worker(self) -> SerialWorker:
-        return get_worker(self.port, self.baud, self._transport_factory)
+        self._owned_worker = get_worker(self.port, self.baud, self._transport_factory)
+        return self._owned_worker
 
     def ensure_started(self) -> None:
         """Start (and connect) the worker — called when serial becomes active."""
@@ -35,7 +37,9 @@ class SerialClient:
             self._worker()
 
     def close(self) -> None:
-        shutdown_worker()
+        if self._owned_worker is not None:
+            shutdown_worker(self.port, self.baud, expected=self._owned_worker)
+            self._owned_worker = None
 
     def status(self) -> PrinterStatus:
         if not self.configured:
@@ -44,7 +48,7 @@ class SerialClient:
         # configured but not the active backend, the worker won't exist yet — we
         # must not start it here just to answer a status poll.
         worker = peek_worker()
-        if worker is None:
+        if worker is None or worker is not self._owned_worker:
             return {"configured": True, "backend": "serial", "online": False}
         return worker.status()
 

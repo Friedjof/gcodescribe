@@ -56,7 +56,6 @@ def project_job_calibration(meta: dict) -> Calibration:
         saved = Calibration.from_dict(snapshot["calibration"])
         current_profile = ProfileService().get(project["profileId"])
         current = Calibration.from_dict(current_profile["calibration"])
-        machine = Calibration.from_dict(ProfileService().active()["calibration"])
     except (KeyError, TypeError, ValueError, ProfileError) as exc:
         raise ProjectJobError(f"Slide-Kalibrierung kann nicht gelesen werden: {exc}") from exc
     if current_profile.get("archived"):
@@ -72,13 +71,12 @@ def project_job_calibration(meta: dict) -> Calibration:
             f"{differences} Bitte im Designer erneut auf Vorschau oder Plot klicken, "
             "damit die aktuelle Kalibrierung verwendet wird."
         )
-    # The active profile's paper outline is only a size reference. A project
-    # job uses its saved project coordinates, while physical travel and Z
-    # limits still cap any machine movement.
+    # Project jobs use their project's current physical limits. A legacy
+    # default profile must not shrink an unrelated project's machine area.
     physical = replace(saved,
-                       bed_width=min(saved.bed_width, current.bed_width, machine.bed_width),
-                       bed_height=min(saved.bed_height, current.bed_height, machine.bed_height),
-                       z_max=min(saved.z_max, current.z_max, machine.z_max))
+                       bed_width=min(saved.bed_width, current.bed_width),
+                       bed_height=min(saved.bed_height, current.bed_height),
+                       z_max=min(saved.z_max, current.z_max))
     if max(saved.pen_up_z, saved.pen_down_z, saved.resolved_park()[2]) > physical.z_max:
         raise ProjectJobError(
             "Die gespeicherte Stifthöhe überschreitet die aktuelle Z-Grenze des Projekts."

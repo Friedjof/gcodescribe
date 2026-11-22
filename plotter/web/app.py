@@ -53,6 +53,9 @@ async def _lifespan(_: FastAPI):
     from ..services.printer_runtime import reset_manager
 
     reset_manager()
+    from ..ai_images.codex import close_codex
+
+    close_codex()
 
 
 def create_app() -> FastAPI:

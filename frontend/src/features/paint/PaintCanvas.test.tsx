@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import "@testing-library/jest-dom/vitest";
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { Calibration, Page } from "../../api";
@@ -243,4 +244,21 @@ it("lets the user hide rulers and grid independently of snapping", () => {
   expect(view.container.querySelector(".canvas-rulers")).toBeNull();
   expect(view.container.querySelector('rect[fill="url(#pc-grid-major)"]')).toBeNull();
   expect(view.container.querySelector('rect[fill="var(--paper)"]')).not.toBeNull();
+});
+
+it("renders a mirrored reference behind editable ink without adding it to the page or selection", () => {
+  const view = setup();
+  const source = page("front");
+  source.objects = [{ ...source.objects[0], id: "front-object", plotted: true }];
+  const before = JSON.stringify([source, view.props.page]);
+  view.rerender(<PaintCanvas {...view.props} backsideReference={{ page: source, edge: "long", opacity: .15 }}/>);
+  const ghost = view.container.querySelector('[data-backside-reference="front"]')!;
+  expect(ghost).toHaveAttribute("pointer-events", "none");
+  expect(ghost).toHaveAttribute("aria-hidden", "true");
+  expect(ghost).toHaveAttribute("opacity", "0.15");
+  expect(ghost.querySelector("g[transform]")).toHaveAttribute("transform", "matrix(1 0 0 -1 0 80)");
+  expect(ghost.parentElement?.children[ghost.parentElement.children.length - 1]).not.toBe(ghost);
+  expect(view.props.page.objects).toHaveLength(1);
+  expect(JSON.stringify([source, view.props.page])).toBe(before);
+  expect(view.props.onAdd).not.toHaveBeenCalled(); expect(view.props.onUpdateMany).not.toHaveBeenCalled();
 });

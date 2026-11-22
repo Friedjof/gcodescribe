@@ -14,7 +14,7 @@ export default function HomeStep({ cal, controls }: { cal: Calibration; controls
       <p className="muted">{t("paper.step1Hint")}</p>
       {homed && <>
         <p className="calibration-check">✓ {t("paper.homed")}</p>
-        <button className="primary big" onClick={() => setActive("pen")}>{t("paper.continueSetup")}</button>
+        <button className="primary big" onClick={() => setActive("positions")}>{t("paper.continueSetup")}</button>
       </>}
       <button className={homed ? "ghost" : "primary big"} disabled={!canMove} onClick={homeAll}>
         {t("paper.homeXYZ")}

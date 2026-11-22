@@ -158,14 +158,14 @@ def test_speed_test_homes_even_when_position_is_unknown(controller):
     assert controller.position()["homed"] is True
 
 
-def test_speed_test_api_requires_the_active_profile(controller, monkeypatch):
+def test_speed_test_api_requires_an_existing_profile(controller, monkeypatch):
     from plotter.web.app import app
     from plotter.web.routes import printer
 
     monkeypatch.setattr(printer, "controller", lambda: controller)
     client = TestClient(app)
     active_id = ProfileService().active_id()
-    assert client.post("/api/printer/speed-test", json={"profile_id": "other"}).status_code == 409
+    assert client.post("/api/printer/speed-test", json={"profile_id": "other"}).status_code == 404
     controller.client.gcode.assert_not_called()
     result = client.post("/api/printer/speed-test", json={"profile_id": active_id})
     assert result.status_code == 200
@@ -613,7 +613,7 @@ def test_pressure_api_rejects_wrong_profile_and_range_then_clamps_z(controller, 
                 "offset": 1,
             },
         ).status_code
-        == 409
+        == 404
     )
     controller.client.gcode.assert_not_called()
     response = client.post(

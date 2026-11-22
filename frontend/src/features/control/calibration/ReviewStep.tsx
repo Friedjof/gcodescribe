@@ -5,7 +5,7 @@ import { CORNERS } from "./steps";
 
 type Controls = Pick<CalibrationController,
   "homed" | "heightSaved" | "currentBase" | "margin" | "setMargin" | "marginValid" | "apply" |
-  "canMove" | "canEdit" | "plotFrame" | "target" | "rect" | "adoptPaperArea" | "driveToCorner">;
+  "canMove" | "canEdit" | "plotFrame" | "plotCornerTest" | "target" | "rect" | "adoptPaperArea" | "driveToCorner">;
 
 export default function ReviewStep({ controls }: { controls: Controls }) {
   const { t } = useI18n();
@@ -39,7 +39,10 @@ export default function ReviewStep({ controls }: { controls: Controls }) {
         <a className="btn-link" href={`/api/calibration/export${targetQuery(target)}`} download>
           {t("common.exportXml")}
         </a>
+        <button disabled={!canMove || !homed || !heightSaved} onClick={controls.plotCornerTest}
+          title={t("paper.testCornersHint")}>{t("paper.testCorners")}</button>
       </div>
+      <p className="calibration-task-note">{t("paper.testCornersHint")}</p>
       <button type="button" className="ghost" disabled={!rect || !canEdit} onClick={() => { void adoptPaperArea(); }}
         style={{ marginTop: 10 }}>{t("paper.fromCorners")}</button>
       <div className="field-group" style={{ marginTop: 14 }}>

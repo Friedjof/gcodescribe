@@ -3,6 +3,8 @@ import type { GalleryItem, GalleryPreview } from "./gallery";
 /** Feature-gating + capabilities. Disabled responses carry only `enabled`. */
 export interface AiImageStatus {
   enabled: boolean;
+  provider?: "api" | "codex";
+  ready?: boolean;
   model?: string;
   apiMode?: string;
   maxInputMb?: number;

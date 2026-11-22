@@ -11,8 +11,22 @@ export type AssetTask = {
   local?: boolean;
 };
 let snapshot: AssetTask[] = [];
+const HIDDEN_KEY = "gcs.hiddenAssetTasks.v1";
+const hidden = new Set<string>();
+try {
+  const saved: unknown = JSON.parse(localStorage.getItem(HIDDEN_KEY) ?? "[]");
+  if (Array.isArray(saved)) for (const id of saved) if (typeof id === "string") hidden.add(id);
+} catch { /* Notifications also work without browser storage. */ }
+let visibleSnapshot: AssetTask[] = [];
 const listeners = new Set<() => void>();
-const emit = () => listeners.forEach((fn) => fn());
+const emit = () => {
+  visibleSnapshot = snapshot.filter(task => !hidden.has(task.id));
+  listeners.forEach((fn) => fn());
+};
+function hide(id: string) {
+  hidden.add(id);
+  try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...hidden])); } catch { /* Session-only fallback. */ }
+}
 function receive(task: AssetTask, announce = true) {
   if (task.dismissed) { snapshot = snapshot.filter((t) => t.id !== task.id); emit(); return; }
   const previous = snapshot.find((t) => t.id === task.id);
@@ -24,7 +38,7 @@ function receive(task: AssetTask, announce = true) {
   }
 }
 export function useAssetTasks() {
-  return useSyncExternalStore((fn) => { listeners.add(fn); return () => { listeners.delete(fn); }; }, () => snapshot);
+  return useSyncExternalStore((fn) => { listeners.add(fn); return () => { listeners.delete(fn); }; }, () => visibleSnapshot);
 }
 export function watchAssetTasks(onError: (error: unknown) => void) {
   let active = true;
@@ -91,6 +105,18 @@ export async function startRender(id: string, mode: string, detail: number, cont
 export async function taskAction(id: string, action: "cancel" | "retry" | "dismiss") {
   if (action === "dismiss") {
     if (!snapshot.find((t) => t.id === id)?.local) await req(`/api/asset-tasks/${id}`, { method: "DELETE" });
+    hide(id);
     snapshot = snapshot.filter((t) => t.id !== id); emit();
   } else receive(await req<AssetTask>(`/api/asset-tasks/${id}/${action}`, { method: "POST" }));
+}
+
+/** Close notifications; uploads and queued/running work continue normally. */
+export async function dismissAllTasks() {
+  const tasks = [...visibleSnapshot];
+  const finished = tasks.filter(task => !["uploading", "queued", "running"].includes(task.state));
+  for (const task of tasks) if (!finished.includes(task)) hide(task.id);
+  emit();
+  const results = await Promise.allSettled(finished.map(task => taskAction(task.id, "dismiss")));
+  const failure = results.find(result => result.status === "rejected");
+  if (failure?.status === "rejected") throw failure.reason;
 }

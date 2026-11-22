@@ -6,7 +6,7 @@ import Segmented from "../../../components/Segmented";
 import { Z_STEPS } from "./steps";
 
 type Controls = Pick<CalibrationController,
-  "heightSaved" | "homed" | "canMove" | "canEdit" | "homeAll" | "pos" | "zStep" | "setZStep" | "kbd" |
+  "atPenPosition" | "preparePen" | "jogScope" | "heightSaved" | "homed" | "canMove" | "canEdit" | "homeAll" | "pos" | "zStep" | "setZStep" | "kbd" |
   "jogZ" | "savePenHeight" | "testPen" | "setPenHeightValue" | "setActive">;
 
 export default function PenStep({ cal, controls }: { cal: Calibration; controls: Controls }) {
@@ -32,6 +32,8 @@ export default function PenStep({ cal, controls }: { cal: Calibration; controls:
         </div>
       )}
 
+      <p className="muted">{t("paper.penLocation", { x: cal.calibration_x.toFixed(1), y: cal.calibration_y.toFixed(1) })}</p>
+      <button disabled={!canMove || !homed} onClick={controls.preparePen}>{t("paper.preparePen")}</button>
       <p className="muted">{t("paper.step2Hint")}</p>
       <details className="collapsible" open={!heightSaved}>
         <summary>{t("paper.penInstructions")}</summary>
@@ -40,7 +42,7 @@ export default function PenStep({ cal, controls }: { cal: Calibration; controls:
           <li>{t("paper.penLiftInstruction")}</li>
         </ol>
       </details>
-      <div className="z-panel">
+      <div className="z-panel calibration-jog-scope" ref={controls.jogScope} tabIndex={0} role="group" aria-label={t("paper.keyboardZ")} onClickCapture={() => controls.jogScope.current?.focus({ preventScroll: true })}>
         <div className="z-readout">
           <span className="muted">{t("paper.currentZ")}</span>
           <strong>{homed && pos ? `${pos.z.toFixed(2)} mm` : t("paper.notHomed")}</strong>
@@ -53,14 +55,14 @@ export default function PenStep({ cal, controls }: { cal: Calibration; controls:
         <div className="z-buttons">
           <button
             className={"big" + kbd("raise") + kbd("up")}
-            disabled={!canMove || !homed}
+            disabled={!canMove || !homed || !controls.atPenPosition}
             onClick={() => jogZ(1)}
           >
             Z + {zStep}
           </button>
           <button
             className={"big" + kbd("lower") + kbd("down")}
-            disabled={!canMove || !homed}
+            disabled={!canMove || !homed || !controls.atPenPosition}
             onClick={() => jogZ(-1)}
           >
             Z − {zStep}
@@ -72,22 +74,22 @@ export default function PenStep({ cal, controls }: { cal: Calibration; controls:
           </p>
         )}
         <div className="save-row">
-          <button disabled={!canMove || !homed} onClick={() => savePenHeight("down")}>
+          <button disabled={!canMove || !homed || !controls.atPenPosition} onClick={() => savePenHeight("down")}>
             {t("paper.saveAsDown")}
           </button>
-          <button disabled={!canMove || !homed} onClick={() => savePenHeight("up")}>
+          <button disabled={!canMove || !homed || !controls.atPenPosition} onClick={() => savePenHeight("up")}>
             {t("paper.saveAsUp")}
           </button>
         </div>
         <div className="save-row" style={{ marginTop: 4 }}>
           <button
-            disabled={!canMove || !homed || !heightSaved}
+            disabled={!canMove || !homed || !controls.atPenPosition || !heightSaved}
             onClick={() => testPen(true)}
           >
             {t("paper.testLower")}
           </button>
           <button
-            disabled={!canMove || !homed || !heightSaved}
+            disabled={!canMove || !homed || !controls.atPenPosition || !heightSaved}
             onClick={() => testPen(false)}
           >
             {t("paper.testRaise")}

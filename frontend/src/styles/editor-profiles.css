@@ -80,3 +80,14 @@
 
 .profile-compat-notice { display: flex; align-items: center; gap: 8px; padding: 6px 10px; flex-shrink: 0; font-size: 11px; line-height: 1.4; background: var(--panel-2); border-bottom: 1px solid var(--border); }
 .profile-compat-notice button { flex-shrink: 0; font-size: 11px; padding: 3px 6px; }
+
+.profile-editor-heading { flex-wrap: wrap; }
+.profile-heading-name { display: flex; align-items: center; gap: 5px; flex: 1; min-width: 160px; }
+.profile-heading-name h2 { flex: 0 1 auto; }
+.profile-heading-name input { min-width: 0; flex: 1; max-width: 340px; }
+.profile-heading-name button { display: grid; place-items: center; flex-shrink: 0; min-height: 27px; padding: 3px 5px; }
+.profile-heading-export { display: flex; gap: 5px; align-items: center; }
+.profile-heading-export .btn-link { font-size: 11px; min-height: 27px; padding: 4px 7px; white-space: nowrap; }
+.profile-heading-export [aria-disabled="true"] { opacity: .45; cursor: default; }
+.profile-heading-name button { display: flex; align-items: center; justify-content: center; gap: 4px; font-size: 11px; }
+.profile-project-context { margin: 0; padding: 7px 10px; color: var(--muted); background: var(--panel-2); border-bottom: 1px solid var(--border); font-size: 11px; line-height: 1.4; flex-shrink: 0; }

@@ -7,7 +7,7 @@ export function settingsGroups(section: string, values: SettingsPatch) {
     { id: "serial", fields: entries.filter(([key]) => key.startsWith("serial_")) },
   ];
   if (section === "ai") return [
-    { id: "access", fields: entries.filter(([key]) => ["enabled", "fake", "api_key_configured"].includes(key)) },
+    { id: "access", fields: [["provider", values.provider ?? "api"] as [string, string], ...entries.filter(([key]) => ["enabled", "fake", "api_key_configured"].includes(key))] },
     { id: "output", fields: entries.filter(([key]) => ["model", "api_mode", "size", "quality"].includes(key)) },
     { id: "limits", fields: entries.filter(([key]) => ["max_input_mb", "timeout_seconds"].includes(key)) },
   ];

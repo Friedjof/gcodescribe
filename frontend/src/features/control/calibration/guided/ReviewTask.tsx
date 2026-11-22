@@ -45,6 +45,7 @@ export default function ReviewTask({ controls: c }: Props) {
         </button>
       </div>
       <p className="calibration-task-note">{t("paper.marginHint")}</p>
+      <p className="calibration-task-note">{t("paper.testCornersHint")}</p>
       <div className="calibration-task-actions">
         <EditorMenu
           label={t("paper.driveToPlotCorners")}
@@ -65,6 +66,8 @@ export default function ReviewTask({ controls: c }: Props) {
           <EditorIcon name="shape" size={16} />
           {t("paper.testFrame")}
         </button>
+        <button type="button" disabled={!c.canMove || !c.homed || !c.heightSaved}
+          onClick={c.plotCornerTest} title={t("paper.testCornersHint")}>{t("paper.testCorners")}</button>
       </div>
     </div>
   );

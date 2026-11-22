@@ -3,6 +3,7 @@ from __future__ import annotations
 from plotter.artwork.export import calibration_comment
 from plotter.core.calibration import Calibration, feed_word, z_max_feedrate_line
 from plotter.gcode.safety import GcodeSafetyChecker
+from plotter.geometry.routing import route_travel
 
 
 def build_vpype_config(cal: Calibration, profile: str = "plotter") -> str:
@@ -137,6 +138,25 @@ def test_pattern(name: str, cal: Calibration) -> str:
             _move(cal, x0, y0, True),
             _pen_up(cal),
         ]
+    elif name == "corners":
+        # Front left -> back left -> back right -> front right, with no drawn edges.
+        previous = (0.0, 0.0)  # Starting jobs always home before sending.
+        for point in [(x0, y0), (x0, y1), (x1, y1), (x1, y0)]:
+            for wx, wy in route_travel(
+                previous, point, cal.obstacles, bed_bounds=(cal.bed_width, cal.bed_height)
+            ):
+                lines.append(_move(cal, wx, wy, False))
+            lines += [_pen_down(cal), "G4 P100", _pen_up(cal)]
+            previous = point
+        # Route the return as well, so the footer's final park move is stationary.
+        if cal.park_after_plot:
+            px, py, pz = cal.resolved_park()
+            if abs(pz - cal.pen_up_z) > 1e-6:
+                lines.append(f"G0 Z{pz:.3f} {feed_word(cal.z_feed)}")
+            for wx, wy in route_travel(
+                previous, (px, py), cal.obstacles, bed_bounds=(cal.bed_width, cal.bed_height)
+            ):
+                lines.append(_move(cal, wx, wy, False))
     elif name == "cross":
         lines += [
             _move(cal, cx, y0, False),
@@ -183,4 +203,4 @@ def test_pattern(name: str, cal: Calibration) -> str:
     return calibration_comment(cal) + gcode
 
 
-TEST_PATTERNS = ["frame", "cross", "pen", "grid"]
+TEST_PATTERNS = ["frame", "corners", "cross", "pen", "grid"]

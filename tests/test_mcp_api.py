@@ -657,7 +657,7 @@ def test_mcp_page_plot_bounds_follow_current_project_without_saving_or_uploading
 @pytest.mark.parametrize("tool_name", [
     "plot_page", "create_page_and_plot_polylines", "add_polylines_to_page_and_plot",
 ])
-@pytest.mark.parametrize("change", ["machine_bed", "project_changed_during_render"])
+@pytest.mark.parametrize("change", ["project_bed", "project_changed_during_render"])
 def test_mcp_project_jobs_revalidate_before_any_homing_or_upload(
     monkeypatch, client, cal, workspace, tool_name, change,
 ):
@@ -679,10 +679,8 @@ def test_mcp_project_jobs_revalidate_before_any_homing_or_upload(
         }]})
     before = client.get(f"/api/pages/{page_id}").json()
     profiles = ProfileService()
-    if change == "machine_bed":
-        machine = profiles.create("Kleineres Druckbett")
-        profiles.update(machine["id"], calibration={"bed_width": 45})
-        profiles.activate(machine["id"])
+    if change == "project_bed":
+        profiles.update(project_profile_id, calibration={"bed_width": 45})
     else:
         def change_profile_after_render(*args, **kwargs):
             path = save_scene_job(*args, **kwargs)

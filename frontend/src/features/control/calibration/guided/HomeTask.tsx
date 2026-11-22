@@ -45,7 +45,7 @@ export default function HomeTask({ controls: c }: Props) {
           type="button"
           className={c.homed ? "primary" : ""}
           disabled={!c.homed}
-          onClick={() => c.setActive("pen")}
+          onClick={() => c.setActive("positions")}
         >
           {t("common.next")} →
         </button>

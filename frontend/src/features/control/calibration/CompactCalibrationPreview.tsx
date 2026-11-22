@@ -97,6 +97,8 @@ export default function CompactCalibrationPreview({
       )}
       <CalibrationMap cal={cal} controls={c} />
       <div className="calibration-map-status">
+        {c.homed && c.pos && <span className={c.pos.z >= cal.pen_up_z - 0.001 ? "pen-state up" : "pen-state down"}
+          title={t("paper.defaultPenUp")}>{t(c.pos.z >= cal.pen_up_z - 0.001 ? "paper.penUpStrong" : "paper.penDownStrong")}</span>}
         <span title={t("paper.drawingArea")}>
           {c.currentPlot.w.toFixed(0)} × {c.currentPlot.h.toFixed(0)} mm
         </span>

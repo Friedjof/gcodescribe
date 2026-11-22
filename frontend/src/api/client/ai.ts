@@ -2,6 +2,10 @@ import { req } from "./req";
 import type { AiImageStatus, AiImageResult } from "../types/ai";
 
 export const aiClient = {
+  codexStatus: () => req<{ available: boolean; authenticated: boolean; imageGeneration: boolean; email?: string; plan?: string; error?: string }>("/api/ai-images/codex/status"),
+  codexLogin: () => req<{ loginId: string; verificationUrl: string; userCode: string }>("/api/ai-images/codex/login", { method: "POST" }),
+  codexCancelLogin: (loginId: string) => req("/api/ai-images/codex/login/cancel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ loginId }) }),
+  codexLogout: () => req("/api/ai-images/codex/logout", { method: "POST" }),
   aiImageStatus: () => req<AiImageStatus>("/api/ai-images/status"),
   aiImageGenerate: (
     file: File | null,

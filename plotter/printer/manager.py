@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -34,6 +35,7 @@ class PrinterManager:
         *,
         on_selection: Callable[[str], None] | None = None,
         on_connection_changed: Callable[[], None] | None = None,
+        metadata: dict[str, dict] | None = None,
     ):
         self._backends = dict(backends)
         self._active = active
@@ -44,6 +46,7 @@ class PrinterManager:
         self._closed = False
         self._on_selection = on_selection
         self._on_connection_changed = on_connection_changed
+        self._metadata = metadata or {}
         # If serial starts out active, connect it now so its status reflects
         # reality (lazy lifecycle: only the active serial backend is connected).
         self._ensure_active_started()
@@ -111,7 +114,12 @@ class PrinterManager:
                 self._on_selection(backend_id)
 
     def reconfigure(
-        self, backends: dict[str, PrinterBackend], active: str, *, preserve_selection: bool = False
+        self,
+        backends: dict[str, PrinterBackend],
+        active: str,
+        *,
+        preserve_selection: bool = False,
+        metadata: dict[str, dict] | None = None,
     ) -> bool:
         """Apply prepared connections, or defer if the active job would be affected.
 
@@ -119,7 +127,10 @@ class PrinterManager:
         during a plot. Selection, commands and lifecycle changes share one lock.
         """
         with self._transition():
-            return self._apply_backends(backends, active, preserve_selection=preserve_selection)
+            applied = self._apply_backends(backends, active, preserve_selection=preserve_selection)
+            if applied and metadata is not None:
+                self._metadata = metadata
+            return applied
 
     def _apply_backends(
         self, backends: dict[str, PrinterBackend], active: str, *, preserve_selection: bool = False
@@ -187,15 +198,30 @@ class PrinterManager:
         if not self.configured:
             return []
         with self._operation():
-            return [
-                {
+            result = []
+            for bid, backend in self._backends.items():
+                status = backend.status()
+                meta = self._metadata.get(bid, {})
+                reachable = bool(status.get("online", False))
+                connection_state = ((status.get("connection") or {}).get("state") or "").lower()
+                disconnected = meta.get("transport") == OCTOPRINT and any(
+                    word in connection_state
+                    for word in ("closed", "offline", "error", "connecting")
+                )
+                item = {
                     "id": bid,
                     "configured": backend.configured,
-                    "online": bool(backend.status().get("online", False)),
+                    "online": reachable and not disconnected,
                     "active": bid == self._active,
+                    **meta,
                 }
-                for bid, backend in self._backends.items()
-            ]
+                if meta:
+                    item["busy"] = self._status_busy(status)
+                    item["available"] = reachable or (
+                        meta.get("transport") == SERIAL and os.path.exists(meta.get("port", ""))
+                    )
+                result.append(item)
+            return result
 
     def job_active(self) -> bool:
         if not self.configured:
@@ -244,7 +270,8 @@ class PrinterManager:
             return {"configured": False}
         with self._operation() as (backend_id, backend):
             st: PrinterStatus = {**backend.status()}
-            st["backend"] = backend_id
+            st["backend"] = self._metadata.get(backend_id, {}).get("transport", backend_id)
+            st["printer_id"] = backend_id
             return st
 
     def upload(self, gcode_path: Path, *, start: bool = False) -> dict:

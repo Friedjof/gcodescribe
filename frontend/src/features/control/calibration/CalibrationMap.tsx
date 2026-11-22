@@ -41,6 +41,7 @@ export default function CalibrationMap({
       }
       selectedPosition={positionsOpen ? positions.kind : null}
       target={positions.target}
+      activeCorner={active === "corners" ? controls.selectedCorner : undefined}
       onDragCorner={
         visible && canEdit && active === "corners"
           ? handleDragCorner

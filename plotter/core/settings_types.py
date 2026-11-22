@@ -18,6 +18,7 @@ class PublicPrinterSettings(TypedDict):
 
 
 class PublicAiSettings(TypedDict):
+    provider: str
     enabled: bool
     fake: bool
     api_key_configured: bool

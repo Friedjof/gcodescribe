@@ -195,7 +195,7 @@ export default function AiImageDesigner({
   // baseVariantId set → a feedback refinement (no re-upload); else first pass.
   const generate = (baseVariantId?: string) => {
     if (busy) return;
-    if (!baseVariantId && !canGenerateInitial) return;
+    if (status?.ready === false || (!baseVariantId && !canGenerateInitial)) return;
     if (baseVariantId && !feedback.trim()) return;
     setBusy(true);
     setErr(null);
@@ -445,7 +445,8 @@ export default function AiImageDesigner({
         )}
 
         </div>
-        <button className="primary" disabled={!canGenerateInitial || busy} onClick={() => generate()}>
+        {status?.ready === false && <p className="muted" role="status">{t("codex.notReady")}</p>}
+        <button className="primary" disabled={status?.ready === false || !canGenerateInitial || busy} onClick={() => generate()}>
           {busy && !selected ? t("ai.generating") : t("ai.generate")}
         </button>
         <p className="muted small ai-cost">{t("ai.costHint")}</p>
@@ -641,7 +642,7 @@ export default function AiImageDesigner({
                 )}
                 <button
                   className="primary"
-                  disabled={busy || !feedback.trim()}
+                  disabled={status?.ready === false || busy || !feedback.trim()}
                   onClick={() => generate(selected.variantId)}
                 >
                   {busy ? t("ai.generating") : t("ai.regenerate")}

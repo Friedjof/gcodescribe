@@ -187,7 +187,7 @@ export default function ProjectOverviewPopup({ activeId, movePageId, onClose, on
   </> : undefined;
 
   return <Modal title={mode === "list" ? movePageId ? "Slide verschieben" : "Projekte" : mode === "create" ? "Neues Projekt" : `Projekt: ${selected?.name ?? ""}`}
-    onClose={() => !busy && onClose()} footer={footer} className="project-overview-popup" bodyClassName="project-overview-body">
+    onClose={() => !busy && onClose()} footer={footer} className={`project-overview-popup project-mode-${mode}`} bodyClassName="project-overview-body">
     {error && <p className="banner err" role="alert">{error}</p>}
     {mode === "list" ? <>
       <div className="project-overview-intro">

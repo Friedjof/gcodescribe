@@ -4,14 +4,16 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperti
 import { createPortal } from "react-dom";
 import type { PageGroup, PageIndex, PageMeta } from "../../api";
 import PageThumbnail from "./PageThumbnail";
+import EditorIcon from "../../components/editor/EditorIcon";
 
 type Dragged = { kind: "slide" | "folder"; id: string };
 
 export default function ProjectPagePanel({ index, activePageId, onOpenProjects, onOpen, onNew,
   onRename, onDuplicate, onRemove, onReorder, onCreateGroup, onRenameGroup, onDeleteGroup,
-  onSetPageGroup, onSetGroupParent, onMove, sidebarCollapsed, onToggleSidebar }: {
+  onSetPageGroup, onSetGroupParent, onMove, sidebarCollapsed, onToggleSidebar, loadingPageId }: {
   index: PageIndex;
   activePageId: string;
+  loadingPageId?: string | null;
   onOpenProjects: () => void;
   onOpen: (id: string) => void;
   onNew: (folderId?: string | null) => void;
@@ -139,9 +141,8 @@ export default function ProjectPagePanel({ index, activePageId, onOpenProjects, 
 
   const renderPage = (page: PageMeta) => {
     const active = page.id === activePageId;
-    const menuId = `slide:${page.id}`;
     return <li key={page.id}
-      className={`project-slide${active ? " active" : ""}${dropTarget === page.id ? " drop-before" : ""}`}
+      className={`project-slide${active ? " active" : ""}${loadingPageId === page.id ? " loading" : ""}${dropTarget === page.id ? " drop-before" : ""}`}
       draggable={canDrag} onDragStart={canDrag ? () => setDrag({ kind: "slide", id: page.id }) : undefined}
       onDragEnd={() => { setDrag(null); setDropTarget(null); }}
       onDragOver={(event) => { if (canDrag && drag?.kind === "slide" && drag.id !== page.id) {
@@ -153,20 +154,15 @@ export default function ProjectPagePanel({ index, activePageId, onOpenProjects, 
         <PageThumbnail page={page} />
         {!sidebarCollapsed && <span className="project-slide-info">
           <strong>{page.name}</strong>
-          <small>{page.objectCount === 0 ? "Leerer Slide" : `${page.objectCount} Objekte`}</small>
+          <small>{loadingPageId === page.id ? "Wird geladen …" : page.objectCount === 0 ? "Leerer Slide" : `${page.objectCount} ${page.objectCount === 1 ? "Objekt" : "Objekte"}`}</small>
         </span>}
       </button>
-      {!sidebarCollapsed && <div className="project-action-menu" data-project-action-menu>
-        <button className="project-more" title={`Aktionen für ${page.name}`} aria-label={`Aktionen für ${page.name}`}
-          aria-haspopup="menu" aria-expanded={menu?.id === menuId}
-          onClick={(event) => toggleMenu(menuId, event.currentTarget)}>⋯</button>
-        {popover(menuId, <>
-          <button role="menuitem" onClick={() => action(() => onRename(page.id, page.name))}>Umbenennen</button>
-          <button role="menuitem" onClick={() => action(() => onDuplicate(page.id))}>Duplizieren</button>
-          <button role="menuitem" onClick={() => action(() => onMove(page.id))}>In anderes Projekt verschieben</button>
-          {page.groupId && <button role="menuitem" onClick={() => action(() => onSetPageGroup(page.id, null))}>Aus Ordner nehmen</button>}
-          <button role="menuitem" className="danger" onClick={() => action(() => onRemove(page.id))}>Löschen</button>
-        </>)}
+      {!sidebarCollapsed && <div className="project-slide-actions" role="group" aria-label={`Slide bearbeiten: ${page.name}`}>
+        <button type="button" title="Umbenennen" aria-label={`Umbenennen: ${page.name}`} onClick={() => onRename(page.id, page.name)}><EditorIcon name="text" size={13}/></button>
+        <button type="button" title="Duplizieren" aria-label={`Duplizieren: ${page.name}`} onClick={() => onDuplicate(page.id)}><EditorIcon name="copy" size={13}/></button>
+        <button type="button" title="In anderes Projekt verschieben" aria-label={`Verschieben: ${page.name}`} onClick={() => onMove(page.id)}><EditorIcon name="folder" size={13}/></button>
+        {page.groupId && <button type="button" title="Aus Ordner nehmen" aria-label={`Aus Ordner nehmen: ${page.name}`} onClick={() => onSetPageGroup(page.id, null)}><EditorIcon name="previous" size={13}/></button>}
+        <button type="button" className="danger" title="Löschen" aria-label={`Löschen: ${page.name}`} onClick={() => onRemove(page.id)}><EditorIcon name="trash" size={13}/></button>
       </div>}
     </li>;
   };
@@ -228,10 +224,11 @@ export default function ProjectPagePanel({ index, activePageId, onOpenProjects, 
   return <aside className={`paint-pages project-pages${sidebarCollapsed ? " collapsed" : ""}`}>
     <div className="project-sidebar-head">
       <button className="project-switch" onClick={onOpenProjects} title="Projektübersicht öffnen"
+        aria-haspopup="dialog"
         aria-label={`Projektübersicht öffnen: ${index.project?.name ?? "Projekt"}`}>
         <span className="project-switch-icon" aria-hidden="true">▤</span>
         {!sidebarCollapsed && <><span className="project-switch-text"><strong>{index.project?.name ?? "Projekt"}</strong>
-          <small>{index.activeProfile?.name ?? "Projektprofil"}</small></span><span aria-hidden="true">⌄</span></>}
+          <small>{index.activeProfile?.name ?? "Projektprofil"}</small></span><EditorIcon name="open" size={14} /></>}
       </button>
       <button className="ghost tiny pages-collapse-btn" onClick={onToggleSidebar}
         aria-label={sidebarCollapsed ? "Leiste öffnen" : "Leiste schließen"}

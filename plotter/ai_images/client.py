@@ -204,10 +204,21 @@ class OpenAiImageApiClient:
 
 
 def make_client(config: AiImageConfig) -> AiImageClient:
-    """Pick the client for the active configuration: fake when AI_IMAGE_FAKE is
-    set, otherwise the real OpenAI client when a key is present."""
+    """Use the fake client or the explicitly selected provider; never fall back."""
     if config.fake:
         return FakeAiImageClient()
-    if config.api_key:
+    if config.provider == "codex":
+        return CodexImageClient(config)
+    if config.provider == "api" and config.api_key:
         return OpenAiImageApiClient(config)
     raise AiImageError("not_configured", "AI Designer ist nicht konfiguriert.")
+
+
+class CodexImageClient:
+    def __init__(self, config: AiImageConfig):
+        self.config = config
+
+    def generate_plotter_image(self, request: AiImageRequest) -> AiImageOutput:
+        from .codex import get_codex
+
+        return get_codex().generate(request, self.config.timeout_seconds)

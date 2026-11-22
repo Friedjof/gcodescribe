@@ -30,7 +30,7 @@ export function useObjectCommandContext(options: ObjectCommandOptions) {
     }>) => {
         const current = latestPage.current?.id === target.id ? latestPage.current : cachedPage(target.id);
         if (!current)
-            return;
+            return false;
         let changed = false, skipped = false;
         const objects = current.objects.flatMap((object) => {
             const replacement = replacements.get(object.id);
@@ -47,7 +47,7 @@ export function useObjectCommandContext(options: ObjectCommandOptions) {
         if (skipped)
             fail(new Error(t("paint.editChanged")));
         if (!changed)
-            return;
+            return false;
         if (latestPage.current?.id === target.id) {
             undoStack.current.push(cloneObjects(current.objects));
             redoStack.current = [];
@@ -57,6 +57,7 @@ export function useObjectCommandContext(options: ObjectCommandOptions) {
             setSelectedIds((ids) => ids.filter((id) => objects.some((obj) => obj.id === id)));
         }
         queueObjects(target.id, objects);
+        return !skipped;
     };
     const undoStack = useRef<SceneObject[][]>([]);
     const redoStack = useRef<SceneObject[][]>([]);

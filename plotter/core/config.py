@@ -20,6 +20,7 @@ _PRINTER_DEFAULTS: dict = {
 }
 
 _AI_DEFAULTS: dict = {
+    "provider": "api",
     "fake": False,
     "api_key": "",
     "model": "gpt-image-2",
@@ -81,6 +82,7 @@ class AiSettings:
     quality: str
     max_input_mb: int
     timeout_seconds: int
+    provider: str = "api"
 
 
 @dataclass(frozen=True)
@@ -136,6 +138,7 @@ class AppSettings:
                 "default_backend": self.printer.default_backend,
             },
             "ai": {
+                "provider": self.ai.provider,
                 "enabled": self.ai.enabled,
                 "fake": self.ai.fake,
                 "api_key_configured": bool(self.ai.api_key),
@@ -318,8 +321,10 @@ def _load(saved: dict | None) -> tuple[AppSettings, SourceMap]:
         "AI_IMAGE_FAKE", _AI_DEFAULTS["fake"],
         s.get("ai.fake"), ai_src, "fake",
     )
+    ai_provider = _str("AI_IMAGE_PROVIDER", "api", s.get("ai.provider"), ai_src, "provider")
     ai = AiSettings(
-        enabled=bool(api_key) or fake,
+        enabled=(bool(api_key) and ai_provider == "api") or fake or ai_provider == "codex",
+        provider=ai_provider,
         fake=fake,
         api_key=api_key,
         model=_str(

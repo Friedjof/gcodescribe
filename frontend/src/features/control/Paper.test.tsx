@@ -16,7 +16,7 @@ const render = (ui: ReactElement) => renderComponent(ui, { wrapper: ({ children 
 const mocks = vi.hoisted(() => ({
   paper: vi.fn(), profileCalibration: vi.fn(), position: vi.fn(), activeProfile: vi.fn(), listJobs: vi.fn(),
   listPages: vi.fn(), activateProfile: vi.fn(), saveProfile: vi.fn(), getProfile: vi.fn(),
-  move: vi.fn(), moveToPosition: vi.fn(), positionFromHead: vi.fn(), pen: vi.fn(),
+  raisePen: vi.fn(), testDot: vi.fn(), move: vi.fn(), moveToPosition: vi.fn(), positionFromHead: vi.fn(), pen: vi.fn(),
   saveCalibration: vi.fn(), jog: vi.fn(), error: vi.fn(),
   homeAndMoveToPosition: vi.fn(), home: vi.fn(), penFromPosition: vi.fn(),
   setCorner: vi.fn(), clearCorner: vi.fn(), resetPaper: vi.fn(), applyPaper: vi.fn(),
@@ -76,8 +76,8 @@ beforeEach(() => {
   mocks.testPattern.mockResolvedValue({ filename: "frame.gcode" });
   mocks.send.mockResolvedValue({ ok: true });
   mocks.move.mockResolvedValue({ ok: true, position: head });
-  mocks.moveToPosition.mockImplementation(async (kind, target) => {
-    head = { ...head, ...(target ?? { x: 105, y: kind === "park" ? 210 : 105 }), z: kind === "park" ? 10 : 1 };
+  mocks.moveToPosition.mockImplementation(async (kind, target, _scope, liftOnly) => {
+    head = { ...head, ...(target ?? { x: profileCalibration.calibration_x, y: kind === "park" ? profileCalibration.park_y : profileCalibration.calibration_y }), z: liftOnly ? head.z : kind === "park" ? 10 : 1 };
     return { ok: true, position: { ...head } };
   });
   mocks.homeAndMoveToPosition.mockImplementation(async (kind) => {
@@ -92,6 +92,8 @@ beforeEach(() => {
     };
     return profileCalibration;
   });
+  mocks.raisePen.mockImplementation(async () => ({ ok: true, position: head }));
+  mocks.testDot.mockResolvedValue({ ok: true, position: head });
   mocks.pen.mockImplementation(async (down) => {
     head = { ...head, z: down ? 1 : 5 };
     return { ok: true, z: head.z, position: head };
@@ -109,6 +111,9 @@ async function setup(status = { online: true }) {
     x: 0, y: 0, matrixTransform() { return { x: this.x, y: this.y }; },
   }) });
   Object.defineProperty(svg, "getScreenCTM", { value: () => ({ inverse: () => ({}) }) });
+  if (status.online !== false && !("motion_locked" in status && status.motion_locked) && !("job" in status)) {
+    await waitFor(() => expect(screen.getByRole("button", { name: "paper.homeXYZ" })).toBeEnabled());
+  }
   return { ...view, svg, onAction };
 }
 
@@ -136,24 +141,24 @@ it("keeps the plot area passive without resize handles", async () => {
   expect(mocks.saveCalibration).not.toHaveBeenCalled();
 });
 
-function openPositions() { fireEvent.click(screen.getByRole("button", { name: /paper.positions.title/ })); }
+async function openPositions() { await act(async () => { fireEvent.click(screen.getByRole("button", { name: /paper.positions.title/ })); }); }
 function targetClick(svg: SVGSVGElement) { fireEvent.click(svg, { clientX: 40, clientY: 180 }); }
 
-it("keeps four main steps before optional settings and requires explicit click-to-move", async () => {
+it("puts positions before pen height before optional settings and requires explicit click-to-move", async () => {
   const { container, svg } = await setup();
   const steps = Array.from(container.querySelectorAll(".wstep-title")).map((el) => el.textContent);
-  expect(steps).toEqual(["paper.step1", "paper.step2", "paper.step3", "paper.step5", "paper.positions.title", "paper.step4Obstacles"]);
+  expect(steps).toEqual(["paper.step1", "paper.positions.title", "paper.step2", "paper.step3", "paper.step5", "paper.step4Obstacles"]);
   expect(container.querySelector("section")?.querySelector(".wizard")).not.toBeNull();
   const toggle = screen.getByRole("button", { name: "paper.clickMove" });
   expect(toggle).toHaveAttribute("aria-pressed", "false");
   targetClick(svg);
   expect(mocks.move).not.toHaveBeenCalled();
   fireEvent.click(toggle);
-  openPositions();
+  await openPositions();
   expect(toggle).toBeDisabled();
   expect(toggle).toHaveAttribute("aria-pressed", "false");
   expect(screen.queryByText("paper.editPositions")).not.toBeInTheDocument();
-  openPositions();
+  await openPositions();
   expect(toggle).toBeEnabled();
   expect(toggle).toHaveAttribute("aria-pressed", "true");
   targetClick(svg);
@@ -161,21 +166,21 @@ it("keeps four main steps before optional settings and requires explicit click-t
   expect(mocks.moveToPosition).not.toHaveBeenCalled();
 });
 
-it.each(["P", "C"])("positions %s directly on the board without saving, then explicitly captures it", async (marker) => {
+it.each(["paper.legPark", "calibrate.groupCalibrationPosition"])("positions %s directly on the board without saving, then explicitly captures it", async (marker) => {
   const { svg } = await setup();
-  const kind = marker === "P" ? "park" : "calibration";
-  openPositions();
-  fireEvent.click(screen.getByRole("button", { name: new RegExp(`^${marker} `) }));
+  const kind = marker === "paper.legPark" ? "park" : "calibration";
+  await openPositions();
+  fireEvent.click(screen.getByRole("button", { name: marker }));
   expect(mocks.moveToPosition).not.toHaveBeenCalled();
   targetClick(svg);
   await waitFor(() => expect(screen.getByRole("button", { name: `paper.positions.capture ${marker}` })).toBeEnabled());
-  expect(mocks.moveToPosition).toHaveBeenLastCalledWith(kind, { x: 40, y: 30 }, "project");
+  expect(mocks.moveToPosition).toHaveBeenLastCalledWith(kind, { x: 40, y: 30 }, "project", true);
   expect(mocks.move).not.toHaveBeenCalled();
   expect(mocks.saveCalibration).not.toHaveBeenCalled();
   expect(mocks.positionFromHead).not.toHaveBeenCalled();
   expect(screen.getByRole("img", { name: `${marker} · paper.positions.target` })).toBeInTheDocument();
   fireEvent.click(svg, { clientX: 50, clientY: 180 });
-  await waitFor(() => expect(mocks.moveToPosition).toHaveBeenLastCalledWith(kind, { x: 50, y: 30 }, "project"));
+  await waitFor(() => expect(mocks.moveToPosition).toHaveBeenLastCalledWith(kind, { x: 50, y: 30 }, "project", true));
   await waitFor(() => expect(screen.getByRole("button", { name: `paper.positions.capture ${marker}` })).toBeEnabled());
   fireEvent.click(screen.getByRole("button", { name: `paper.positions.capture ${marker}` }));
   await waitFor(() => expect(mocks.positionFromHead).toHaveBeenCalledWith(kind, "project"));
@@ -184,7 +189,7 @@ it.each(["P", "C"])("positions %s directly on the board without saving, then exp
 
 it("shows three coordinate columns and uses the board without extra movement controls", async () => {
   const { container } = await setup();
-  openPositions();
+  await openPositions();
   expect(Array.from(container.querySelectorAll(".position-coordinates dt"), (el) => el.textContent))
     .toEqual(["paper.positions.stored", "paper.positions.head", "paper.positions.target"]);
   expect(container.querySelector(".position-target dd")).toHaveTextContent("—");
@@ -203,26 +208,26 @@ it("serializes commands and clears the unsaved target after a failed move", asyn
   const { svg } = await setup();
   let reject!: (e: Error) => void;
   mocks.moveToPosition.mockReturnValue(new Promise((_, fail) => { reject = fail; }));
-  openPositions();
+  await openPositions();
   targetClick(svg);
-  expect(screen.getByRole("button", { name: /^C / })).toBeDisabled();
-  expect(screen.getByRole("button", { name: "paper.positions.capture P" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "calibrate.groupCalibrationPosition" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "paper.positions.capture calibrate.groupCalibrationPosition" })).toBeDisabled();
   targetClick(svg);
   fireEvent.keyDown(window, { key: "ArrowRight" });
   expect(mocks.moveToPosition).toHaveBeenCalledTimes(1);
   await act(async () => reject(new Error("offline")));
   expect(mocks.error).toHaveBeenCalledWith("offline");
-  expect(screen.queryByRole("img", { name: "P · paper.positions.target" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("img", { name: "calibrate.groupCalibrationPosition · paper.positions.target" })).not.toBeInTheDocument();
   expect(mocks.positionFromHead).not.toHaveBeenCalled();
 });
 
 it.each([{ online: false }, { online: true, motion_locked: true }, { online: true, job: { state: "Printing" } }])(
   "blocks clicks, jogs, and capturing when unavailable: %j", async (status) => {
     const { svg } = await setup(status);
-    openPositions();
+    await openPositions();
     targetClick(svg);
     fireEvent.keyDown(window, { key: "ArrowRight" });
-    expect(screen.getByRole("button", { name: "paper.positions.capture P" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "paper.positions.capture calibrate.groupCalibrationPosition" })).toBeDisabled();
     expect(mocks.moveToPosition).not.toHaveBeenCalled();
     expect(mocks.move).not.toHaveBeenCalled();
     expect(mocks.positionFromHead).not.toHaveBeenCalled();
@@ -232,46 +237,46 @@ it.each([{ online: false }, { online: true, motion_locked: true }, { online: tru
 it("discards targets on tab changes and keeps the user's click-to-move preference", async () => {
   const { svg, rerender, onAction } = await setup();
   fireEvent.click(screen.getByRole("button", { name: "paper.clickMove" }));
-  openPositions();
+  await openPositions();
   targetClick(svg);
-  await waitFor(() => expect(screen.getByRole("button", { name: "paper.positions.capture P" })).toBeEnabled());
+  await waitFor(() => expect(screen.getByRole("button", { name: "paper.positions.capture calibrate.groupCalibrationPosition" })).toBeEnabled());
   rerender(<Paper status={{ configured: true, online: true }} onAction={onAction} visible={false} />);
   rerender(<Paper status={{ configured: true, online: true }} onAction={onAction} visible={true} />);
   await screen.findByRole("button", { name: /paper.positions.title/ });
   expect(screen.getByRole("button", { name: /paper.positions.title/ })).toHaveAttribute("aria-expanded", "false");
   expect(screen.getByRole("button", { name: "paper.clickMove" })).toHaveAttribute("aria-pressed", "true");
-  expect(screen.queryByRole("img", { name: "P · paper.positions.target" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("img", { name: "calibrate.groupCalibrationPosition · paper.positions.target" })).not.toBeInTheDocument();
 });
 
 it("keeps special positions readable but blocks motion and capture before homing", async () => {
   head = { ...head, homed: false, homed_axes: [] };
   const { container } = render(<Paper status={{ configured: true, online: true }} onAction={vi.fn()} />);
   await screen.findByRole("button", { name: /paper.positions.title/ });
-  openPositions();
+  await openPositions();
   expect(screen.getByText("paper.positions.stored")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "paper.positions.capture P" })).toBeDisabled();
-  expect(screen.getByRole("button", { name: "common.next →" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "paper.positions.capture calibrate.groupCalibrationPosition" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "paper.preparePen →" })).toBeDisabled();
   fireEvent.click(container.querySelector("svg")!, { clientX: 40, clientY: 180 });
   fireEvent.keyDown(window, { key: "ArrowRight" });
   expect(mocks.moveToPosition).not.toHaveBeenCalled();
   expect(mocks.positionFromHead).not.toHaveBeenCalled();
 });
 
-it.each<{ defined: PositionKind[] }>([{ defined: [] }, { defined: ["park"] }])("does not complete step 3 with only $defined defined", async ({ defined }) => {
+it.each<{ defined: PositionKind[] }>([{ defined: [] }, { defined: ["park"] }])("accepts the displayed setup position without requiring a custom park point: $defined", async ({ defined }) => {
   profileCalibration = { ...cal, defined_positions: defined };
-  await setup();
-  openPositions();
-  fireEvent.click(screen.getByRole("button", { name: "common.next →" }));
-  expect(screen.getByRole("button", { name: /paper.positions.title/ }).querySelector(".badge"))
-    .not.toHaveClass("done");
+  await setup(); await openPositions();
+  fireEvent.click(screen.getByRole("button", { name: "paper.preparePen →" }));
+  await waitFor(() => expect(mocks.moveToPosition).toHaveBeenCalledWith("calibration", undefined, "project", true));
+  expect(mocks.saveCalibration).toHaveBeenCalledWith({ calibration_x: 105, calibration_y: 105 }, "project");
+  await waitFor(() => expect(screen.getByRole("button", { name: /paper.positions.title/ }).querySelector(".badge")).toHaveClass("done"));
 });
 
-it("completes step 3 only after both positions are saved and Next is clicked", async () => {
+it("marks positions complete after the setup trip and invalidates completion when the point changes", async () => {
   const { svg } = await setup();
   const step = screen.getByRole("button", { name: /paper.positions.title/ });
-  openPositions();
-  for (const marker of ["P", "C"]) {
-    fireEvent.click(screen.getByRole("button", { name: new RegExp(`^${marker} `) }));
+  await openPositions();
+  for (const marker of ["paper.legPark", "calibrate.groupCalibrationPosition"]) {
+    fireEvent.click(screen.getByRole("button", { name: marker }));
     targetClick(svg);
     const capture = screen.getByRole("button", { name: `paper.positions.capture ${marker}` });
     await waitFor(() => expect(capture).toBeEnabled());
@@ -279,13 +284,13 @@ it("completes step 3 only after both positions are saved and Next is clicked", a
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(`paper.positions.saved ${marker}`));
   }
   expect(step.querySelector(".badge")).not.toHaveClass("done");
-  fireEvent.click(screen.getByRole("button", { name: "common.next →" }));
-  expect(step.querySelector(".badge")).toHaveClass("done");
+  fireEvent.click(screen.getByRole("button", { name: "paper.preparePen →" }));
+  await waitFor(() => expect(step.querySelector(".badge")).toHaveClass("done"));
   expect(step.querySelector(".badge")).toHaveTextContent("✓");
-  openPositions();
-  expect(step.querySelector(".badge")).toHaveClass("done");
+  await openPositions();
+  await waitFor(() => expect(step.querySelector(".badge")).toHaveClass("done"));
   fireEvent.click(svg, { clientX: 60, clientY: 180 });
-  const capture = screen.getByRole("button", { name: "paper.positions.capture C" });
+  const capture = screen.getByRole("button", { name: "paper.positions.capture calibrate.groupCalibrationPosition" });
   await waitFor(() => expect(capture).toBeEnabled());
   fireEvent.click(capture);
   await waitFor(() => expect(step.querySelector(".badge")).not.toHaveClass("done"));
@@ -295,9 +300,9 @@ it("accepts previously defined positions on Next without carrying completion to 
   profileCalibration = { ...cal, defined_positions: ["park", "calibration"] };
   await setup();
   const step = screen.getByRole("button", { name: /paper.positions.title/ });
-  openPositions();
-  fireEvent.click(screen.getByRole("button", { name: "common.next →" }));
-  expect(step.querySelector(".badge")).toHaveClass("done");
+  await openPositions();
+  fireEvent.click(screen.getByRole("button", { name: "paper.preparePen →" }));
+  await waitFor(() => expect(step.querySelector(".badge")).toHaveClass("done"));
   mocks.listPages.mockResolvedValue({ project: { id: "other-project", name: "Other", profileId: "other" },
     activeProfile: { id: "other", fingerprint: "other" } });
   await waitFor(() => expect(screen.getByRole("button", { name: /paper.positions.title/ }).querySelector(".badge")).not.toHaveClass("done"), { timeout: 3000 });
@@ -305,27 +310,27 @@ it("accepts previously defined positions on Next without carrying completion to 
 
 it("clears the target when the active profile changes while the step remains open", async () => {
   const { svg } = await setup();
-  openPositions();
+  await openPositions();
   targetClick(svg);
-  await waitFor(() => expect(screen.getByRole("button", { name: "paper.positions.capture P" })).toBeEnabled());
-  expect(screen.getByRole("img", { name: "P · paper.positions.target" })).toBeInTheDocument();
+  await waitFor(() => expect(screen.getByRole("button", { name: "paper.positions.capture calibrate.groupCalibrationPosition" })).toBeEnabled());
+  expect(screen.getByRole("img", { name: "calibrate.groupCalibrationPosition · paper.positions.target" })).toBeInTheDocument();
   mocks.listPages.mockResolvedValue({ project: { id: "other-project", name: "Other", profileId: "other" },
     activeProfile: { id: "other", fingerprint: "other" } });
-  await waitFor(() => expect(screen.queryByRole("img", { name: "P · paper.positions.target" })).not.toBeInTheDocument(), { timeout: 3000 });
+  await waitFor(() => expect(screen.queryByRole("img", { name: "calibrate.groupCalibrationPosition · paper.positions.target" })).not.toBeInTheDocument(), { timeout: 3000 });
   expect(mocks.positionFromHead).not.toHaveBeenCalled();
 });
 
-it.each(["P", "C"])("explicitly homes then visits saved %s, including before homing", async (marker) => {
+it.each(["paper.legPark", "calibrate.groupCalibrationPosition"])("explicitly homes then visits saved %s, including before homing", async (marker) => {
   head = { ...head, homed: false, homed_axes: [] };
   render(<Paper status={{ configured: true, online: true }} onAction={vi.fn()} />);
   await screen.findByRole("button", { name: /paper.positions.title/ });
-  openPositions();
-  fireEvent.click(screen.getByRole("button", { name: new RegExp(`^${marker} `) }));
+  await openPositions();
+  fireEvent.click(screen.getByRole("button", { name: marker }));
   const visit = screen.getByRole("button", { name: `paper.positions.homeVisit ${marker}` });
   expect(visit).toHaveAttribute("title", `paper.positions.homeHint ${marker}`);
   await waitFor(() => expect(visit).toBeEnabled());
   fireEvent.click(visit);
-  await waitFor(() => expect(mocks.homeAndMoveToPosition).toHaveBeenCalledWith(marker === "P" ? "park" : "calibration", "project"));
+  await waitFor(() => expect(mocks.homeAndMoveToPosition).toHaveBeenCalledWith(marker === "paper.legPark" ? "park" : "calibration", "project", true));
   expect(mocks.positionFromHead).not.toHaveBeenCalled();
   expect(mocks.moveToPosition).not.toHaveBeenCalled();
 });
@@ -353,6 +358,8 @@ it("homes, jogs, and captures and tests pen heights using the displayed project"
   await setup();
   fireEvent.click(screen.getByRole("button", { name: "paper.homeXYZ" }));
   await waitFor(() => expect(mocks.home).toHaveBeenCalledWith(undefined, "project"));
+  await screen.findByRole("button", { name: "paper.preparePen →" });
+  fireEvent.click(screen.getByRole("button", { name: "paper.preparePen →" }));
   await screen.findByRole("button", { name: "paper.saveAsDown" });
   fireEvent.click(screen.getByRole("button", { name: "Z + 0.1" }));
   await waitFor(() => expect(mocks.jog).toHaveBeenCalledWith(0, 0, 0.1, { projectId: "project" }));
@@ -365,13 +372,15 @@ it("homes, jogs, and captures and tests pen heights using the displayed project"
 
 it("captures, visits and applies project paper corners, and creates its frame test", async () => {
   await setup();
-  fireEvent.click(screen.getByRole("button", { name: /paper.step3/ }));
-  const capture = screen.getByRole("button", { name: "paper.cornerBL" });
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: /paper.step3/ })); });
+  const capture = screen.getByRole("button", { name: "calibration.captureCorner" });
   fireEvent.click(capture);
-  await waitFor(() => expect(mocks.setCorner).toHaveBeenCalledWith("bl", "project"));
-  fireEvent.click(capture.closest(".corner")!.querySelector('button[title="paper.driveCorner"]')!);
+  await waitFor(() => expect(mocks.setCorner).toHaveBeenCalledWith("bl", "project", { mode: "manual", diagonal: "bl-tr" }));
+  fireEvent.change(screen.getByRole("combobox", { name: "calibration.corner" }), { target: { value: "bl" } });
+  await waitFor(() => expect(screen.getByRole("button", { name: "paper.driveCorner" })).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", { name: "paper.driveCorner" }));
   await waitFor(() => expect(mocks.moveToCorner).toHaveBeenCalledWith("bl", "paper", "project"));
-  fireEvent.click(screen.getByRole("button", { name: /paper.step5/ }));
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: /paper.step5/ })); });
   fireEvent.click(screen.getByRole("button", { name: "paper.applyMargin" }));
   await waitFor(() => expect(mocks.applyPaper).toHaveBeenCalledWith(0, "project"));
   fireEvent.click(screen.getByRole("button", { name: "paper.testFrame" }));
@@ -383,8 +392,8 @@ it("captures, visits and applies project paper corners, and creates its frame te
 
 it("opens insertion pressure for the project profile instead of the global profile", async () => {
   await setup();
-  openPositions();
-  fireEvent.click(screen.getByRole("button", { name: /^C / }));
+  await openPositions();
+  fireEvent.click(screen.getByRole("button", { name: "calibrate.groupCalibrationPosition" }));
   fireEvent.click(screen.getByRole("button", { name: "paper.pressure.title" }));
   await screen.findByRole("dialog");
   await screen.findByText("paper.pressure.hint");
@@ -403,7 +412,7 @@ it("applies zero margin to the existing base and only uses paper corners on expl
     return { calibration: profileCalibration, rect: [10, 10, 190, 190] };
   });
   await setup();
-  fireEvent.click(screen.getByRole("button", { name: /paper.step5/ }));
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: /paper.step5/ })); });
   fireEvent.change(screen.getByRole("spinbutton", { name: "paper.margin" }), { target: { value: "0" } });
   fireEvent.click(screen.getByRole("button", { name: "paper.applyMargin" }));
   await waitFor(() => expect(mocks.applyPaper).toHaveBeenCalledWith(0, "project"));
@@ -421,16 +430,20 @@ it("allows margin changes without calibrated paper corners", async () => {
   await setup();
   const step = screen.getByRole("button", { name: /paper.step5/ });
   expect(step).toBeEnabled();
-  fireEvent.click(step);
-  expect(screen.getByRole("button", { name: "paper.applyMargin" })).toBeEnabled();
+  await act(async () => { fireEvent.click(step); });
+  await waitFor(() => expect(screen.getByRole("button", { name: "paper.applyMargin" })).toBeEnabled());
   expect(screen.getByRole("button", { name: "paper.fromCorners" })).toBeDisabled();
 });
 
 
 it("follows the main setup path without requiring custom positions or obstacles", async () => {
   await setup();
-  fireEvent.click(screen.getByRole("button", { name: "paper.continueSetup" }));
-  fireEvent.click(screen.getByRole("button", { name: "paper.toCorners" }));
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "paper.continueSetup" })); });
+  await waitFor(() => expect(screen.getByRole("button", { name: "paper.preparePen →" })).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", { name: "paper.preparePen →" }));
+  await screen.findByRole("button", { name: "paper.toCorners" });
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "paper.toCorners" })); });
+  await waitFor(() => expect(screen.getByRole("button", { name: "paper.usePaperArea" })).toBeEnabled());
   fireEvent.click(screen.getByRole("button", { name: "paper.usePaperArea" }));
   await waitFor(() => expect(mocks.applyPaper).toHaveBeenCalledWith(0, "project", true));
   await screen.findByRole("button", { name: "paper.applyMargin" });
@@ -442,9 +455,10 @@ it("can keep the current plot area without capturing paper corners", async () =>
   profileCalibration = { ...profileCalibration, paper_corners: {} };
   mocks.paper.mockResolvedValue({ calibration: profileCalibration, rect: null });
   await setup();
-  fireEvent.click(screen.getByRole("button", { name: /paper.step3/ }));
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: /paper.step3/ })); });
   expect(screen.getByRole("button", { name: "paper.usePaperArea" })).toBeDisabled();
-  fireEvent.click(screen.getByRole("button", { name: "paper.useCurrentArea" }));
+  fireEvent.click(screen.getByRole("button", { name: "paint.moreActions" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: "paper.useCurrentArea" }));
   await screen.findByRole("button", { name: "paper.applyMargin" });
   expect(mocks.applyPaper).not.toHaveBeenCalled();
   expect(mocks.setCorner).not.toHaveBeenCalled();
@@ -470,8 +484,9 @@ it("lets paper layout be edited before homing while keeping machine controls dis
   const corners = await screen.findByRole("button", { name: /paper.step3/ });
   expect(corners).toBeEnabled();
   fireEvent.click(corners);
-  expect(screen.getByRole("button", { name: "paper.cornerBL" })).toBeDisabled();
-  expect(screen.getByRole("button", { name: "paper.useCurrentArea" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "calibration.captureCorner" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "paint.moreActions" }));
+  expect(screen.getByRole("menuitem", { name: "paper.useCurrentArea" })).toBeEnabled();
   expect(mocks.home).not.toHaveBeenCalled();
   expect(mocks.move).not.toHaveBeenCalled();
 });
@@ -493,7 +508,7 @@ it("never starts a generated frame after leaving the calibration view", async ()
   let finish!: (job: { filename: string }) => void;
   mocks.testPattern.mockReturnValue(new Promise(resolve => { finish = resolve; }));
   const { rerender, onAction } = await setup();
-  fireEvent.click(screen.getByRole("button", { name: /paper.step5/ }));
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: /paper.step5/ })); });
   const test = screen.getByRole("button", { name: "paper.testFrame" });
   fireEvent.click(test);
   fireEvent.click(test);
@@ -510,7 +525,7 @@ it.each([{ online: false }, { online: true, job: { state: "Printing" } }])(
     let finish!: (job: { filename: string }) => void;
     mocks.testPattern.mockReturnValue(new Promise(resolve => { finish = resolve; }));
     const { rerender, onAction } = await setup();
-    fireEvent.click(screen.getByRole("button", { name: /paper.step5/ }));
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /paper.step5/ })); });
     fireEvent.click(screen.getByRole("button", { name: "paper.testFrame" }));
     rerender(<Paper status={{ configured: true, ...status }} onAction={onAction} />);
     await act(async () => finish({ filename: "frame.gcode" }));
@@ -520,7 +535,7 @@ it.each([{ online: false }, { online: true, job: { state: "Printing" } }])(
 
 it("discards an obstacle's first captured corner on tab changes", async () => {
   const { rerender, onAction } = await setup();
-  fireEvent.click(screen.getByRole("button", { name: /paper.step4Obstacles/ }));
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: /paper.step4Obstacles/ })); });
   fireEvent.click(screen.getByRole("button", { name: /paper.obsStartCapture/ }));
   fireEvent.click(screen.getByRole("button", { name: "paper.obsSetCorner1" }));
   expect(screen.getByRole("button", { name: "paper.obsSetCorner2" })).toBeInTheDocument();
@@ -571,13 +586,13 @@ it("shows paper arrows immediately, uses the selected step and captures the sele
     const button = screen.getByRole("button", { name: label });
     await waitFor(() => expect(button).toBeEnabled());
     fireEvent.click(button);
-    await waitFor(() => expect(mocks.jog).toHaveBeenLastCalledWith(x, y, 0, { projectId: "project" }));
+    await waitFor(() => expect(mocks.jog).toHaveBeenLastCalledWith(x, y, 0, { projectId: "project", pen_up_first: true }));
   }
   const capture = screen.getByRole("button", { name: "calibration.captureCorner" });
   await waitFor(() => expect(capture).toBeEnabled());
   fireEvent.change(screen.getByRole("combobox", { name: "calibration.corner" }), { target: { value: "br" } });
   fireEvent.click(capture);
-  await waitFor(() => expect(mocks.setCorner).toHaveBeenCalledWith("br", "project"));
+  await waitFor(() => expect(mocks.setCorner).toHaveBeenCalledWith("br", "project", { mode: "manual", diagonal: "bl-tr" }));
   expect(mocks.home).not.toHaveBeenCalled();
 });
 it.each([
@@ -603,20 +618,22 @@ it("edits and moves the explicit visual profile instead of the current project's
   fireEvent.change(width, { target: { value: "240" } }); fireEvent.blur(width);
   await waitFor(() => expect(mocks.saveCalibration).toHaveBeenCalledWith({ bed_width: 240 }, { profileId: "visual-profile" }));
   await waitFor(() => expect(screen.getByRole("button", { name: "paper.homeXYZ" })).toBeEnabled());
-  fireEvent.click(screen.getByRole("button", { name: /paper.nav.corners/ }));
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: /paper.nav.corners/ })); });
   fireEvent.click(screen.getByRole("button", { name: "X+" }));
-  await waitFor(() => expect(mocks.jog).toHaveBeenCalledWith(10, 0, 0, { profileId: "visual-profile" }));
+  await waitFor(() => expect(mocks.jog).toHaveBeenCalledWith(10, 0, 0, { profileId: "visual-profile", pen_up_first: true }));
   expect(mocks.activateProfile).not.toHaveBeenCalled();
 });
-it("keeps an inactive profile editable while refusing motion", async () => {
+it("edits and moves with the selected profile without global activation", async () => {
   mocks.getProfile.mockImplementation(async id => ({ id, name: id, active: false, archived: false, fingerprint: id, calibration: profileCalibration }));
   render(<Paper profileId="inactive-profile" status={{ configured: true, online: true }} onAction={vi.fn()} guided />);
   const width = await screen.findByRole("spinbutton", { name: "paper.bedWidth" });
   await waitFor(() => expect(width).toBeEnabled());
-  expect(screen.getByRole("button", { name: "paper.homeXYZ" })).toBeDisabled();
-  fireEvent.click(screen.getByRole("button", { name: /paper.nav.corners/ }));
-  expect(screen.getByRole("button", { name: "X+" })).toBeDisabled();
-  expect(mocks.home).not.toHaveBeenCalled(); expect(mocks.jog).not.toHaveBeenCalled();
+  await waitFor(() => expect(screen.getByRole("button", { name: "paper.homeXYZ" })).toBeEnabled());
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: /paper.nav.corners/ })); });
+  await waitFor(() => expect(screen.getByRole("button", { name: "X+" })).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", { name: "X+" }));
+  await waitFor(() => expect(mocks.jog).toHaveBeenCalledWith(10, 0, 0, { profileId: "inactive-profile", pen_up_first: true }));
+  expect(mocks.activateProfile).not.toHaveBeenCalled();
 });
 
 it("discards a late visual-profile read after selecting another profile", async () => {
@@ -648,8 +665,111 @@ it("previews an inactive profile on an old backend without using global paper da
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   expect(mocks.paper.mock.calls.some(([target]) => typeof target === "object")).toBe(false);
   fireEvent.click(screen.getByRole("button", { name: "paper.homeXYZ" }));
-  fireEvent.click(screen.getByRole("button", { name: /paper.nav.corners/ }));
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: /paper.nav.corners/ })); });
   fireEvent.click(screen.getByRole("button", { name: "X+" }));
   expect(mocks.home).not.toHaveBeenCalled(); expect(mocks.jog).not.toHaveBeenCalled();
   expect(mocks.saveCalibration).not.toHaveBeenCalled(); expect(mocks.activateProfile).not.toHaveBeenCalled();
+});
+
+it("guides two diagonal captures, advances only after success, and labels generated corners", async () => {
+  profileCalibration = { ...cal, paper_corners: {}, paper_diagonal: null };
+  mocks.setCorner.mockImplementation(async () => {
+    profileCalibration = { ...profileCalibration, paper_diagonal: "bl-tr",
+      paper_corners: { bl: [20, 30], tr: [180, 190], tl: [20, 190], br: [180, 30] },
+      paper_generated_corners: ["tl", "br"] };
+    return { calibration: profileCalibration, rect: [20, 30, 160, 160] };
+  });
+  await setup();
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: /paper.step3/ })); });
+  fireEvent.click(screen.getByText("paper.cornerHelp"));
+  expect(screen.getByText("paper.diagonalHint")).toBeInTheDocument();
+  expect(screen.getByRole("combobox", { name: "calibration.corner" })).toHaveValue("bl");
+  fireEvent.click(screen.getByRole("button", { name: "calibration.captureCorner" }));
+  await waitFor(() => expect(mocks.setCorner).toHaveBeenCalledWith("bl", "project", { mode: "diagonal", diagonal: "bl-tr" }));
+  await waitFor(() => expect(screen.getByRole("combobox", { name: "calibration.corner" })).toHaveValue("tr"));
+  expect(document.querySelectorAll(".calibration-corner-summary .generated")).toHaveLength(2);
+  expect(screen.getByRole("img", { name: "paper.cornerTL · paper.cornerGenerated" }).querySelector("circle"))
+    .toHaveAttribute("stroke-dasharray");
+});
+
+it("marks the current corner with one test-dot request and homes without changing steps or stored corners", async () => {
+  await setup();
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: /paper.step3/ })); });
+  fireEvent.click(screen.getByRole("button", { name: "paper.testDot" }));
+  await waitFor(() => expect(mocks.testDot).toHaveBeenCalledExactlyOnceWith("project"));
+  expect(mocks.pen).not.toHaveBeenCalled();
+  expect(mocks.setCorner).not.toHaveBeenCalled();
+  const home = screen.getByRole("button", { name: "paper.rehome" });
+  await waitFor(() => expect(home).toBeEnabled());
+  fireEvent.click(home);
+  await waitFor(() => expect(mocks.home).toHaveBeenCalledWith(undefined, "project"));
+  expect(screen.getByRole("combobox", { name: "calibration.corner" })).toBeInTheDocument();
+  expect(mocks.clearCorner).not.toHaveBeenCalled();
+});
+
+it("does not continue with a setup trip if its default-position save finishes after leaving the view", async () => {
+  let finish!: (value: Calibration) => void;
+  mocks.saveCalibration.mockReturnValue(new Promise(resolve => { finish = resolve; }));
+  const { rerender, onAction } = await setup();
+  await openPositions();
+  fireEvent.click(screen.getByRole("button", { name: "paper.preparePen →" }));
+  await waitFor(() => expect(mocks.saveCalibration).toHaveBeenCalledOnce());
+  rerender(<Paper status={{ configured: true, online: true }} onAction={onAction} visible={false} />);
+  await act(async () => finish(profileCalibration));
+  expect(mocks.moveToPosition).not.toHaveBeenCalled();
+});
+
+it("starts the corner-point test beside the frame test with the displayed project's calibration", async () => {
+  await setup();
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: /paper.step5/ })); });
+  expect(screen.getByRole("button", { name: "paper.testFrame" })).toBeEnabled();
+  fireEvent.click(screen.getByRole("button", { name: "paper.testCorners" }));
+  await waitFor(() => expect(mocks.testPattern).toHaveBeenCalledExactlyOnceWith("corners", "project"));
+  await waitFor(() => expect(mocks.send).toHaveBeenCalledWith("frame.gcode", true));
+});
+
+it("does not start the corner-point test when its generating view has been left", async () => {
+  let finish!: (job: { filename: string }) => void;
+  mocks.testPattern.mockReturnValue(new Promise(resolve => { finish = resolve; }));
+  const { rerender, onAction } = await setup();
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: /paper.step5/ })); });
+  fireEvent.click(screen.getByRole("button", { name: "paper.testCorners" }));
+  rerender(<Paper status={{ configured: true, online: true }} onAction={onAction} visible={false} />);
+  await act(async () => finish({ filename: "corners.gcode" }));
+  expect(mocks.send).not.toHaveBeenCalled();
+});
+
+it("defaults to pen up on entry, step changes and reactivation without undoing explicit height adjustments", async () => {
+  const { rerender, onAction } = await setup();
+  await waitFor(() => expect(mocks.raisePen).toHaveBeenCalledWith("project"));
+  const first = mocks.raisePen.mock.calls.length;
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: /paper.step3/ })); });
+  await waitFor(() => expect(mocks.raisePen.mock.calls.length).toBeGreaterThan(first));
+  const raised = mocks.raisePen.mock.calls.length;
+  const jog = screen.getByRole("button", { name: "X+" });
+  await waitFor(() => expect(jog).toBeEnabled());
+  fireEvent.click(jog);
+  await waitFor(() => expect(mocks.jog).toHaveBeenCalledWith(10, 0, 0, { projectId: "project", pen_up_first: true }));
+  expect(mocks.raisePen).toHaveBeenCalledTimes(raised);
+  rerender(<Paper status={{ configured: true, online: true }} onAction={onAction} visible={false} />);
+  rerender(<Paper status={{ configured: true, online: true }} onAction={onAction} visible />);
+  await waitFor(() => expect(mocks.raisePen.mock.calls.length).toBeGreaterThan(raised));
+});
+
+it("leaves an explicitly lowered pen available for height adjustment and raises again when leaving that task", async () => {
+  mocks.raisePen.mockImplementation(async () => {
+    head = { ...head, z: Math.max(head.z, profileCalibration.pen_up_z) };
+    return { ok: true, position: head };
+  });
+  await setup(); await openPositions();
+  fireEvent.click(screen.getByRole("button", { name: "paper.preparePen →" }));
+  const lower = await screen.findByRole("button", { name: "paper.testLower" });
+  await waitFor(() => expect(lower).toBeEnabled());
+  const raised = mocks.raisePen.mock.calls.length;
+  await act(async () => { fireEvent.click(lower); });
+  await waitFor(() => expect(mocks.pen).toHaveBeenCalledWith(true, "project"));
+  expect(head.z).toBe(1);
+  expect(mocks.raisePen).toHaveBeenCalledTimes(raised);
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: /paper.step3/ })); });
+  await waitFor(() => expect(head.z).toBe(5));
 });

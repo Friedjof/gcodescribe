@@ -99,6 +99,9 @@ class Calibration:
     # Paper calibration: corner positions captured by jogging the head to the
     # sheet's corners (printer coordinates, mm). Keys: bl, br, tr, tl.
     paper_corners: dict = field(default_factory=dict)
+    # Measured anchors; the other two corners are derived. None = manual mode.
+    paper_diagonal: Literal["bl-tr", "tl-br"] | None = None
+    paper_generated_corners: list[str] = field(default_factory=list)
     paper_margin: float = 0.0  # inset from plot_area_base to the effective plot area
 
     # No-go obstacle zones (e.g. clamps): list of dicts with keys
@@ -161,6 +164,8 @@ class Calibration:
     def from_dict(cls, data: dict) -> Calibration:
         known = {f.name for f in fields(cls)}
         cal = cls(**{k: v for k, v in data.items() if k in known})
+        if cal.paper_diagonal not in (None, "bl-tr", "tl-br"):
+            raise ValueError("Ungültige Papierdiagonale.")
         cal.pen_pressure_max_depth = cal.validated_pressure_depth()
         return cal
 
@@ -219,6 +224,8 @@ class Calibration:
         # Validate jointly with pen_down_z so recalibration cannot silently
         # turn a formerly valid pressure depth into a movement below Z=0.
         candidate = Calibration(**data)
+        if candidate.paper_diagonal not in (None, "bl-tr", "tl-br"):
+            raise ValueError("Ungültige Papierdiagonale.")
         data["pen_pressure_max_depth"] = candidate.validated_pressure_depth()
         area_fields = ("origin_x", "origin_y", "plot_width", "plot_height")
         explicit_base = updates.get("plot_area_base") is not None

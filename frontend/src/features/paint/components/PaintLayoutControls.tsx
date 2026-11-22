@@ -10,14 +10,25 @@ export default function PaintLayoutControls({
   measurementsOpen,
   onToggleMeasurements,
   visible,
+  onBackside,
+  backsideConfigured,
+  backsideActive,
+  onToggleBackside,
 }: {
   measurementsOpen: boolean;
   onToggleMeasurements: () => void;
   visible: boolean;
+  onBackside: () => void;
+  backsideConfigured: boolean;
+  backsideActive: boolean;
+  onToggleBackside: () => void;
 }) {
   const { preferences: prefs, update } = useInterface(),
     { t } = useI18n();
   const items: EditorMenuItem[] = [
+    { id: "backside-setup", label: t("backside.title"), icon: "pages", action: onBackside },
+    { id: "backside-toggle", label: t("backside.show"), checked: backsideActive,
+      disabled: !backsideConfigured, action: onToggleBackside },
     {
       id: "pages",
       label: t("interface.pages"),
@@ -84,6 +95,8 @@ export default function PaintLayoutControls({
   ];
   return (
     <div className="paint-layout-controls">
+      <button type="button" className="icon-button" aria-label={t("backside.title")} title={t("backside.title")}
+        aria-pressed={backsideActive} onClick={onBackside}><EditorIcon name="pages" size={18}/></button>
       <button
         type="button"
         className="icon-button"

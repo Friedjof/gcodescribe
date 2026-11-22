@@ -56,6 +56,8 @@ def patch_settings(body: SettingsPatch) -> dict:
                 status_code=422,
                 detail=f"Invalid settings key {key!r} — expected 'section.field'",
             )
+    if "ai.provider" in body.settings and body.settings["ai.provider"] not in {"api", "codex"}:
+        raise HTTPException(422, "AI-Zugang muss api oder codex sein.")
     patch_saved(body.settings)
     return _effective()
 

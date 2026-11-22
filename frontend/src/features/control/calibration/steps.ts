@@ -14,10 +14,10 @@ export function calibrationSteps({ homed, heightSaved, hasPaper, positionsDone }
 }): Step[] {
   return [
     { id: "home", titleKey: "paper.step1", done: homed, locked: false },
+    { id: "positions", titleKey: "paper.positions.title", done: positionsDone, locked: false },
     { id: "pen", titleKey: "paper.step2", done: heightSaved, locked: !homed && !heightSaved },
     { id: "corners", titleKey: "paper.step3", done: hasPaper, locked: false },
     { id: "apply", titleKey: "paper.step5", done: false, locked: false },
-    { id: "positions", titleKey: "paper.positions.title", done: positionsDone, locked: false, optional: true },
     { id: "obstacles", titleKey: "paper.step4Obstacles", done: false, locked: !hasPaper, optional: true },
   ];
 }

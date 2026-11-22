@@ -11,7 +11,7 @@ export type CalibrationPreviewControls = Pick<CalibrationController,
   "formatLandscape" | "setFormatLandscape" | "pos" | "rect" | "preview" | "positions" |
   "visible" | "homed" | "canMove" | "canEdit" | "moveTo" | "active" | "handleDragCorner" |
   "handleDropCorner" | "obstacles" | "saveObstacles" | "currentPlot" | "cornerAngles" |
-  "setClickMove" | "previewJob" | "setPreviewJob" | "jobs" | "refreshJobs">;
+  "setClickMove" | "previewJob" | "setPreviewJob" | "jobs" | "refreshJobs" | "selectedCorner">;
 
 export default function CalibrationPreview({ cal, controls, compact = false }: { cal: Calibration; controls: CalibrationPreviewControls; compact?: boolean }) {
   const { t } = useI18n();
@@ -54,12 +54,14 @@ export default function CalibrationPreview({ cal, controls, compact = false }: {
         <span><i className="sw head" /> {t("paper.legPen")}</span>
         <span><i className="sw park" /> {t("paper.legPark")}</span>
         <span>
-          <i className="sw calibration" /> C · {t("calibrate.groupCalibrationPosition")}
+          <i className="sw calibration" /> {t("calibrate.groupCalibrationPosition")}
         </span>
         {obstacles.length > 0 && <span><i className="sw obstacle" /> {t("paper.legObstacle")}</span>}
         {preview && <span><i className="sw draw" /> {t("paper.legPreview")}</span>}
       </div>
       <div className="pos-readout">
+        {homed && pos && <span className={pos.z >= cal.pen_up_z - 0.001 ? "pen-state up" : "pen-state down"}
+          title={t("paper.defaultPenUp")}>{t(pos.z >= cal.pen_up_z - 0.001 ? "paper.penUpStrong" : "paper.penDownStrong")}</span>}
         {homed && pos ? (
           <>
             <span>X <strong>{pos.x.toFixed(1)}</strong></span>

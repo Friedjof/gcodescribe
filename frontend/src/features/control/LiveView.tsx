@@ -49,6 +49,7 @@ export default function LiveView({
   onObstaclesChange,
   selectedPosition = null,
   target = null,
+  activeCorner,
 }: {
   cal: Calibration;
   position: Position | null;
@@ -63,6 +64,7 @@ export default function LiveView({
   onObstaclesChange?: (obstacles: Obstacle[]) => void;
   selectedPosition?: PositionKind | null;
   target?: PositionTarget | null;
+  activeCorner?: string;
 }) {
   const { t } = useI18n();
   const svgRef = useRef<SVGSVGElement>(null);
@@ -149,7 +151,7 @@ export default function LiveView({
     const coords = svgBedCoords(e);
     if (!coords) return;
     const [x, y] = coords;
-    const snap = snapTo90(cal.paper_corners, dragging.corner, x, y);
+    const snap = cal.paper_diagonal ? null : snapTo90(cal.paper_corners, dragging.corner, x, y);
     setSnapTarget(snap);
     onDragCorner?.(dragging.corner, snap ? snap[0] : x, snap ? snap[1] : y);
   };
@@ -159,7 +161,7 @@ export default function LiveView({
     const coords = svgBedCoords(e);
     if (coords) {
       const [x, y] = coords;
-      const snap = snapTo90(cal.paper_corners, dragging.corner, x, y);
+      const snap = cal.paper_diagonal ? null : snapTo90(cal.paper_corners, dragging.corner, x, y);
       onDropCorner?.(dragging.corner, snap ? snap[0] : x, snap ? snap[1] : y);
     }
     setDragging(null);
@@ -322,14 +324,18 @@ export default function LiveView({
           const pos = cornersMap[name];
           if (!pos) return null;
           const [cx, cy] = pos;
+          const generated = !!cal.paper_generated_corners?.includes(name)
+            || (!!cal.paper_diagonal && !cal.paper_diagonal.split("-").includes(name));
           const angle = angles?.[name];
           const angleOk = angle != null && Math.abs(angle - 90) <= 1;
           const color = angle == null || angleOk ? "var(--ok)" : "var(--warn)";
           const rightSide = name === "tr" || name === "br";
           const topSide = name === "tl" || name === "tr";
           return (
-            <g key={name}>
-              {isDraggable && (
+            <g key={name} role="img" aria-label={`${t(`paper.corner${name.toUpperCase()}`)} · ${t(generated ? "paper.cornerGenerated" : "paper.cornerMeasured")}`}>
+              <title>{t(generated ? "paper.cornerGenerated" : "paper.cornerMeasured")}</title>
+              {activeCorner === name && <circle cx={cx} cy={ty(cy)} r={7} fill="none" stroke="var(--accent)" strokeWidth={1.2} />}
+              {isDraggable && !generated && (
                 <circle
                   cx={cx} cy={ty(cy)} r={8}
                   fill="transparent"
@@ -339,7 +345,8 @@ export default function LiveView({
                   onPointerDown={(e) => handleCornerPointerDown(e, name)}
                 />
               )}
-              <circle cx={cx} cy={ty(cy)} r={3} fill={color} />
+              <circle cx={cx} cy={ty(cy)} r={3} fill={generated ? "var(--panel)" : color}
+                stroke={color} strokeWidth={0.8} strokeDasharray={generated ? "1.5 1" : undefined} />
               <text x={cx + (rightSide ? -5 : 5)} y={ty(cy) + (topSide ? 9 : -5)}
                 textAnchor={rightSide ? "end" : "start"} fontSize={7} fill={color} pointerEvents="none">
                 {CORNER_LABELS[name] ?? name}{angle == null ? "" : ` ${angle.toFixed(1)}°`}
@@ -359,11 +366,11 @@ export default function LiveView({
         {/* Saved markers never intercept clicks or save by dragging. */}
         {SPECIAL_POSITIONS.map((point) => (
           <PositionMarker key={point.kind} x={cal[point.x]} y={ty(cal[point.y])} width={W}
-            label={point.marker} color={point.color} selected={selectedPosition === point.kind} />
+            label={t(point.label)} color={point.color} selected={selectedPosition === point.kind} />
         ))}
         {target && (
           <PositionMarker x={target.x} y={ty(target.y)} width={W} draft
-            label={`${positionDefinition(target.kind).marker} · ${t("paper.positions.target")}`}
+            label={`${t(positionDefinition(target.kind).label)} · ${t("paper.positions.target")}`}
             color={positionDefinition(target.kind).color} />
         )}
 

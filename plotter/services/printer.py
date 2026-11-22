@@ -99,6 +99,7 @@ class PrinterController:
         limit: str = "bed",
         *,
         cal: Calibration | None = None,
+        pen_up_first: bool = False,
     ) -> dict:
         self._require_manual_motion(f"jog X{dx} Y{dy} Z{dz}")
         cal = cal or Calibration.load()
@@ -111,8 +112,10 @@ class PrinterController:
             tx = min(max(pos["x"] + dx, x0), x1)
             ty = min(max(pos["y"] + dy, y0), y1)
             tz = min(max(pos["z"] + dz, z_floor), self.tracker.z_max)
+            if pen_up_first and (dx or dy):
+                tz = max(tz, self._raised_height(cal, pos["z"]))
             commands = ["G90"]
-            if dz:
+            if dz or (pen_up_first and (dx or dy)):
                 commands.append(z_max_feedrate_line(cal))
                 commands.append(f"G0 Z{tz:.3f} {feed_word(cal.z_feed)}")
             if dx or dy:
@@ -121,10 +124,33 @@ class PrinterController:
                 self.client.gcode(commands)
             self.tracker.set_axes(x=tx, y=ty, z=tz)
         else:
+            if pen_up_first:
+                raise NotHomedError()
             if limit != "bed":
                 raise NotHomedError()
             self.client.jog(dx, dy, dz, speed)
             self.tracker.jog(dx, dy, dz, cal.bed_width, cal.bed_height)
+        return self.position()
+
+    @staticmethod
+    def _raised_height(cal: Calibration, current_z: float) -> float:
+        if not (math.isfinite(cal.pen_up_z) and 0 < cal.pen_up_z <= cal.z_max):
+            raise ServiceError("Die Abhebehöhe ist ungültig. Zuerst eine gültige Höhe einstellen.")
+        height = max(cal.pen_up_z, current_z)
+        if not math.isfinite(height) or height > cal.z_max:
+            raise ServiceError("Die aktuelle Stifthöhe liegt außerhalb des Verfahrbereichs.")
+        return height
+
+    def raise_pen(self, *, cal: Calibration | None = None) -> dict:
+        """Paper-view baseline: lift to clearance, never descend from a higher Z."""
+        self._require_position_action("calibration")
+        cal = cal or Calibration.load()
+        height = self._raised_height(cal, self.tracker.snapshot()["z"])
+        self.client.gcode([
+            "G90", z_max_feedrate_line(cal),
+            f"G0 Z{height:.3f} {feed_word(cal.z_feed)}", "M400",
+        ])
+        self.tracker.set_axes(z=height)
         return self.position()
 
     def move_to(
@@ -163,7 +189,7 @@ class PrinterController:
         return self.move_to_position("calibration", cal=cal)
 
     def home_and_move_to_position(
-        self, kind: PositionKind, *, cal: Calibration | None = None
+        self, kind: PositionKind, *, cal: Calibration | None = None, lift_only: bool = False
     ) -> dict:
         """Explicitly home all axes, then visit the chosen saved position."""
         if kind not in POSITION_FIELDS:
@@ -171,7 +197,7 @@ class PrinterController:
         if self.client.status().get("online") is False:
             raise ServiceError("Drucker ist nicht verbunden.")
         self.home(cal=cal)
-        return self.move_to_position(kind, cal=cal)
+        return self.move_to_position(kind, cal=cal, lift_only=lift_only)
 
     def calibration_height(self, offset: float, *, cal: Calibration | None = None) -> dict:
         """Manually adjust insertion Z at C. Never alter the plotting pen heights."""
@@ -231,6 +257,7 @@ class PrinterController:
         y: float | None = None,
         *,
         cal: Calibration | None = None,
+        lift_only: bool = False,
     ) -> dict:
         """Try an XY target or visit a saved position, without saving calibration."""
         self._require_position_action(kind)
@@ -245,12 +272,16 @@ class PrinterController:
         if not (
             math.isfinite(cal.pen_down_z)
             and math.isfinite(cal.pen_up_z)
-            and 0 <= cal.pen_down_z < cal.pen_up_z <= cal.z_max
+            and (lift_only or 0 <= cal.pen_down_z < cal.pen_up_z)
+            and 0 < cal.pen_up_z <= cal.z_max
         ):
             raise ServiceError("Die Stifthöhen im aktiven Profil sind ungültig.")
 
         lift_z = cal.resolved_park()[2] if kind == "park" else cal.pen_up_z
-        if not math.isfinite(lift_z) or not cal.pen_down_z < lift_z <= cal.z_max:
+        if lift_only:
+            lift_z = max(lift_z, self.tracker.snapshot()["z"])
+        floor = 0 if lift_only else cal.pen_down_z
+        if not math.isfinite(lift_z) or not floor < lift_z <= cal.z_max:
             raise ServiceError("Die Park-Abhebehöhe im aktiven Profil ist ungültig.")
 
         cur = self.tracker.snapshot()
@@ -269,17 +300,39 @@ class PrinterController:
         commands = [
             "G90",
             z_max_feedrate_line(cal),
-            f"G0 Z{cal.pen_up_z:.3f} {feed_word(cal.z_feed)}",
+            f"G0 Z{lift_z if lift_only else cal.pen_up_z:.3f} {feed_word(cal.z_feed)}",
         ]
-        if lift_z != cal.pen_up_z:
+        if not lift_only and lift_z != cal.pen_up_z:
             commands.append(f"G0 Z{lift_z:.3f} {feed_word(cal.z_feed)}")
         commands.extend(
             f"G0 X{wx:.3f} Y{wy:.3f} {feed_word(cal.travel_feed)}" for wx, wy in waypoints
         )
-        if kind == "calibration":
+        if kind == "calibration" and not lift_only:
             commands.append(f"G1 Z{cal.pen_down_z:.3f} {feed_word(cal.z_feed)}")
         self.client.gcode(commands)
-        self.tracker.set_axes(x=x, y=y, z=cal.pen_down_z if kind == "calibration" else lift_z)
+        self.tracker.set_axes(
+            x=x, y=y, z=cal.pen_down_z if kind == "calibration" and not lift_only else lift_z
+        )
+        return self.position()
+
+    def test_dot(self, *, cal: Calibration | None = None) -> dict:
+        """Mark the current XY point with one indivisible command batch."""
+        self._require_position_action("calibration")
+        cal = cal or Calibration.load()
+        pos = self.tracker.snapshot()
+        self._validate_position(cal, pos["x"], pos["y"])
+        if not cal.pen_calibrated or not (
+            math.isfinite(cal.pen_down_z) and math.isfinite(cal.pen_up_z)
+            and 0 <= cal.pen_down_z < cal.pen_up_z <= cal.z_max
+        ):
+            raise ServiceError("Zuerst Papierkontakt und Abhebehöhe kalibrieren.")
+        self.client.gcode([
+            "G90", z_max_feedrate_line(cal),
+            f"G1 Z{cal.pen_down_z:.3f} {feed_word(cal.z_feed)}",
+            "G4 P100",
+            f"G0 Z{cal.pen_up_z:.3f} {feed_word(cal.z_feed)}", "M400",
+        ])
+        self.tracker.set_axes(z=cal.pen_up_z)
         return self.position()
 
     def position_from_head(

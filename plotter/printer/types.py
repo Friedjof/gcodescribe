@@ -49,6 +49,7 @@ class PrinterInfo(TypedDict, total=False):
 class PrinterStatus(TypedDict):
     configured: bool
     backend: NotRequired[str]
+    printer_id: NotRequired[str]
     online: NotRequired[bool]
     url: NotRequired[str]
     connection: NotRequired[PrinterConnection | None]
@@ -64,3 +65,8 @@ class PrinterBackendInfo(TypedDict):
     configured: bool
     online: bool
     active: bool
+    name: NotRequired[str]
+    transport: NotRequired[str]
+    port: NotRequired[str]
+    available: NotRequired[bool]
+    busy: NotRequired[bool]

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 from plotter.core.calibration import Calibration
 from plotter.core.position import PositionTracker, get_tracker
 
@@ -38,35 +40,89 @@ class PaperService:
         if corner not in self.CORNERS:
             raise ServiceError(f"unknown corner: {corner}")
         cal = self._calibration()
-        corners = dict(cal.paper_corners)
-        corners[corner] = [x, y]
-        cal = cal.merged({"paper_corners": corners})
+        cal = self._with_corner(cal, corner, x, y)
         self._save(cal)
         return self.state(cal)
 
-    def capture(self, corner: str) -> dict:
+    def capture(
+        self, corner: str, *, mode: str | None = None, diagonal: str = "bl-tr"
+    ) -> dict:
         if corner not in self.CORNERS:
             raise ServiceError(f"unknown corner: {corner}")
         pos = self.tracker.snapshot()
         if not pos["homed"]:
             raise NotHomedError()
         cal = self._calibration()
-        corners = dict(cal.paper_corners)
-        corners[corner] = [pos["x"], pos["y"]]
-        cal = cal.merged({"paper_corners": corners})
+        cal = self._with_corner(cal, corner, pos["x"], pos["y"], mode, diagonal)
         self._save(cal)
         return self.state(cal)
+
+    @staticmethod
+    def _with_corner(
+        cal: Calibration, corner: str, x: float, y: float,
+        mode: str | None = None, diagonal: str = "bl-tr",
+    ) -> Calibration:
+        if not (math.isfinite(x) and math.isfinite(y)):
+            raise ServiceError("Eckkoordinaten müssen endlich sein.")
+        selected = (
+            diagonal if mode == "diagonal" else None if mode == "manual" else cal.paper_diagonal
+        )
+        corners = dict(cal.paper_corners)
+        generated = set(cal.paper_generated_corners)
+        if cal.paper_diagonal:
+            generated.update(key for key in corners if key not in cal.paper_diagonal.split("-"))
+        if selected:
+            if selected not in ("bl-tr", "tl-br"):
+                raise ServiceError("Ungültige Diagonale.")
+            anchors = selected.split("-")
+            if corner not in anchors:
+                raise ServiceError("Diese Ecke wird berechnet. Zum Bearbeiten vier Ecken wählen.")
+            # Generated points from another diagonal are not measured anchors.
+            corners = {} if cal.paper_diagonal and cal.paper_diagonal != selected else {
+                key: value for key, value in corners.items() if key in anchors
+            }
+            corners[corner] = [x, y]
+            generated = set()
+            if all(key in corners for key in anchors):
+                a, b = (corners[key] for key in anchors)
+                if b[0] - a[0] < 1 or (
+                    b[1] - a[1] if selected == "bl-tr" else a[1] - b[1]
+                ) < 1:
+                    raise ServiceError(
+                        "Die zweite Ecke muss diagonal gegenüberliegen (mindestens 1 × 1 mm)."
+                    )
+                if selected == "bl-tr":
+                    corners.update(tl=[a[0], b[1]], br=[b[0], a[1]])
+                else:
+                    corners.update(bl=[a[0], b[1]], tr=[b[0], a[1]])
+                generated = set(corners) - set(anchors)
+        else:
+            corners[corner] = [x, y]
+            generated.discard(corner)
+        return cal.merged({
+            "paper_corners": corners, "paper_diagonal": selected,
+            "paper_generated_corners": sorted(generated),
+        })
 
     def clear(self, corner: str) -> dict:
         cal = self._calibration()
         corners = dict(cal.paper_corners)
         corners.pop(corner, None)
-        cal = cal.merged({"paper_corners": corners})
+        if cal.paper_diagonal:
+            corners = {key: value for key, value in corners.items()
+                       if key in cal.paper_diagonal.split("-")}
+        cal = cal.merged({
+            "paper_corners": corners,
+            "paper_generated_corners": [key for key in cal.paper_generated_corners
+                                        if key in corners],
+        })
         self._save(cal)
         return self.state(cal)
 
     def reset(self) -> dict:
-        cal = self._calibration().merged({"paper_corners": {}})
+        cal = self._calibration().merged({
+            "paper_corners": {}, "paper_diagonal": None, "paper_generated_corners": [],
+        })
         self._save(cal)
         return self.state(cal)
 

@@ -7,6 +7,7 @@ import Segmented from "../../components/Segmented";
 import { useToasts } from "../../components/Toasts";
 import type { PrinterBackendId, PrinterBackendInfo, PrinterStatus } from "../../api/types/printer";
 import { isPrinterBusy, isManualMotionLocked, isPaused, isPrinting, printerProgress } from "../../lib/printerState";
+import { useProjectCalibration } from "../../state/ProjectCalibrationContext";
 
 function PrinterOverview({ status, onAction }: { status: PrinterStatus | null; onAction: () => void }) {
   const { t } = useI18n();
@@ -58,7 +59,7 @@ function PrinterOverview({ status, onAction }: { status: PrinterStatus | null; o
           <div key={b.id} className={`printer-card${b.active ? " active" : ""}`}>
             <div className="printer-card-top">
               <span className="dot" data-online={b.online} />
-              <strong>{t(`printer.backend.${b.id}`)}</strong>
+              <strong>{b.name ?? t(`printer.backend.${b.id}`)}</strong>
               {b.active && (
                 <span className="pbadge pbadge-active">{t("printer.state.active")}</span>
               )}
@@ -129,6 +130,8 @@ export default function Control({
 }) {
   const { t } = useI18n();
   const toast = useToasts();
+  const { index, loading: projectLoading, error: projectError } = useProjectCalibration();
+  const projectId = index?.project?.id;
   const [step, setStep] = useState(10);
   const [limitPlot, setLimitPlot] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -138,7 +141,7 @@ export default function Control({
   const progress = printerProgress(status);
   const printing = isPrinting(status);
   const paused = isPaused(status);
-  const motionLocked = isManualMotionLocked(status);
+  const motionLocked = isManualMotionLocked(status) || projectLoading || !!projectError || !projectId;
   const [refreshing, setRefreshing] = useState(false);
 
   const run = (fn: () => Promise<unknown>) => {
@@ -158,7 +161,7 @@ export default function Control({
 
   const jog = (x: number, y: number, z: number) =>
     run(() =>
-      api.jog(x * step, y * step, z * step, { limit: limitPlot ? "plot" : "bed" })
+      api.jog(x * step, y * step, z * step, { limit: limitPlot ? "plot" : "bed", projectId })
     );
 
   const pressed = useArrowKeys(
@@ -220,13 +223,13 @@ export default function Control({
             <div className="xy">
               <button onClick={() => jog(0, 1, 0)} className={"up" + kbd("up")}>↑ Y+</button>
               <button onClick={() => jog(-1, 0, 0)} className={"left" + kbd("left")}>← X-</button>
-              <button onClick={() => run(() => api.home(["x", "y"]))} className="home">⌂</button>
+              <button onClick={() => run(() => api.home(["x", "y"], projectId))} className="home">⌂</button>
               <button onClick={() => jog(1, 0, 0)} className={"right" + kbd("right")}>X+ →</button>
               <button onClick={() => jog(0, -1, 0)} className={"down" + kbd("down")}>↓ Y-</button>
             </div>
             <div className="z">
               <button onClick={() => jog(0, 0, 1)} className={kbd("raise").trim()}>Z+ ↑</button>
-              <button onClick={() => run(() => api.home(["z"]))} className="home">⌂ Z</button>
+              <button onClick={() => run(() => api.home(["z"], projectId))} className="home">⌂ Z</button>
               <button onClick={() => jog(0, 0, -1)} className={kbd("lower").trim()}>Z- ↓</button>
             </div>
           </div>
@@ -235,9 +238,9 @@ export default function Control({
             <kbd>{t("common.pageUpKey")}</kbd><kbd>{t("common.pageDownKey")}</kbd> Z
           </p>
           <div className="pen-row">
-            <button onClick={() => run(() => api.pen(false))}>{t("control.penUp")}</button>
-            <button onClick={() => run(() => api.pen(true))}>{t("control.penDown")}</button>
-            <button onClick={() => run(() => api.home())}>{t("control.homeAll")}</button>
+            <button onClick={() => run(() => api.pen(false, projectId))}>{t("control.penUp")}</button>
+            <button onClick={() => run(() => api.pen(true, projectId))}>{t("control.penDown")}</button>
+            <button onClick={() => run(() => api.home(undefined, projectId))}>{t("control.homeAll")}</button>
           </div>
         </fieldset>
         <label className="switch-label" style={{ marginTop: 14, justifyContent: "flex-start" }}>

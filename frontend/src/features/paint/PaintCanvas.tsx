@@ -39,6 +39,8 @@ import { useCanvasViewport } from "./hooks/useCanvasViewport";
 import CanvasRulers from "./components/canvas/CanvasRulers";
 import CanvasGrid from "./components/canvas/CanvasGrid";
 import ObjectsLayer from "./components/canvas/ObjectsLayer";
+import BacksideLayer from "./components/canvas/BacksideLayer";
+import type { TurnEdge } from "./lib/backside";
 import OverlayLayer from "./components/canvas/OverlayLayer";
 import SelectionLayer from "./components/canvas/SelectionLayer";
 import { objectPlacementFrame, sourcePageFrame } from "./lib/sourcePage";
@@ -76,6 +78,7 @@ const ERASER_RADIUS = 2.5;
 function PaintCanvas({
   visible = true,
   statusContent,
+  backsideReference,
   gridVisible = true,
   showRulers = true,
   padding = 32,
@@ -102,6 +105,7 @@ function PaintCanvas({
 }: {
   visible?: boolean;
   statusContent?: ReactNode;
+  backsideReference?: { page: Page; edge: TurnEdge; opacity: number };
   gridVisible?: boolean;
   showRulers?: boolean;
   padding?: number;
@@ -769,7 +773,10 @@ function PaintCanvas({
         onDrop={onDrop}
       >
         <g transform={canvasRotationTransform}>
-        <CanvasGrid W={W} H={H} S={S} pad={pad} step={step} major={major} gridVisible={gridVisible} pixel={pixel} showOrientation={viewRotation !== 0} />
+        <CanvasGrid W={W} H={H} S={S} pad={pad} step={step} major={major} gridVisible={gridVisible} pixel={pixel} />
+
+        {backsideReference && <BacksideLayer {...backsideReference} cal={cal} stroke={LINE_STROKE}
+          active={visible} interactive={panning || zooming}/>}
 
         <ObjectsLayer objects={objectsByZ} selectedIds={selectedIds} stroke={LINE_STROKE} active={visible} interactive={previewTransforms.size > 0 || panning || zooming} />
 

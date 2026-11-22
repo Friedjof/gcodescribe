@@ -3,6 +3,7 @@ import { useI18n } from "../../i18n";
 import type { WorkspaceId } from "../../interface/workspaces";
 import EditorMenu from "./EditorMenu";
 import InterfaceMenu from "./InterfaceMenu";
+import EditorIcon from "./EditorIcon";
 export default function ProgramMenus({
   onNavigate,
   onProjects,
@@ -86,13 +87,6 @@ export default function ProgramMenus({
               ]
             : []),
           {
-            id: "settings",
-            label: t("settings.title"),
-            icon: "settings",
-            separator: true,
-            action: onSettings,
-          },
-          {
             id: "notify",
             label: t(notifications.granted ? "notify.test" : "notify.enable"),
             icon: "bell",
@@ -125,6 +119,9 @@ export default function ProgramMenus({
           },
         ]}
       />
+      <button type="button" className="app-menu-button app-settings-button" onClick={onSettings} title={t("settings.title")} aria-label={t("settings.title")}>
+        <EditorIcon name="settings" size={14} /><span className="app-settings-label">{t("settings.title")}</span>
+      </button>
     </>
   );
 }

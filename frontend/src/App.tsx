@@ -3,7 +3,7 @@ import { isPrinterBusy } from "./lib/printerState";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import type { PrinterStatus } from "./api/types/printer";
 import { api, onAppEvent, type AiImageStatus, type EffectiveSettings } from "./api";
-import StatusPill from "./components/StatusPill";
+import PrinterSelector from "./components/PrinterSelector";
 import { usePlotNotifications } from "./hooks/usePlotNotifications";
 import QuickStopPlot, { canStopPlot } from "./components/QuickStopPlot";
 const AiImageDesigner = lazy(() => import("./features/ai-designer/AiImageDesigner"));
@@ -64,6 +64,8 @@ function AdminApp() {
   const [paintCommand, setPaintCommand] = useState<PaintWorkspaceCommand | null>(null);
   const commandId = useRef(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [printerSwitching, setPrinterSwitching] = useState(false);
+  const statusRequest = useRef(0);
   const [visited, setVisited] = useState<Set<Tab>>(() => new Set<Tab>(["paper"]));
   const [status, setStatus] = useState<PrinterStatus | null>(null);
   const [aiStatus, setAiStatus] = useState<AiImageStatus | null>(null);
@@ -72,7 +74,7 @@ function AdminApp() {
   const visibleTabs = tourWorkspace && !preferences.visibleWorkspaces.includes(tourWorkspace) ? [...preferences.visibleWorkspaces, tourWorkspace] : preferences.visibleWorkspaces;
   const tab = usableWorkspace(requestedTab, preferences.workspaceOrder, visibleTabs, aiStatus?.enabled ?? false);
   const workspaces = visibleWorkspaces(preferences.workspaceOrder, visibleTabs, aiStatus?.enabled ?? false);
-  const interactive = !settingsOpen && !tabSettingsOpen && !helpOpen;
+  const interactive = !settingsOpen && !printerSwitching && !tabSettingsOpen && !helpOpen;
   const setTab = useCallback((id: Tab) => {
     if (id === "start") id = "paper";
     if (id === "ai" && !aiStatus?.enabled) return;
@@ -97,7 +99,15 @@ function AdminApp() {
   }, []);
 
   const notificationsActive = notifications.active;
-  const refreshStatus = useCallback(() => api.octoStatus().then(setStatus).catch(() => setStatus(null)), []);
+  const refreshStatus = useCallback(() => {
+    const request = ++statusRequest.current;
+    return api.octoStatus().then(next => { if (request === statusRequest.current) setStatus(next); })
+      .catch(() => { if (request === statusRequest.current) setStatus(null); });
+  }, []);
+  const switchingPrinter = useCallback((switching: boolean) => {
+    setPrinterSwitching(switching);
+    ++statusRequest.current; setStatus(null);
+  }, []);
 
   // Surface a toast whenever a connected agent triggers an MCP tool. The data
   // those tools change is refreshed live by each view (e.g. the designer) via
@@ -144,7 +154,7 @@ function AdminApp() {
 
   return (
     <SetupProgressProvider>
-    <ProjectCalibrationProvider active={tab === "paint" || tab === "paper" || tab === "games"}>
+    <ProjectCalibrationProvider active={tab === "paint" || tab === "paper" || tab === "games" || tab === "calibrate" || tab === "control"}>
     <TourProvider activeWorkspace={tab} onNavigate={navigateTour} onEnd={endTour} blocked={!interactive} printerBusy={isPrinterBusy(status)}>
     <div className={`app tab-${tab}`}>
       <header className="app-titlebar">
@@ -163,7 +173,7 @@ function AdminApp() {
             <option value="fr">{t("lang.fr")}</option>
             <option value="es">{t("lang.es")}</option>
           </select>
-          <button className="app-connection-button" title={t("start.configureConnection")} aria-label={t("start.configureConnection")} onClick={() => setSettingsOpen(true)}><StatusPill status={status} /></button>
+          <PrinterSelector status={status} onAction={refreshStatus} onManage={() => setSettingsOpen(true)} onSwitching={switchingPrinter} />
           {canStopPlot(status) && <QuickStopPlot status={status} onAction={refreshStatus} />}
         </div>
       </header>
@@ -174,18 +184,17 @@ function AdminApp() {
       {helpOpen && <PaintInfoModal onClose={() => setHelpOpen(false)} />}
       {settingsOpen && (
         <SettingsDialog
+          status={status}
           onClose={() => setSettingsOpen(false)}
           onSaved={(saved: EffectiveSettings) => {
             void refreshStatus();
-            if (saved.ai.enabled && !aiStatus?.enabled) {
-              api.aiImageStatus().then((s) => {
-                setAiStatus(s);
-                if (s.enabled) {
+            api.aiImageStatus().then((s) => {
+              setAiStatus(s);
+              if (saved.ai.enabled && (!aiStatus?.enabled || aiStatus?.ready === false) && s.enabled && s.ready !== false) {
                   setSettingsOpen(false);
                   setTab("ai");
-                }
-              }).catch(() => {});
-            }
+              }
+            }).catch(() => {});
           }}
         />
       )}

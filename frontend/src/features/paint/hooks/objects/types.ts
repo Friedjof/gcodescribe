@@ -37,6 +37,7 @@ export interface ObjectOps {
     ungroupSelected: (ids?: string[]) => void;
     applyMaskStamp: (maskId: string) => void;
     convertSelectedToLines: () => void;
+    clipToPlot: () => Promise<boolean>;
     copySelected: () => void;
     cutSelected: () => void;
     pasteObjects: (source?: SceneObject[]) => void;

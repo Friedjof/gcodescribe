@@ -24,25 +24,26 @@ export default function SpecialPositions({ cal, pos, controls, onNext, onOpenPre
         <legend className="sr-only">{t("paper.positions.select")}</legend>
         <Segmented value={controls.kind} onChange={controls.select} options={SPECIAL_POSITIONS.map((item) => ({
           value: item.kind,
-          label: <><strong style={{ color: controls.kind === item.kind ? "var(--text)" : item.color }}>{item.marker}</strong> {t(item.label)}</>,
+          label: t(item.label),
         }))} />
       </fieldset>
       <p className="muted">{t(point.hint)}</p>
+      <p className="calibration-task-note">{t("paper.positions.defaultsHint")}</p>
       <dl className="position-coordinates">
         <div><dt>{t("paper.positions.stored")}</dt><dd>{coords(saved)}</dd></div>
         <div><dt>{t("paper.positions.head")}</dt><dd>{coords(pos?.homed ? pos : null)}</dd></div>
         <div className="position-target"><dt>{t("paper.positions.target")}</dt><dd>{coords(controls.target)}</dd></div>
       </dl>
       <p className="position-instruction" role="status">
-        {controls.busy ? t("common.loading") : controls.message || t("paper.positions.instructions", { marker: point.marker })}
+        {controls.busy ? t("common.loading") : controls.message || t("paper.positions.instructions", { marker: t(point.label) })}
       </p>
       <div className="position-actions">
         <button disabled={!controls.available || controls.busy} onClick={controls.homeAndVisit}
-          title={t("paper.positions.homeHint", { marker: point.marker })}>
-          {t("paper.positions.homeVisit", { marker: point.marker })}
+          title={t("paper.positions.homeHint", { marker: t(point.label) })}>
+          {t("paper.positions.homeVisit", { marker: t(point.label) })}
         </button>
-        <button disabled={disabled} onClick={controls.capture}>{t("paper.positions.capture", { marker: point.marker })}</button>
-        {controls.kind === "calibration" && <button className="ghost position-pressure" disabled={controls.busy}
+        <button disabled={disabled} onClick={controls.capture}>{t("paper.positions.capture", { marker: t(point.label) })}</button>
+        {controls.kind === "calibration" && cal.pen_calibrated && <button className="ghost position-pressure" disabled={controls.busy}
           aria-label={t("paper.pressure.title")}
           title={`${t("paper.pressure.title")} · ${(cal.calibration_pressure_offset ?? 0) > 0 ? "+" : ""}${cal.calibration_pressure_offset ?? 0} mm`}
           onClick={onOpenPressure}>
@@ -53,8 +54,8 @@ export default function SpecialPositions({ cal, pos, controls, onNext, onOpenPre
             <circle cx="17" cy="16" r="2" fill="var(--panel)" />
           </svg>
         </button>}
-        <button className="primary" disabled={controls.busy || !pos?.homed} onClick={onNext}>
-          {t("common.next")} →
+        <button className="primary" disabled={!controls.available || controls.busy || !pos?.homed} onClick={onNext}>
+          {t("paper.preparePen")} →
         </button>
       </div>
       {!controls.ready && <p className="muted">{t("paper.positions.unavailable")}</p>}

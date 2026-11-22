@@ -43,10 +43,10 @@ it.each(["background", "P", "C"])("passes clicks on %s to the parent motion hand
 it("shows saved positions and an unsaved target as circles with a centered X", () => {
   render(<LiveView cal={cal} position={null} rect={null} preview={null}
     selectedPosition="calibration" target={{ kind: "calibration", x: 40, y: 30 }} />);
-  const saved = screen.getByRole("img", { name: "C" });
+  const saved = screen.getByRole("img", { name: "calibrate.groupCalibrationPosition" });
   expect(saved.querySelector("path")).toHaveAttribute("d", "M103 103L107 107M103 107L107 103");
   expect(saved.querySelectorAll("circle")).toHaveLength(2);
-  const target = screen.getByRole("img", { name: "C · paper.positions.target" });
+  const target = screen.getByRole("img", { name: "calibrate.groupCalibrationPosition · paper.positions.target" });
   expect(target.querySelector("circle")).toHaveAttribute("cx", "40");
   expect(target.querySelector("circle")).toHaveAttribute("cy", "180");
   expect(target.querySelector("circle")).toHaveAttribute("fill", "none");

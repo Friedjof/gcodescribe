@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 
 export type ArrowDir = "left" | "right" | "up" | "down" | "raise" | "lower";
 
@@ -19,9 +19,12 @@ export interface ArrowHandlers {
  * direction currently "pressed" (briefly), so the matching button can be
  * highlighted for visual feedback.
  */
-export function useArrowKeys(handlers: ArrowHandlers, enabled = true): ArrowDir | null {
+export function useArrowKeys(handlers: ArrowHandlers, enabled = true,
+  options?: { scope: RefObject<HTMLElement>; motionEnabled: boolean }): ArrowDir | null {
   const ref = useRef(handlers);
   ref.current = handlers;
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
   const [pressed, setPressed] = useState<ArrowDir | null>(null);
   const timer = useRef<number | undefined>(undefined);
 
@@ -38,16 +41,24 @@ export function useArrowKeys(handlers: ArrowHandlers, enabled = true): ArrowDir 
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented) return;
       const t = e.target as HTMLElement | null;
-      if (t?.closest("button, a, [role='menu'], [role='separator'], [role='tablist'], [role='dialog']")) return;
+      const settings = optionsRef.current;
+      const scope = settings?.scope.current;
+      if (settings && (!scope || !t || !scope.contains(t))) return;
+      if (t?.closest("a, [role='menu'], [role='separator'], [role='tablist']")) return;
+      if (!scope && t?.closest("button, [role='dialog'], [role='alertdialog']")) return;
+      if (scope && t?.closest("[role='dialog'], [role='alertdialog']") !==
+        scope.closest("[role='dialog'], [role='alertdialog']")) return;
       const tag = t?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || t?.isContentEditable)
         return;
-      if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
       const dir = KEYS[e.key];
       if (!dir) return;
       const fn = ref.current[dir];
       if (!fn) return;
       e.preventDefault();
+      // Keep held keys and in-flight commands from scrolling or queuing moves.
+      if (e.repeat || settings?.motionEnabled === false) return;
       fn();
       setPressed(dir);
       window.clearTimeout(timer.current);

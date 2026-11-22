@@ -2,6 +2,7 @@ import type { PrinterStatus } from "../api/types/printer";
 import { isPrinting, printerJobState, printerProgress } from "../lib/printerState";
 export interface PlotNotice { filename: string; pct: number }
 export interface PlotTracker {
+  printerKey: string | null;
   initialized: boolean;
   jobKey: string | null;
   notified: Set<number>;
@@ -11,6 +12,7 @@ export interface PlotTracker {
   completedKey: string | null;
 }
 export const newPlotTracker = (): PlotTracker => ({
+  printerKey: null,
   initialized: false, jobKey: null, notified: new Set(), lastProgress: null,
   wasPrinting: false, lastResultId: null, completedKey: null,
 });
@@ -18,13 +20,16 @@ export const newPlotTracker = (): PlotTracker => ({
 /** Advance only from observed progress or an explicit terminal result. */
 export function plotNotices(tracker: PlotTracker, status: PrinterStatus | null): PlotNotice[] {
   if (status?.online !== true) return [];
+  const printerKey = status.printer_id ?? status.backend ?? null;
+  if (tracker.printerKey && printerKey && tracker.printerKey !== printerKey) Object.assign(tracker, newPlotTracker());
+  if (printerKey) tracker.printerKey = printerKey;
   const notices: PlotNotice[] = [];
   const first = !tracker.initialized;
   const result = status.last_job;
   if (first) { tracker.initialized = true; tracker.lastResultId = result?.id ?? null; }
   const job = status.job;
   const filename = job?.job?.file?.name;
-  const key = filename ? `${status.backend ?? "printer"}:${job?.id ?? filename}` : null;
+  const key = filename ? `${status.printer_id ?? status.backend ?? "printer"}:${job?.id ?? filename}` : null;
   const state = printerJobState(status);
   const printing = isPrinting(status);
   const progress = printerProgress(status);
@@ -50,7 +55,7 @@ export function plotNotices(tracker: PlotTracker, status: PrinterStatus | null):
   }
   if (result?.id && result.id !== tracker.lastResultId) {
     tracker.lastResultId = result.id;
-    const resultKey = `${status.backend ?? "printer"}:${result.id}`;
+    const resultKey = `${status.printer_id ?? status.backend ?? "printer"}:${result.id}`;
     if (result.outcome === "completed" && result.filename && tracker.completedKey !== resultKey) {
       notices.push({ filename: result.filename, pct: 100 });
       tracker.completedKey = resultKey;

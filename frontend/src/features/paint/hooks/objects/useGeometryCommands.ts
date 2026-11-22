@@ -9,6 +9,7 @@ import { DEFAULT_VECTOR_STYLE, normalizeStyle, type VectorStyle, } from "../../l
 import { geometryTask } from "../../lib/geometryTasks";
 import { hasPressureSamples, remapSegmentPressures, validSegmentPressures } from "../../lib/pressure";
 import type { ObjectCommandContext } from "./useObjectCommandContext";
+import type { ClipResult } from "../../lib/clipToPlot";
 export function useGeometryCommands(context: ObjectCommandContext) {
     const { page, cal, selectedIds, setPage, setSelectedIds, persist, remember, appendPrepared, setProcessing, commitAsync, fail, t } = context;
     const stylePending = useRef(new Map<string, {
@@ -16,6 +17,36 @@ export function useGeometryCommands(context: ObjectCommandContext) {
         token: number;
     }>());
     const sequence = useRef(0);
+    const latestCalibration = useRef(cal); latestCalibration.current = cal;
+    const clipToPlot = async () => {
+        if (!page || !cal || context.processing) return false;
+        const release = retainPage(page);
+        setProcessing(n => n + 1);
+        try {
+            const replacements = new Map<string, { before: SceneObject; after: SceneObject | null }>();
+            for (const obj of page.objects) {
+                if (obj.plotted || isMaskObject(obj)) continue;
+                const lines = (obj.cachedPolylines ?? basePolylines(obj)) as Pt[][];
+                const result = await geometryTask<ClipResult>({ kind: "clip", lines,
+                    transform: obj.transform ?? IDENTITY, width: cal.plot_width, height: cal.plot_height,
+                    pressures: validSegmentPressures(lines, obj.data?.cachedSegmentPressures)
+                        ?? validSegmentPressures(lines, obj.data?.baseSegmentPressures), feeds: obj.cachedFeeds });
+                if (!result.changed) continue;
+                replacements.set(obj.id, { before: obj, after: result.lines.length ? {
+                    ...obj, type: "freehand", transform: { ...IDENTITY }, cachedPolylines: result.lines,
+                    cachedFeeds: result.feeds, data: { basePolylines: result.lines, style: DEFAULT_VECTOR_STYLE,
+                        baseSegmentPressures: result.pressures, cachedSegmentPressures: result.pressures,
+                        pressureEnabled: obj.data?.pressureEnabled, strokeOrder: obj.data?.strokeOrder,
+                        template: obj.data?.template, name: obj.data?.name },
+                } : null });
+            }
+            if (context.latestPage.current?.id === page.id && (
+                latestCalibration.current?.plot_width !== cal.plot_width || latestCalibration.current?.plot_height !== cal.plot_height
+            )) throw new Error(t("paint.clipAreaChanged"));
+            return replacements.size ? commitAsync(page, replacements) : true;
+        } catch (error) { fail(error); return false; }
+        finally { release(); setProcessing(n => n - 1); }
+    };
     const addObjects = (objs: SceneObject[]) => {
         if (!page || !objs.length)
             return;
@@ -253,6 +284,6 @@ export function useGeometryCommands(context: ObjectCommandContext) {
         persist(page.id, objects);
     };
     return { addObjects, addObject, eraseAcrossObjects, updateSelectedStyle, setSelectedPressureEnabled,
-        applyMaskStamp, convertSelectedToLines,
+        applyMaskStamp, convertSelectedToLines, clipToPlot,
         pendingStyle: selectedIds.length ? stylePending.current.get(`${page?.id}:${selectedIds[0]}`)?.style : undefined };
 }

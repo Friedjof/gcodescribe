@@ -32,6 +32,10 @@ def calibration_to_xml(cal: Calibration) -> str:
         SubElement(area, "base", x=str(x), y=str(y), width=str(width), height=str(height))
 
     paper = SubElement(root, "paper", margin=f"{cal.paper_margin}")
+    if cal.paper_diagonal:
+        paper.set("diagonal", cal.paper_diagonal)
+    if cal.paper_generated_corners:
+        paper.set("generated", " ".join(cal.paper_generated_corners))
     for name, point in sorted(cal.paper_corners.items()):
         SubElement(paper, "corner", id=name, x=f"{point[0]}", y=f"{point[1]}")
 
@@ -125,6 +129,14 @@ def calibration_from_xml(xml: str, *, base: Calibration | None = None) -> Calibr
     paper = root.find("paper")
     if paper is not None:
         num(paper, "margin", "paper_margin")
+        diagonal = paper.get("diagonal")
+        if diagonal not in (None, "bl-tr", "tl-br"):
+            raise CalibrationImportError("Ungültige Papierdiagonale.")
+        updates["paper_diagonal"] = diagonal
+        generated = paper.get("generated", "").split()
+        if any(key not in ("bl", "br", "tl", "tr") for key in generated):
+            raise CalibrationImportError("Ungültige ergänzte Papierecke.")
+        updates["paper_generated_corners"] = generated
         corners: dict[str, list[float]] = {}
         for corner in paper.findall("corner"):
             cid = corner.get("id")
