@@ -1,177 +1,177 @@
-# Interface-Refactoring: Editor über die volle Fensterbreite
+# Interface refactoring: a full-window editor
 
-Stand: 16.11.2026. Status: Umsetzung nach erweitertem Auftrag vom 16.11.2026. Für Umsetzung und Prüfung stehen ab 00:20 Uhr acht Stunden zur Verfügung; Zieltermin 08:20 Uhr (Europe/Berlin).
+Historical plan and implementation notes, 16 November 2026. Implementation follows the expanded request of that date, with an eight-hour implementation/validation window from 00:20 to 08:20 (Europe/Berlin).
 
-## Sicherung und Arbeitsbranch
+## Backup and working branch
 
-- Gesicherter Ausgangsstand: `698188a` auf `main`.
-- Die letzten Funktionsänderungen liegen getrennt in `f5db2a7` (Zahlenfelder) und `698188a` (Maßleiste).
-- Sicherungstag: `interface-refactoring-base-2026-11-16`.
-- Neuer Arbeitsbranch: `interface-refactoring` (Git erlaubt keine Leerzeichen in Branchnamen).
-- Letzter geprüfter Funktionsstand: 442 Frontend-Tests und Produktions-Build erfolgreich.
-- Der vorliegende Plan bekommt einen eigenen Commit auf dem Arbeitsbranch. Die Umsetzung folgt in getrennten, rücknehmbaren Schritten.
-- Rückblick auf den Ausgangsstand: `git switch --detach interface-refactoring-base-2026-11-16`. Für eine Weiterentwicklung daraus einen neuen Branch anlegen. Einzelne Umsetzungsschritte später gezielt mit `git revert <commit>` rückgängig machen. Vor einem Branchwechsel eigene Änderungen sichern.
+- Saved starting point: `698188a` on `main`.
+- Recent changes are separate: `f5db2a7` for numeric inputs and `698188a` for the measurement bar.
+- Backup tag: `interface-refactoring-base-2026-11-16`.
+- New working branch: `interface-refactoring`; Git branch names cannot contain spaces.
+- Last validated baseline: 442 frontend tests and a successful production build.
+- Commit this plan separately on the working branch, then implement it in reversible steps.
+- Inspect the baseline with `git switch --detach interface-refactoring-base-2026-11-16`; create a new branch to develop from it. Use `git revert <commit>` for individual later steps. Save local work before switching branches.
 
-## Verbindliche Richtung aus dem Nutzerfeedback
+## Required direction from user feedback
 
-1. Die App nutzt die volle Breite und Höhe ihres Fensters.
-2. Das Erscheinungsbild orientiert sich an einem Dokumenteditor: echte Tabs, kompakte Befehlsgruppen, angedockte Bereiche, klare Trennlinien und eine Statusleiste.
-3. Hell ist der Standard, Dunkel eine optionale Darstellung. Weißes Papier und lesbare Zeichnung bleiben in beiden Modi erhalten.
-4. Anfänger erhalten einen eigenständigen, verständlichen Einstieg und eine reduzierte Arbeitsoberfläche.
-5. Arbeitsbereich-Tabs sind ein-/ausblendbar und umsortierbar. KI-Designer, Schrifteditor und weitere Spezialbereiche sind im Anfängerstandard ausgeblendet.
-6. Platzverbrauch und Abstände werden geprüft: insbesondere Canvas-Innenrand, Seitenleisten, Karten-Padding, Werkzeugleisten, Mindesthöhen und feste Rasterauswahl.
+1. Fill the entire window width and height.
+2. Use a document-editor layout: actual tabs, compact command groups, docked panels, clear separators and a status bar.
+3. Default to light, with optional dark mode. Keep white paper and legible drawings in both.
+4. Give beginners a clear entry point and a reduced interface.
+5. Allow workspace tabs to be hidden and reordered. Hide AI Designer, Font Editor and other specialist workspaces in the beginner preset.
+6. Audit space usage: canvas padding, sidebars, cards, toolbars, minimum heights and fixed grid choices.
 
-Der Entwurf wird direkt auf dem separaten Arbeitsbranch in der App umgesetzt und anhand isolierter Browser-Testprofile geprüft. Tests lösen keine unaufgeforderten Maschinenbewegungen aus.
+Implement directly in the app on the separate branch and validate using isolated browser profiles. Tests do not initiate unsolicited machine movement.
 
-## Zielaufbau
+## Target layout
 
-- **Oben:** flache Arbeitsbereich-Tabs; Programmname kompakt; Druckerzustand und bei laufendem Auftrag „Plot stoppen“ jederzeit sichtbar.
-- **Darunter:** Menü und kompakte Befehlsleiste. Gruppen: Bearbeiten, Einfügen, Anordnen, Ansicht, Vorschau/Plotten. Befehle besitzen eindeutige Namen und einheitliche SVG-Symbole.
-- **Links:** schmale Werkzeugleiste; daneben bei Bedarf das angedockte Projekt-/Seitenpanel. Seiten und Objekte lassen sich innerhalb dieses Panels wechseln.
-- **Mitte:** durchgehende neutrale Arbeitsfläche mit weißem Papier; optionale Lineale und Maßleiste. Die Fläche wächst sofort mit, wenn ein Panel geschlossen wird.
-- **Rechts:** einklappbare Eigenschaften, abhängig von Werkzeug, Objekttyp und Auswahl. Allgemeine Aktionen wie Undo, Zwischenablage und Import stehen in der Befehlsleiste.
-- **Unten:** Speicherzustand, Seite/Auswahl, Maßeinheit, Zoom und Hintergrundaufgaben. Dauerhafte Informationszeilen und schwebende Zoom-Pills entfallen.
+- **Top:** flat workspace tabs, a compact app name, printer status and a visible Stop plot action whenever a job is active.
+- **Below:** menus and a compact command bar grouped into Edit, Insert, Arrange, View and Preview/Plot. Use clear names and consistent SVG icons.
+- **Left:** a narrow toolbar and an optional docked project/pages panel for navigating pages and objects.
+- **Centre:** a continuous neutral workspace with white paper, optional rulers and a measurement bar. Closing a panel immediately frees canvas space.
+- **Right:** collapsible properties for the current tool, object type and selection. Put general actions such as Undo, clipboard and import in the command bar.
+- **Bottom:** save status, page/selection, units, zoom and background tasks. Remove permanent information rows and floating zoom pills.
 
-Arbeitsbereich-Tabs wechseln Funktionen der App. Projektseiten bleiben im Seitenbereich bzw. in optionalen Seitentabs am Dokument. Diese beiden Ebenen bekommen unterscheidbare Gestaltung und Beschriftung.
+Workspace tabs switch app functions. Project pages stay in the pages panel or optional document tabs. Give these two navigation levels distinct styling and labels.
 
-## Navigation und konfigurierbare Tabs
+## Navigation and configurable tabs
 
-### Anfängerstandard und Reihenfolge
+### Beginner preset and order
 
-**Start → Zeichnen → Vorlagen → Aufträge → Einrichten**.
+**Start → Draw → Templates → Jobs → Setup**.
 
-- **Start:** „Bild einfügen“, „Text schreiben“, „Vorlage verwenden“, „Projekt öffnen“ und ein klarer Einrichtungsstatus.
-- **Zeichnen:** bisheriger Designer mit Werkzeugen, Seiten, Eigenschaften, Maßleiste und Vorschau.
-- **Vorlagen:** bisherige generative Vorlagen/Games.
-- **Aufträge:** erzeugte Jobs, Fortschritt und Ergebnisse.
-- **Einrichten:** geführter Zugang zu Druckerverbindung, Papier/Plotfläche und Stiftkalibrierung.
+- **Start:** Insert image, Write text, Use template, Open project and a clear setup status.
+- **Draw:** the existing designer with tools, pages, properties, measurements and preview.
+- **Templates:** existing generative templates/games.
+- **Jobs:** generated jobs, progress and results.
+- **Setup:** guided access to connections, paper/plot bounds and pen calibration.
 
-Weitere wählbare Bereiche: **Galerie, Profile, Steuerung, Schrifteditor, KI-Designer**. Das sind Umgruppierungen vorhandener Funktionen; vorhandene Inhalte werden erhalten.
+Additional workspaces: **Gallery, Profiles, Control, Font Editor and AI Designer**. These regroup existing features without discarding content.
 
-### Tab-Verwaltung
+### Managing tabs
 
-- „Tabs anpassen …“ über Ansicht und einen klaren Knopf am Ende der Tab-Leiste.
-- Sichtbarkeit per Checkbox, Reihenfolge per Ziehen und per tastaturbedienbaren Hoch-/Runter-Aktionen.
-- „Anfängerstandard wiederherstellen“ und „Alle verfügbaren Bereiche“ als ausdrückliche Voreinstellungen.
-- Ausgeblendete Bereiche bleiben über „Weitere Bereiche“ erreichbar und können wieder angeheftet werden.
-- Mindestens ein verfügbarer Bereich bleibt sichtbar. Wird der aktive Tab ausgeblendet, wird ein sichtbarer Nachbar aktiviert.
-- KI-Verfügbarkeit bleibt an die Serverkonfiguration gebunden. Eine UI-Einstellung kann eine deaktivierte Funktion nicht aktivieren.
-- Verbergen eines Tabs löscht weder Projekte noch Aufträge noch Entwürfe. Bereits besuchte Editoren behalten ihren Zustand; Hintergrundaufträge laufen mit sichtbarem Status weiter.
-- Bei zu wenig Breite: kontrolliertes Überlaufmenü, keine unlesbar zusammengedrückten Tabs.
+- Offer Customise tabs through View and a clear button at the end of the tab bar.
+- Use checkboxes for visibility; support dragging and keyboard-accessible up/down controls for ordering.
+- Provide explicit Restore beginner preset and Show all workspaces presets.
+- Keep hidden workspaces reachable through More workspaces, with an option to pin them again.
+- Keep at least one available workspace visible. Hiding the active one selects a visible neighbour.
+- Server configuration still controls AI availability; a UI preference cannot enable a disabled feature.
+- Hiding a tab deletes no projects, jobs or drafts. Visited editors retain state and background work keeps a visible status.
+- Use a controlled overflow menu when space is limited instead of compressing tabs until they are unreadable.
 
-## Eigenständige Bedienung für Anfänger
+## Beginner workflow
 
-Der Anfängerzugang verändert Informationsaufbau, Benennung und Aufgabenführung:
+The beginner interface changes information structure, labels and task guidance:
 
-1. **Starten:** eine Aufgabe auswählen statt eine lange Liste technischer Optionen durchsuchen.
-2. **Einrichten:** verständliche Zustände für Verbindung, Papier und Stift; der nächste fehlende Schritt ist als Aktion erreichbar.
-3. **Bearbeiten:** Auswahl, Verschieben, Größe, Text, Formen und Import sind sichtbar; Schraffuren und Linien besitzen nachvollziehbare Voreinstellungen. Vertiefende Werte stehen unter „Erweitert“.
-4. **Vorschau prüfen:** primärer nächster Schritt vor dem Plotten. „G-Code exportieren“ bleibt über Datei bzw. die vollständige Oberfläche erreichbar.
-5. **Plotten:** bewusster Benutzerbefehl mit den vorhandenen Profil-, Verbindungs- und Sicherheitsprüfungen.
+1. **Start:** choose a task instead of searching a long technical options list.
+2. **Set up:** clearly display connection, paper and pen states and offer the next missing step as an action.
+3. **Edit:** show selection, movement, sizing, text, shapes and import. Give lines/hatching understandable defaults and place detailed values under Advanced.
+4. **Preview:** make inspection the primary next step before plotting. Keep G-code export reachable through File or the full interface.
+5. **Plot:** require an explicit user command and retain existing profile, connection and safety checks.
 
-Hilfe erscheint kontextbezogen bei der jeweiligen Aufgabe. Fortschritt und Fehlertexte benennen eine konkrete nächste Handlung. Die Oberfläche unterscheidet „verbunden“ und „bereit zum Plotten“ anhand der bestehenden Zustandsregeln.
+Keep help next to the task. Progress and errors identify a concrete next action. Distinguish connected from ready to plot using existing state rules.
 
-„Geführt“ und „Vollständig“ sind Anzeigepräferenzen. Der Wechsel verändert keine Kalibrierung, löst keine Maschinenbewegung aus und setzt keine Tab-Anpassungen oder Dokumente zurück. „Plot stoppen“ bleibt in allen Modi und Arbeitsbereichen erreichbar.
+Guided and Full are display preferences. Switching them changes no calibration, moves no hardware and resets neither tab customisation nor documents. Stop plot remains reachable in every mode/workspace.
 
-## Spacing- und Flächenaudit
+## Space and spacing audit
 
-| Bereich / heutige Vorgabe | Geplante Behandlung |
+| Current area / constraint | Planned treatment |
 | --- | --- |
-| `.app`: maximal 1680 px / 97 vw, zentriert, Außen-Padding | Fensterfüllender Rahmen ohne äußeren Kartenrand. |
-| `.paint`: 16 px Abstand zwischen Hauptbereichen | Angedockte Bereiche mit einfachen Trennlinien und schmalen Splittern. |
-| `.card`: 16 px Padding, 16 px Rundung, tiefer Schatten | Editorflächen werden zusammenhängende Panels; Dialoge und echte Inhalte erhalten passende Abstände. |
-| Seitenliste: fest 360 px | Standard etwa 220 px, verstellbar und vollständig einklappbar. |
-| Eigenschaften: fest 300 px | Standard etwa 260 px, verstellbar und vollständig einklappbar. |
-| Werkzeugleiste: 54 px plus Zwischenräume | Kompakte, durchgehende Leiste; ausreichend große Trefferflächen. |
-| Canvas: `max(W,H) * 0.04 + 4` als fester Innenrand in Plot-mm | Anzeigeabstand in Bildschirm-Pixeln, getrennt von Dokumenträndern; Ansichten „Papier einpassen“, „Auswahl einpassen“, „Papier maximieren“. Griffe bleiben auch am Rand erreichbar. |
-| Canvas-Höhe: `100dvh - 122px`, mindestens 520 px | Flexibles Grid mit `minmax(0, 1fr)`; Leisten bestimmen ihre tatsächliche Höhe. Seitenbereiche scrollen getrennt. |
-| Profil-/Maßinformationen dauerhaft oberhalb der Fläche | Kompakter Status unten; Details auf Anforderung; Maßleiste optional. |
-| Schwebender Zoom und Aufgaben-Popup über dem Dokument | Zoom und Aufgabenanzeige in der Statusleiste, aufklappbare Details. |
-| Rasterabstand nur als feste Auswahl | Bestehende Werte als Voreinstellungen; zusätzlich validierte freie Eingabe. Rasteranzeige und Einrasten getrennt bedienbar. |
-| Große allgemeine Button-/Feldabstände | Zwei Dichten: „Komfortabel“ und „Kompakt“. Bedienflächen und Tastaturfokus bleiben gut erkennbar. |
+| `.app`: centred, at most 1680 px / 97 vw, outer padding | Fill the window without an outer card border |
+| `.paint`: 16 px gaps between main areas | Docked panels with simple separators and narrow splitters |
+| `.card`: 16 px padding/radius, deep shadow | Continuous editor panels; appropriate spacing for dialogs and actual content |
+| Fixed 360 px pages list | Approximately 220 px by default, adjustable and fully collapsible |
+| Fixed 300 px properties panel | Approximately 260 px by default, adjustable and fully collapsible |
+| 54 px toolbar plus gaps | Compact continuous bar with adequate hit targets |
+| Canvas inset `max(W,H) * 0.04 + 4` in plot millimetres | Screen-pixel display padding separate from document margins; Fit paper, Fit selection and Maximise paper views; reachable edge handles |
+| Canvas height `100dvh - 122px`, minimum 520 px | Flexible grid with `minmax(0, 1fr)`; bars determine their actual height, side panels scroll independently |
+| Permanent profile/dimension information above the canvas | Compact bottom status, on-demand details and optional measurements |
+| Floating zoom and task popup over the document | Status-bar zoom/tasks with expandable details |
+| Fixed-only grid spacing | Retain presets and add validated custom input; separate visibility and snapping |
+| Large generic button/input spacing | Comfortable and Compact densities, with visible focus and usable targets |
 
-**Wichtige Trennung:** UI-Innenabstände sind Anzeigeeinstellungen. Papier-/Plotränder gehören zur Kalibrierung; der Rasterabstand bleibt eine Dokument-/Bearbeitungseinstellung. „Volle Breite“ entfernt keine physischen Grenzen des Plotters.
+UI padding is a display preference. Paper/plot margins belong to calibration; grid spacing remains a document/editing setting. Full width does not remove physical plotter limits.
 
-Abstandswerte werden durch gemeinsame Tokens vereinheitlicht. Es gibt kein Einstellungsformular für jeden einzelnen Pixel. Sichtbare Panels, Panelbreiten, Dichte, Lineale, Rasteranzeige und optionale Leisten sind die verständlichen Bedienoptionen.
+Use shared spacing tokens instead of exposing a setting for every pixel. Visible panels, widths, density, rulers, grid visibility and optional bars are the user-facing controls.
 
-## Gestaltung
+## Visual design
 
-- Heller, neutraler Programmrahmen; weiße Papierfläche; zurückhaltendes Blau für aktive Auswahl und Fokus.
-- Dunkelmodus verwendet dieselben semantischen Tokens. Portale, Menüs und Dialoge übernehmen das Theme ebenfalls.
-- Flache Tabs mit aktiver Unterkante bzw. Verbindung zum Inhaltsbereich; geringe Rundung.
-- Panels mit 1-px-Trennlinien, kleine Radien für Controls; Schatten gezielt bei Menüs und Dialogen.
-- Systemschrift, kompakte klare Hierarchie, tabellarische Ziffern in Messwerten; reguläre Beschriftung statt übermäßig vieler Großbuchstaben.
-- Einheitliche SVG-Symbole statt gemischter Emoji und Sonderzeichen.
-- Sichtbare Zustände für Fokus, Auswahl, Fehler, deaktivierte Aktionen und laufende Arbeit. Farbe ist nie die einzige Unterscheidung.
-- Keine Abhängigkeit von einer neuen UI-Bibliothek für den Umbau erforderlich.
+- Light neutral app chrome, white paper and restrained blue selection/focus.
+- Shared semantic tokens for dark mode; portals, menus and dialogs inherit the theme.
+- Flat tabs with an active underline or connection to content and limited rounding.
+- One-pixel panel separators, small control radii and targeted menu/dialog shadows.
+- System fonts, compact hierarchy, tabular measurement digits and restrained capitalisation.
+- Consistent SVG icons instead of mixed emoji/symbols.
+- Distinct focus, selection, error, disabled and working states; colour is never the only distinction.
+- No new UI-library dependency is required.
 
-## Technischer Schnitt
+## Technical boundaries
 
-- `AppShell`: Fensterrahmen und Slots für Tabs, Menü/Befehle, Arbeitsbereich und Status.
-- `workspaceRegistry`: stabile IDs, Übersetzungen, Reihenfolge, Verfügbarkeit, Komponente und Keep-alive-Regeln.
-- `interfacePreferences`: versionierte, validierte UI-Präferenzen; `useInterfacePreferences` als Zugriff.
-- `WorkspaceTabs`, `TabSettings`, `CommandBar`, `ToolbarGroup`, `DockPanel`, `SplitPane`, `StatusBar` als begrenzte UI-Bausteine.
-- `BeginnerStart` und `SetupOverview`: Aufgabenführung auf Grundlage vorhandener Services und Statusdaten.
-- `styles/tokens.css` für Theme, Dichte und Abstände; Shell- und Control-Styles getrennt von Feature-Styles.
-- Vorhandene Dokument-, Kalibrierungs-, Job- und Canvas-Controller bleiben die fachlichen Schnittstellen. Ansichten erfinden keine zweite Speicher- oder Druckersteuerung.
-- Anzeigepräferenzen bleiben getrennt von Projektinhalt und Druckerkonfiguration. Unbekannte/veraltete gespeicherte Tab-IDs werden sicher verworfen; sinnvolle Standardwerte bleiben vorhanden.
-- Layoutwechsel und Panel-Resize berücksichtigen aktive Pointer-Gesten: keine versehentliche Geometrieübernahme, erreichbare Griffe und korrekte Bildschirm-/Plotkoordinaten.
-- Alte CSS-Regeln werden pro migriertem Bereich entfernt; keine dauerhafte Sammlung widersprüchlicher Override-Regeln.
+- `AppShell` owns the frame and slots for tabs, menus/commands, workspace and status.
+- `workspaceRegistry` defines stable IDs, translations, ordering, availability, components and keep-alive rules.
+- `interfacePreferences` stores versioned, validated preferences, accessed through `useInterfacePreferences`.
+- `WorkspaceTabs`, `TabSettings`, `CommandBar`, `ToolbarGroup`, `DockPanel`, `SplitPane` and `StatusBar` are bounded UI building blocks.
+- `BeginnerStart` and `SetupOverview` guide tasks using existing services/state.
+- `styles/tokens.css` defines themes, density and spacing; keep shell/control styles separate from feature styles.
+- Existing document, calibration, job and canvas controllers remain the domain interfaces. Views do not create another storage or printer-control layer.
+- Keep display preferences separate from projects/printer settings. Safely discard unknown/obsolete saved tab IDs and retain sensible defaults.
+- Account for active pointer gestures during layout/panel changes: no accidental geometry commits, unreachable handles or incorrect screen/plot coordinates.
+- Remove old CSS rules as each area migrates rather than accumulating contradictory overrides.
 
-## Umsetzung in getrennten Commits
+## Implementation as separate commits
 
-| Schritt | Ergebnis | Abnahme |
+| Step | Result | Acceptance |
 | --- | --- | --- |
-| A. Shell und Tokens | Volle Fensterfläche, Hell als Standard, optional Dunkel, kompakte Grundelemente. | Breite/Höhe und Portale in beiden Themes; bestehende Ansichten erreichbar. |
-| B. Echte Tabs und Präferenzen | Neue Reihenfolge, Verbergen/Anheften, Überlauf, Tastaturbedienung und Reset. | Aktiven Tab verbergen, Server-Flags, Neustart und ungespeicherte Editoren geprüft. |
-| C. Angedockter Designer | Verstellbare/einklappbare Panels, durchgehende Arbeitsfläche, Statusleiste und bedarfsgerechte Canvas-Abstände. | Verschiedene Fenstergrößen, Fokusansicht, Resize und Plotgriffe am Rand. |
-| D. Befehle und Eigenschaften | Gemeinsame Aktionen oben, reduzierte kontextbezogene Eigenschaften, optionale Maße, klare Voreinstellungen. | Gleiche Befehle/Undo-Funktion, keine doppelten Eingabewege oder verdeckten Aktionen. |
-| E. Anfängeroberfläche | Start, Einrichtungsübersicht, geführte Bearbeitung und Vorschau/Plotten. | Neuer Nutzer findet ohne Vorwissen den nächsten Schritt; Moduswechsel erhält Arbeit. |
-| F. Übrige Arbeitsbereiche | Vorlagen, Galerie, Aufträge, Profile, Steuerung und optionale Spezialeditoren übernehmen die neue Sprache. | Gleiches Layout-/Fokus-/Theme-Verhalten und verständliche Navigation. |
+| A. Shell and tokens | Full-window layout, default light/optional dark, compact controls | Dimensions and portals checked in both themes; existing views reachable |
+| B. Tabs and preferences | Ordering, hiding/pinning, overflow, keyboard controls and reset | Hiding active tabs, server flags, restarts and unsaved editors checked |
+| C. Docked designer | Adjustable/collapsible panels, continuous canvas, status bar, suitable padding | Window sizes, focus view, resizing and edge handles checked |
+| D. Commands and properties | Shared actions above, contextual properties, optional dimensions, clear presets | Existing commands/Undo retained; no duplicate inputs or hidden actions |
+| E. Beginner interface | Start, setup overview, guided editing and preview/plotting | A new user can find the next step; mode switching preserves work |
+| F. Other workspaces | Apply the same design to templates, gallery, jobs, profiles, control and specialist editors | Consistent layout, focus, theme and navigation |
 
-Ein Schritt kann mehrere kleine Commits umfassen. Funktionsfehler werden als eigene Fix-Commits dokumentiert. Kein Schritt veröffentlicht automatisch ein Release.
+A step may contain several small commits. Record functional corrections separately. No implementation step automatically publishes a release.
 
-## Prüfkriterien
+## Validation criteria
 
-- Browser- und Desktop-Fenster mit z. B. 1366×768, 1920×1080 und 2560×1440; zusätzlich schmale Ansichten und 125/150/200-%-Skalierung.
-- Keine äußere Maximalbreite im Editor, kein unnötiger horizontaler Seiten-Scroll; Flächengewinn auf großen Monitoren sichtbar.
-- Seiten-/Eigenschaftenpanel lassen sich getrennt schließen und per Tastatur wieder öffnen. Die Arbeitsfläche nutzt die frei werdende Breite.
-- Gezeichnete Maße bleiben beim Umstellen von Theme, Dichte, Panels und Tabs unverändert.
-- Tab-Reihenfolge und Sichtbarkeit bleiben nach Neustart erhalten; verborgene Editoren verlieren keine Entwürfe.
-- Zahlenfeld-, Undo-, Autosave-, Navigation-, Kalibrierungs- und Druckstart-Regressionstests bleiben grün.
-- Profile/Verbindung/Job-Status und Plot-Stopp bleiben korrekt; ein verbundenes Gerät wird nicht automatisch als vollständig eingerichtet dargestellt.
-- Visuelle Browserprüfungen für beide Themes und kritische Kombinationen; vor dem Release zusätzlich Installation/Update von `.deb` und Flatpak sowie Hardware- und Benachrichtigungs-Praxistests.
+- Browser/desktop windows at 1366×768, 1920×1080 and 2560×1440, plus narrow views and 125/150/200% scaling.
+- No outer editor width cap or unnecessary horizontal page scrolling; visibly more canvas on large screens.
+- Independently close/reopen pages and properties by keyboard; the canvas uses the freed width.
+- Theme, density, panel and tab changes leave drawing dimensions unchanged.
+- Persist tab order/visibility after restart and retain hidden-editor drafts.
+- Keep numeric-input, Undo, autosave, navigation, calibration and print-start regressions passing.
+- Preserve correct profile/connection/job states and Stop plot. A connected device is not automatically fully configured.
+- Visually check both themes and critical combinations; before release, additionally test `.deb`/Flatpak installation/upgrades, physical operation and notifications.
 
-## Referenzen
+## References
 
-- [draw.io: Editor-Themes und Modi](https://www.drawio.com/docs/manual/editor/appearance/): feste Panels, Tabs und verschiedene Dichten der Editoroberfläche.
-- [draw.io: Mehr Platz für die Zeichenfläche](https://www.drawio.com/docs/manual/editor/increase-drawing-canvas/): bedarfsgerechtes Ausblenden von Oberflächenteilen.
-- [Office: Registerkarten und Befehlsgruppen](https://support.microsoft.com/en-gb/office/foundations-experiences/customize-the-ribbon-in-office?appver=zsc900&helpid=76843&ns=onenote&syslcid=2057&uilcid=2057&version=90): bekannte Gruppierung von Befehlen. Die konkrete Umsetzung hier ist eine eigene, auf den Plotter zugeschnittene Planung.
+- [draw.io editor themes and modes](https://www.drawio.com/docs/manual/editor/appearance/): fixed panels, tabs and density variations.
+- [draw.io canvas space](https://www.drawio.com/docs/manual/editor/increase-drawing-canvas/): hiding UI elements as needed.
+- [Office ribbon tabs and command groups](https://support.microsoft.com/en-gb/office/foundations-experiences/customize-the-ribbon-in-office?appver=zsc900&helpid=76843&ns=onenote&syslcid=2057&uilcid=2057&version=90): familiar command grouping. This project's implementation is independently designed for the plotter.
 
-## Umsetzungsstand
+## Implementation status
 
-Die Arbeit erfolgt auf `interface-refactoring`; `main` und der Sicherungstag bleiben unverändert.
+At this stage, work is on `interface-refactoring`; `main` and the backup tag are unchanged.
 
-- Shell, echte Arbeitsbereich-Tabs, Tab-Verwaltung und lokale Layout-Präferenzen sind implementiert.
-- Der Designer besitzt optionale, verstellbare Seiten-/Eigenschaftenbereiche, weißes Papier, Lineale, eine feste Zoomleiste und einstellbaren Papierrand. Ansichtsänderungen schreiben keine Geometrie.
-- Dokumentbefehle wurden in eine gemeinsame Menüleiste verschoben. Der Anfängermodus reduziert die ständig sichtbaren Werkzeuge; Spezialwerkzeuge bleiben erreichbar.
-- Der Einrichtungsassistent führt durch Profil/Projekt, Verbindung, Papier/Stift, erste Textseite und echte G-Code-Vorschau. Fortschritt wird pro Projekt gespeichert und an die geprüfte Profilversion gebunden. Offline-Vorbereitung bleibt von vollständiger Maschineneinrichtung unterscheidbar.
-- Die Anfänger-Kalibrierung verwendet dieselben Controller wie die vollständige Ansicht, zeigt aber jeweils einen Arbeitsschritt. Zusätzliche Positionen und Hindernisse stehen in einem optionalen Menü.
-- Dialogfokus und Tastaturnavigation wurden abgesichert, damit Menünavigation keine Jog-Befehle auslöst.
+- Shell, actual workspace tabs, tab management and local layout preferences are implemented.
+- The designer has optional adjustable pages/properties panels, white paper, rulers, a fixed zoom bar and adjustable paper padding. View changes write no geometry.
+- Document actions are grouped in a shared menu bar. Beginner mode reduces permanently visible tools while keeping specialist tools reachable.
+- Setup guides profile/project selection, connection, paper/pen, a first text page and a real G-code preview. Progress is saved per project and bound to its checked profile revision. Offline preparation remains distinct from complete machine setup.
+- Beginner calibration shares the full view's controllers but shows one task at a time. Additional positions/obstacles are in an optional menu.
+- Dialog focus and keyboard navigation prevent menu actions from triggering jog commands.
 
-Zwischenprüfung: 485 Frontend-Tests erfolgreich; produktiver Frontend-Build erfolgreich. Browserdurchläufe gegen einen lokalen Backend-Prozess mit separater Testdatenablage: vorhandenes Profil, Neuanlage eines Profils samt Projekt, Offline-Einstieg, erste Textseite und 3D-Wegvorschau. Kein Hardwarezugriff und kein Druckstart. Weitere Theme-, Layout-, Integrations- und Paketprüfungen folgen.
+Interim validation: 485 frontend tests and the production build passed. Browser runs against an isolated local backend covered an existing profile, a new profile/project, offline entry, a first text page and the 3D path preview. No hardware access or print start. Further theme, layout, integration and package checks follow.
 
-## Zusätzliche Nutzerkorrekturen vom 16.11.
+## Additional user corrections, 16 November
 
-- Oberfläche war noch zu unübersichtlich: Symbolleiste auf eine Zeile reduziert, Eigenschaften bei Bedarf und mehr einheitliche SVG-Symbole.
-- Desktop hat Vorrang. Einrichten/Kalibrieren müssen ohne Scrollen erreichbar bleiben. Der doppelte Start-/Einrichtungsbereich entfällt; bestehende gespeicherte Start-Tabs werden migriert.
-- Kopf kompakter und klassische Programmmenüs (Datei, Ansicht, Extras, Hilfe).
-- Tab-Verwaltungsdialog vollständig prüfen; eine globale horizontale Flex-Regel hat Einleitung und Liste nebeneinander gedrückt. Dialogkörper jetzt standardmäßig vertikal, spezifische Mehrspalten-Dialoge definieren ihre Aufteilung ausdrücklich.
-- Vorlagen grundlegend als Bibliothek links, Vorschau Mitte, paginierte Parameter rechts aufbauen. Erzeugen/Übernehmen bleiben sichtbar.
-- Ausnahme für Scrollen: Die **Auftragsliste soll scrollen**; ihre Filter und Aktionen bleiben stehen. Beim Listen-/Kachelwechsel Vorschaudaten wiederverwenden und nur sichtbare Thumbnails laden.
-- Aktueller Auftrag: alle Funktionen und Dialoge auf Formatierung, Funktion und Übersichtlichkeit prüfen. Hardwarebewegungen werden in der isolierten Browserprüfung nicht ausgeführt.
+- Reduce clutter: a one-row toolbar, on-demand properties and more consistent SVG icons.
+- Prioritise desktop. Setup/calibration must be accessible without scrolling. Remove duplicate Start/Setup areas and migrate saved Start tabs.
+- Make the header more compact, with classic File, View, Tools and Help menus.
+- Fully check tab customisation: a global horizontal flex rule incorrectly placed its introduction beside the list. Dialog bodies now default to vertical layout; specialised multi-column dialogs define that explicitly.
+- Rebuild Templates around a left library, central preview and paginated right parameters, keeping Generate/Add visible.
+- Scrolling exception: **the jobs list must scroll**, while its filters/actions stay fixed. Reuse preview data when switching list/tile views and load only visible thumbnails.
+- Audit every feature/dialog for formatting, operation and clarity. Isolated browser checks do not move hardware.
 
-Browser-Zwischenbefund bei 1366×768: alle vier Kalibrierungsaufgaben und alle 14 Vorlagen ohne vertikalen/horizontalen Inhaltsüberlauf; Tab-Dialog vollständig im Fenster; 45 künstliche Jobs in einem eigenen Scrollbereich. Neue Vorlagenvorschau tatsächlich erzeugt. Vollständiger Frontend-Lauf derzeit 499 Tests erfolgreich. Weitere Funktions-/Dialogprüfung läuft.
+At 1366×768, all four calibration tasks and all 14 templates fit without vertical/horizontal content overflow; tab customisation fits the window and 45 synthetic jobs have their own scroll area. A new template preview was generated. The full frontend run currently passes 499 tests; further feature/dialog review continues.
 
 ### Inline maps and reproducible random templates
 
@@ -300,7 +300,7 @@ The shared project store now derives the paper outline from its single profile
 response. Automatic-position metadata stays intact; project identity, fingerprint
 checks and cancellation of superseded reads remain in place. The existing
 read-only profile fallback shares this geometry helper. Load retry buttons now
-say “Reload” / “Erneut laden” instead of “Retry saving”.
+say “Reload” instead of “Retry saving”.
 
 Regression coverage includes the observed legacy metadata discrepancy, delayed
 responses during project changes, shared polling and degenerate paper outlines.

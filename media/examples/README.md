@@ -1,18 +1,18 @@
-# Werkstatt · Demo-Stiftschrift
+# Workshop · Demo stroke font
 
-[**werkstatt-demo.gcsfont herunterladen**](werkstatt-demo.gcsfont)
+[**Download workshop-demo.gcsfont**](workshop-demo.gcsfont)
 
-Diese eigens für die Dokumentation gezeichnete Monoline-Schrift enthält Klein- und Großbuchstaben, deutsche Umlaute, ß, Ziffern und Satzzeichen. Jedes Zeichen besitzt drei leicht unterschiedliche Varianten mit echten, bearbeitbaren Stiftzügen.
+This original monoline font was drawn for the documentation. It contains lowercase and uppercase letters, German umlauts, ß, digits and punctuation. Every character has three slightly different variants made from real, editable pen strokes.
 
-Die Schrift wurde synthetisch erstellt und bildet keine persönliche Handschrift ab. Sie ist als Ausgangspunkt zum Ausprobieren des Editors gedacht; weitere Zeichen und eigene Varianten lassen sich ergänzen.
+The font is synthetic and does not reproduce anyone's personal handwriting. Use it as a starting point for exploring the editor, then add more characters and your own variants.
 
-## Importieren
+## Import
 
-1. Den Arbeitsbereich **Schrifteditor** öffnen.
-2. Zu **Installierte Schriften → Hinzufügen** wechseln und die `.gcsfont`-Datei importieren.
-3. Im Editor **Meine Schriften** öffnen und **Werkstatt – Demo** auswählen.
-4. Ein Zeichen bearbeiten oder den **Schreibtest** öffnen.
+1. Open the **Font Editor** workspace.
+2. Select **Installed fonts → Add** and import the `.gcsfont` file.
+3. Return to the editor, open **My fonts** and choose **Workshop – Demo**.
+4. Edit a character or open **Writing test**.
 
-Die Datei ist ein JSON-Dokument im GCodeScribe-Exportformat. Sie enthält Rohpunkte und aufbereitete Stiftzüge, Zeichenvarianten und Schriftmetriken.
+The file is a JSON document in GCodeScribe's export format. It includes raw points, processed pen strokes, character variants and font metrics.
 
-Die ursprüngliche Demo-Geometrie steht auch im reproduzierbaren [Fixture-Skript](../../scripts/docs/create_demo.py). Das Skript verlangt ein leeres, ausdrücklich angegebenes Datenverzeichnis und überschreibt keine vorhandenen App-Daten.
+The original demo geometry is also available in the reproducible [fixture script](../../scripts/docs/create_demo.py). The script requires an explicitly selected, empty data directory and never overwrites existing application data.

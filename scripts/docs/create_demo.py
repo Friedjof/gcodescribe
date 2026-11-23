@@ -1,7 +1,7 @@
 """Create public documentation fixtures in a NEW, isolated application data directory.
 
 This does not connect to printers or read an existing user's application data.
-The editable Werkstatt font and the drawings are original synthetic demo artwork.
+The editable Workshop font and the drawings are original synthetic demo artwork.
 """
 
 from __future__ import annotations
@@ -130,7 +130,7 @@ def seed(data_dir: Path, export_dir: Path) -> dict:
         )
     paths["ß"] = "M80 0 L130 490 C160 850 590 630 330 380 C650 270 480 -50 240 40"
     fonts = StrokeFontService()
-    font = fonts.create("Werkstatt – Demo")
+    font = fonts.create("Workshop – Demo")
     glyphs = []
     for key, path in paths.items():
         pen = RecordingPen()
@@ -164,7 +164,7 @@ def seed(data_dir: Path, export_dir: Path) -> dict:
         )
     font = fonts.save(font["id"], {**font, "glyphs": glyphs})
     export_dir.mkdir(parents=True, exist_ok=True)
-    (export_dir / "werkstatt-demo.gcsfont").write_text(
+    (export_dir / "workshop-demo.gcsfont").write_text(
         json.dumps(fonts.export(font["id"]), ensure_ascii=False, indent=2)
     )
     cal = Calibration(
@@ -187,11 +187,11 @@ def seed(data_dir: Path, export_dir: Path) -> dict:
     cal.save()
     profiles = ProfileService()
     profile = profiles.update(
-        profiles.active_id(), name="Plotterprofil – Demo", calibration=cal.as_dict()
+        profiles.active_id(), name="Demo plotter profile", calibration=cal.as_dict()
     )
     docs = DocumentStore(FileStateStore(data_dir / "state"))
     index = docs.list_pages()
-    docs.update_project(index["project"]["id"], name="Plotter-Werkstatt")
+    docs.update_project(index["project"]["id"], name="Plotter Workshop")
 
     def obj(name, lines, x=0, y=0):
         return {
@@ -232,9 +232,9 @@ def seed(data_dir: Path, export_dir: Path) -> dict:
                     ]
                 )
     botanical_objects = [
-        text("Botanik in Linien", 11, 30, 4),
-        obj("Blattstudien", botanical),
-        text("Drei Zweige. Ein Stift.", 6, 40, 119),
+        text("Botanical lines", 11, 30, 4),
+        obj("Leaf studies", botanical),
+        text("Three branches. One pen.", 6, 40, 119),
     ]
     rose = [
         [
@@ -244,11 +244,11 @@ def seed(data_dir: Path, export_dir: Path) -> dict:
         for t in [i * math.tau / 1600 for i in range(1601)]
     ]
     geometry = [
-        text("Linienkunst", 12, 55, 2),
+        text("Line art", 12, 55, 2),
         obj("Rosette", [rose]),
-        text("Präzision trifft Papier", 7, 37, 122),
+        text("Precision meets paper", 7, 37, 122),
     ]
-    overview = [text("Ideen werden Linien", 12, 20, 1)]
+    overview = [text("Ideas become lines", 12, 20, 1)]
     for cx, cy in [(48, 68), (100, 68), (152, 68)]:
         curves = []
         if cx == 48:
@@ -277,12 +277,12 @@ def seed(data_dir: Path, export_dir: Path) -> dict:
                 line(cx - 25, cy, cx + 25, cy),
                 line(cx, cy - 25, cx, cy + 25),
             ]
-        overview.append(obj(f"Studie {cx}", curves))
+        overview.append(obj(f"Study {cx}", curves))
     overview += [
-        text("Form", 7, 38, 101),
-        text("Rhythmus", 7, 83, 101),
-        text("Geometrie", 7, 132, 101),
-        text("Werkstatt für Stift und Papier", 6, 38, 122),
+        text("Shape", 7, 38, 101),
+        text("Rhythm", 7, 83, 101),
+        text("Geometry", 7, 132, 101),
+        text("A workshop for pen and paper", 6, 38, 122),
     ]
     streets = []
     for i in range(13):
@@ -292,9 +292,9 @@ def seed(data_dir: Path, export_dir: Path) -> dict:
     for j in range(17):
         streets.append([[25 + j * 9 + math.sin(i * 0.11 + j) * 5, 20 + i * 1.1] for i in range(81)])
     map_objects = [
-        text("Stadtplan – Demo", 10, 45, 0),
-        obj("Erfundene Straßen", streets),
-        text("Eine fiktive Stadt aus Linien", 6, 38, 122),
+        text("City map - Demo", 10, 45, 0),
+        obj("Imaginary streets", streets),
+        text("An imaginary city drawn in lines", 6, 38, 122),
     ]
 
     # Restore real colour assignments through the public scene model.
@@ -339,10 +339,10 @@ def seed(data_dir: Path, export_dir: Path) -> dict:
 
     pages = {}
     for name, objects in [
-        ("Werkstatt", overview),
-        ("Botanik", botanical_objects),
-        ("Linienkunst", geometry),
-        ("Stadtplan", map_objects),
+        ("Workshop", overview),
+        ("Botanical", botanical_objects),
+        ("Line art", geometry),
+        ("City map", map_objects),
     ]:
         page = docs.create_page(name)
         docs.save_page(
@@ -351,7 +351,7 @@ def seed(data_dir: Path, export_dir: Path) -> dict:
         pages[name] = page["id"]
     first = index["activeId"]
     docs.delete_page(first)
-    docs.set_active(pages["Werkstatt"])
+    docs.set_active(pages["Workshop"])
     manifest = {"fontId": font["id"], "profileId": profile["id"], "pages": pages}
     (data_dir / "demo-manifest.json").write_text(json.dumps(manifest))
     return manifest

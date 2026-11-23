@@ -1,15 +1,10 @@
-# Plot-Effizienz: reproduzierbare Evaluation
+# Plot efficiency: reproducible evaluation
 
-Untersuchte Produktionsversion: `f62512b`. Zusammenfassung und priorisierte
-Umsetzung: [Evaluation](../../docs/plot-efficiency-evaluation.md).
-Keine dieser Dateien wird von der App eingebunden. Keine Drucker-/Netzwerkzugriffe.
-Alle Motive sind synthetisch oder stammen aus bestehenden deterministischen
-App-Generatoren. Keine privaten Dokumente oder Nutzerdaten.
+Production version examined: `f62512b`. Findings and priorities: [evaluation](../../docs/plot-efficiency-evaluation.md). These files are not loaded by the app and make no printer/network requests. All artwork is synthetic or comes from existing deterministic app generators; no private documents or user data are included.
 
-## Ausführen
+## Run
 
-Aus dem Repository mit vorhandener Python-Umgebung (einschließlich Shapely) und
-Node 22 mit Type-Stripping:
+From the repository, use the existing Python environment, including Shapely, and Node 22 with type stripping:
 
 ```sh
 PYTHONPATH=. .venv/bin/python experiments/plot-efficiency/orientation.py
@@ -20,38 +15,21 @@ node --experimental-strip-types experiments/plot-efficiency/styling.mjs
 .venv/bin/ruff check experiments/plot-efficiency
 ```
 
-Die Skripte überschreiben ihre jeweiligen Rohdaten unter `results/`. Für Routing
-ist mit `--output /tmp/eigener-ordner` ein anderes Ziel möglich. Laufzeiten sind
-lokale Messwerte unter wechselnder Hostlast, keine zugesicherte Performance.
-Geometriewerte sind deterministisch; spätere Änderungen am Produktionscode
-können die Befunde bewusst verändern.
+Scripts overwrite their own raw data under `results/`. Routing also accepts `--output /tmp/custom-output`. Timings are local measurements under changing host load, not performance guarantees. Geometry is deterministic; later production changes may intentionally change the findings.
 
-| Skript / Rohdaten | Fragestellung und Prüfung |
+| Script / raw data | Question and checks |
 | --- | --- |
-| `orientation.py` / `results/orientation.json` | Richtungen für feste Reihenfolge mit Start/Park optimieren; neun kleine Fälle gegen alle Orientierungen, sechs App-Motive; exakte Segmente, unveränderte Eingabe |
-| `routing.py` / `results/routing.json` | Greedy/2-opt, KD-Schwelle, Konturstart, Koordinaten, Hindernisse, Raster-Merge und Schraffurknoten; Segment-Invarianten für reine Routenkandidaten, echter Safetycheck im Rand-Repro |
-| `geometry.py` / `results/geometry.json` | Tatsächliche Centerline-/Preview-Funktionen auf Qualitätsgegenbeispielen; temporäre Rasterdateien werden entfernt |
-| `pipeline.py` / `results/pipeline.json` | 13 G-Code-Fälle, dichte/identische Linien und reale Generatoren, Continuous-Kontrollen, wiederholte Renderings, Modal-F-Ausgabe mit exakt gleicher Bewegungs-/Feedfolge |
-| `styling.mjs` / `results/styling.json` | Tatsächliche Designer-Funktionen für Strichelung, Lochfüllung und Punktdarstellung |
+| `orientation.py` / `results/orientation.json` | Optimise directions for fixed order with start/park; nine small exhaustive comparisons and six app motifs; exact segments and unchanged inputs |
+| `routing.py` / `results/routing.json` | Greedy/2-opt, KD threshold, contour starts, coordinates, obstacles, grid merging and hatch junctions; segment invariants for route-only candidates and the real safety checker in the boundary reproduction |
+| `geometry.py` / `results/geometry.json` | Actual centreline/preview functions on quality counterexamples; temporary raster files are removed |
+| `pipeline.py` / `results/pipeline.json` | Thirteen G-code cases, dense/identical lines, real generators, Continuous controls, repeated rendering and modal-F output with identical motion/feed sequences |
+| `styling.mjs` / `results/styling.json` | Actual designer functions for dashing, filling holes and drawing dots |
 
-## Vergleichsbilder
+## Comparison images
 
-- [Labyrinth](results/routing-maze.svg): schwarz = Zeichnung, rot gestrichelt =
-  Leerfahrt. Links bestehendes Scene-Greedy, rechts bestehendes SVG-2-opt. Gleiche
-  Striche nach Merge mit 0,001 mm; Continuous aus, keine Parkfahrt. Kein Vergleich
-  mit einer unsortierten Vorlage.
-- [Hindernis](results/routing-obstacle.svg): konstruiertes Gegenbeispiel. Links
-  Luftlinien-Sortierung mit danach umgeleiteten Fahrten, rechts Auswahl nach
-  wirklicher Umweglänge. Die graue Fläche ist das Hindernis, mit 3 mm Freiraum
-  bei der Wegplanung. Beide Varianten erhalten alle gezeichneten Segmente.
+- [Maze](results/routing-maze.svg): black drawing paths, dashed red travel. Existing scene greedy ordering on the left, existing SVG 2-opt on the right. Both use the same strokes after 0.001 mm merging, with Continuous off and no parking move. This does not compare against an unsorted source.
+- [Obstacle](results/routing-obstacle.svg): a constructed counterexample. The left sorts by straight-line distance before rerouting travel; the right selects by actual detour length. The grey obstacle has 3 mm planning clearance. Both preserve every drawn segment.
 
-Geometrisch exakt bedeutet hier unveränderte Mittellinien/Segmente. Es beweist
-nicht gleiche Tintenablagerung bei Richtungsänderung, neuem Konturstart oder
-Nachzeichnen. Die Richtungs-/Naht-Prototypen gelten nur für frei umkehrbare
-Striche ohne Druck-/Feed-/Reihenfolgebindung. Die Qualitätsgegenbeispiele in
-`geometry.py` und `styling.mjs` zeigen Fehler, keine akzeptablen Optimierungen.
+Geometric exactness means unchanged centrelines/segments, not proven identical ink deposition after reversing strokes, moving contour starts or retracing. Direction/seam prototypes apply only to freely reversible strokes without pressure/feed/order constraints. Counterexamples in `geometry.py` and `styling.mjs` demonstrate errors, not acceptable optimisations.
 
-Das Zeitmodell der App, reine Übertragungsuntergrenzen und reale Plotzeit werden
-ausdrücklich getrennt. Die vorhandene
-[Stiftbreitenstudie](../pen-width/README.md) untersucht ergänzend Farbflächen,
-Dubletten, Vereinfachung und Nachzeichnen gegen Absetzen.
+App time estimates, transmission lower bounds and actual plot duration are kept separate. The [pen-width study](../pen-width/README.md) additionally examines ink coverage, duplicates, simplification and the trade-off between retracing and lifting.

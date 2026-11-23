@@ -1,48 +1,48 @@
 # GCodeScribe Ai3MS · Hardware v2
 
-Aktuelle Druckteile für die Stifthalterung am **Anycubic i3 Mega S**. Die Hardwareversion v2 ist unabhängig von der Softwareversion v0.6.1.
+Current print parts for the pen holder on the **Anycubic i3 Mega S**. Hardware revision v2 is independent of software version v0.6.1.
 
 ## Downloads
 
-| Druckteil | STL | Abmessungen der STL-Hüllbox |
+| Part | STL | STL bounding-box dimensions |
 |---|---|---|
-| Druckerhalterung | [mount](GCodeScribe-Ai3MS-v2-mount.stl) | ca. 48,91 × 55,51 × 29 mm |
-| Stifthalter | [pen](GCodeScribe-Ai3MS-v2-pen.stl) | ca. 31,5 × 70 × 27,75 mm |
-| Platte | [plate](GCodeScribe-Ai3MS-v2-plate.stl) | ca. 40 × 61 × 29 mm |
+| Printer mount | [mount](GCodeScribe-Ai3MS-v2-mount.stl) | Approx. 48.91 × 55.51 × 29 mm |
+| Pen holder | [pen](GCodeScribe-Ai3MS-v2-pen.stl) | Approx. 31.5 × 70 × 27.75 mm |
+| Plate | [plate](GCodeScribe-Ai3MS-v2-plate.stl) | Approx. 40 × 61 × 29 mm |
 
-- [Alle drei Druckteile als ZIP](GCodeScribe-Ai3MS-v2-print-parts.zip)
-- [Bearbeitbares STEP-Modell](GCodeScribe-Ai3MS-v2.step)
-- [Native Fusion-Konstruktion](GCodeScribe-Ai3MS-v2.f3d)
+- [All three print parts as a ZIP](GCodeScribe-Ai3MS-v2-print-parts.zip)
+- [Editable STEP model](GCodeScribe-Ai3MS-v2.step)
+- [Native Fusion design](GCodeScribe-Ai3MS-v2.f3d)
 
-Die Abmessungen wurden aus den STL-Koordinaten bestimmt; sie sind keine Druckorientierungsempfehlung. Alle Teile mit **100 % Skalierung** in Millimetern importieren. Orientierung, Stützen und Druckprofil anhand der Geometrie und des eigenen Druckers wählen. Maschinenfertiger G-Code wird bewusst nicht als universelle Druckdatei angeboten.
+Dimensions were measured from the STL coordinates; they do not indicate a recommended print orientation. Import every part in millimetres at **100% scale**. Choose orientation, supports and a print profile to suit the geometry and your printer. Machine-ready G-code is not provided as a universal print file.
 
-## Material und Werkzeug
+## Materials and tools
 
-| Material | Anzahl |
+| Material | Quantity |
 |---|---:|
-| Magnete mit 5 mm Durchmesser | 10 |
-| M3-Innengewindeeinsätze | 2 |
-| M3-Schrauben | 2 |
-| Mittelgroßes Gummiband | 1 |
-| Filament | für drei Druckteile |
-| Flüssiger Sekundenkleber | nach Bedarf |
+| Magnets, 5 mm diameter | 10 |
+| M3 threaded inserts | 2 |
+| M3 screws | 2 |
+| Medium-sized rubber band | 1 |
+| Filament | Enough for three print parts |
+| Liquid superglue | As needed |
 
-Werkzeug: passender Innensechskantschlüssel und optional ein kleiner Hammer zum Einsetzen der Magnete. Die STEP-Datei enthält Aufnahmen mit 2,5 mm Radius. Die jeweils passende Magnetdicke, Schraubenlänge und Einsatzgeometrie vor dem Einkauf beziehungsweise Einbau an der Konstruktion prüfen.
+Tools: a matching hex key and, optionally, a small hammer for inserting the magnets. The STEP file includes sockets with a 2.5 mm radius. Check the required magnet thickness, screw length and insert geometry against the design before buying or fitting components.
 
-## Montageablauf
+## Assembly
 
-1. Die drei v2-Teile drucken, Stützreste entfernen und Passflächen prüfen.
-2. Magnetpaare vor dem Einkleben auf ihre spätere Ausrichtung zueinander prüfen. Magnete passend einsetzen und mit flüssigem Sekundenkleber befestigen; den Kleber aushärten lassen.
-3. Die M3-Gewindeeinsätze passend zu deren Bauart einsetzen. Die Druckerhalterung mit den zwei M3-Schrauben befestigen.
-4. Platte und Stifthalter anhand des STEP-/Fusion-Modells zusammenfügen und das mittelgroße Gummiband an den vorgesehenen Aufnahmen einsetzen.
-5. In GCodeScribe ein zur Maschine passendes Profil wählen, die Einsetzposition bestimmen und die Stifthöhen kalibrieren. Danach Papier-Ecken und Testpunkte prüfen.
+1. Print the three v2 parts, remove support material and check the mating surfaces.
+2. Check magnet-pair polarity in the intended assembly before gluing. Fit the magnets, secure them with liquid superglue and let the glue cure.
+3. Fit the M3 threaded inserts using the method appropriate for their type. Attach the printer mount using the two M3 screws.
+4. Assemble the plate and pen holder using the STEP/Fusion model as a reference, then fit the medium-sized rubber band to its attachment points.
+5. In GCodeScribe, choose a profile matching your machine, define the insertion position and calibrate pen heights. Check the paper corners and test points afterwards.
 
-Das [Montagefoto](../hardware/pen-mount-printer.jpg) zeigt das Funktionsprinzip der gedruckten Halterung. Es dokumentiert nicht verbindlich jedes Detail der v2-Geometrie.
+The [assembly photo](../hardware/pen-mount-printer.jpg) illustrates how the printed holder works. It does not define every detail of the v2 geometry.
 
-Der [Release-Download](https://github.com/Friedjof/gcodescribe/releases/tag/v0.6.1) enthält die drei STLs, das ZIP und beide CAD-Dateien zusätzlich als direkt herunterladbare Anhänge.
+The [release page](https://github.com/Friedjof/gcodescribe/releases/tag/v0.6.1) also provides the three STLs, ZIP and both CAD files as direct downloads.
 
-## Frühere Modelle
+## Earlier designs
 
-Unter [`old/`](old/) bleiben frühere STL-, STEP-, Fusion- und experimentelle Modellstände erhalten. Sie gehören nicht zum aktuellen v2-Drucksatz und sollten nicht mit dessen Teilen vermischt werden.
+Earlier STL, STEP, Fusion and experimental designs remain under [`old/`](old/). They are not part of the current v2 print set and should not be mixed with its parts.
 
-Die drei separaten v2-STLs wurden aus den bereitgestellten Dateien `CGodeScribe-Ai3MS_v2.0_{mount,pen,plate}.stl` übernommen. Die ursprünglichen Dateien im Download-Ordner bleiben unverändert.
+The three separate v2 STLs were copied from the supplied `CGodeScribe-Ai3MS_v2.0_{mount,pen,plate}.stl` files. The original files in the Downloads directory are unchanged.

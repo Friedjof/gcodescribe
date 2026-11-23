@@ -1,67 +1,67 @@
 <p align="center">
-  <img src="media/branding/png/gcodescribe-256.png" width="112" height="112" alt="GCodeScribe – ein G mit Stift und blauen Vektorlinien">
+  <img src="media/branding/png/gcodescribe-256.png" width="112" height="112" alt="GCodeScribe – a handwritten G with a pen and blue vector paths">
 </p>
 <h1 align="center">GCodeScribe</h1>
-<p align="center"><strong>Deine Ideen. Deine Handschrift. Dein Stiftplotter.</strong><br>Zeichnungen, Dokumente und eigene Schriften gestalten, kalibrieren und als G-Code aufs Papier bringen.</p>
+<p align="center"><strong>Your ideas. Your handwriting. Your pen plotter.</strong><br>Create drawings, documents and custom stroke fonts, then bring them to paper with G-code.</p>
 <p align="center">
-  <a href="https://github.com/Friedjof/gcodescribe/releases/latest"><img src="https://img.shields.io/github/v/release/Friedjof/gcodescribe?label=Download&amp;color=2563eb" alt="Aktuelle Version herunterladen"></a>
-  <a href="https://github.com/Friedjof/gcodescribe/actions/workflows/release.yml"><img src="https://github.com/Friedjof/gcodescribe/actions/workflows/release.yml/badge.svg" alt="Status des Release-Builds"></a>
-  <img src="https://img.shields.io/badge/Desktop-Linux-334155" alt="Linux-Desktop">
-  <img src="https://img.shields.io/badge/Verbindung-USB%20%2F%20OctoPrint-334155" alt="USB oder OctoPrint">
+  <a href="https://github.com/Friedjof/gcodescribe/releases/latest"><img src="https://img.shields.io/github/v/release/Friedjof/gcodescribe?label=Download&amp;color=2563eb" alt="Download the latest release"></a>
+  <a href="https://github.com/Friedjof/gcodescribe/actions/workflows/release.yml"><img src="https://github.com/Friedjof/gcodescribe/actions/workflows/release.yml/badge.svg" alt="Release build status"></a>
+  <img src="https://img.shields.io/badge/Desktop-Linux-334155" alt="Linux desktop">
+  <img src="https://img.shields.io/badge/Connection-USB%20%2F%20OctoPrint-334155" alt="USB or OctoPrint connection">
 </p>
-<p align="center"><a href="#installation">Installation</a> · <a href="#was-du-damit-machen-kannst">Funktionen</a> · <a href="#stifthalter-selbst-bauen">Druckteile &amp; Material</a> · <a href="docs/screenshots.md">Bildergalerie</a> · <a href="docs/releases/0.6.1.md">Neu in v0.6.1</a></p>
+<p align="center"><a href="#installation">Installation</a> · <a href="#what-you-can-do">Features</a> · <a href="#build-your-pen-holder">Print files &amp; materials</a> · <a href="docs/screenshots.md">Screenshot gallery</a> · <a href="docs/releases/0.6.1.md">New in v0.6.1</a></p>
 
 <table>
   <tr>
-    <td width="50%"><a href="media/screenshots/design-overview.png"><img src="media/screenshots/design-overview.png" alt="Zeicheneditor mit eigener Schrift, Rosette, Wellenmuster und geometrischer Studie"></a><br><strong>Zeichnen und gestalten</strong><br>Mehrere Objekte, eigene Schrift und ein präziser Zeichenbereich.</td>
-    <td width="50%"><a href="media/screenshots/font-editor.png"><img src="media/screenshots/font-editor.png" alt="Schrifteditor mit der geladenen Beispielschrift Werkstatt, bearbeitbarem Zeichen und drei Varianten"></a><br><strong>Eigene Handschrift entwickeln</strong><br>Zeichen als echte Stiftbewegungen erfassen und Varianten bearbeiten.</td>
+    <td width="50%"><a href="media/screenshots/design-overview.png"><img src="media/screenshots/design-overview.png" alt="Drawing editor with a custom stroke font, a rosette, waves and a geometric study"></a><br><strong>Draw and compose</strong><br>Arrange objects, custom lettering and patterns on a precise drawing area.</td>
+    <td width="50%"><a href="media/screenshots/font-editor.png"><img src="media/screenshots/font-editor.png" alt="Font editor with the Workshop demo font, an editable character and three variants"></a><br><strong>Develop your handwriting</strong><br>Build characters from real pen strokes and refine their variants.</td>
   </tr>
 </table>
 <table>
   <tr>
-    <td width="33%"><a href="media/screenshots/color-layers.png"><img src="media/screenshots/color-layers.png" alt="Botanische Zeichnung im Farbeditor mit schwarzen, grünen, blauen und roten Stiftlagen"></a><br><strong>Farblayer vorbereiten</strong><br>Zeichnungen auf mehrere Stiftfarben verteilen.</td>
-    <td width="33%"><a href="media/screenshots/stl-import.png"><img src="media/screenshots/stl-import.png" alt="STL-Import der v2-Druckerhalterung mit 3D-Ansicht und technischer Linienzeichnung"></a><br><strong>3D wird Linienzeichnung</strong><br>STL ausrichten, Kanten wählen und die Plot-Vorschau prüfen.</td>
-    <td width="33%"><a href="media/screenshots/profile-calibration.png"><img src="media/screenshots/profile-calibration.png" alt="Visuelle Profilkalibrierung mit Papierumriss, Zeichenfläche und gespeicherten Sonderpositionen"></a><br><strong>Papier und Stift einrichten</strong><br>Zeichenfläche, Papier-Ecken und Stiftpositionen im Blick.</td>
+    <td width="33%"><a href="media/screenshots/color-layers.png"><img src="media/screenshots/color-layers.png" alt="Botanical drawing split into black, green, blue and red pen layers"></a><br><strong>Prepare colour layers</strong><br>Split a drawing across multiple pen colours.</td>
+    <td width="33%"><a href="media/screenshots/stl-import.png"><img src="media/screenshots/stl-import.png" alt="STL importer showing the v2 printer mount as a 3D model and a technical line drawing"></a><br><strong>Turn 3D into line art</strong><br>Orient an STL, choose its edges and inspect the plot preview.</td>
+    <td width="33%"><a href="media/screenshots/profile-calibration.png"><img src="media/screenshots/profile-calibration.png" alt="Visual profile editor with paper corners, drawing bounds and saved special positions"></a><br><strong>Set up paper and pen</strong><br>Keep paper corners, drawing bounds and pen positions in view.</td>
   </tr>
 </table>
 
-Alle App-Aufnahmen zeigen eine getrennte Demo-Umgebung mit neutralen Inhalten. Die editierbare [Beispielschrift „Werkstatt“](media/examples/werkstatt-demo.gcsfont) kannst du selbst importieren. Weitere Ansichten findest du in der [Bildergalerie](docs/screenshots.md).
+All app screenshots use an isolated demo environment with neutral English content. Import the editable [Workshop demo font](media/examples/workshop-demo.gcsfont) to try it yourself. Explore more views in the [screenshot gallery](docs/screenshots.md).
 
-## Was du damit machen kannst
+## What you can do
 
-- **Gestalten:** Zeichnungen, Texte und importierte Motive auf Seiten anordnen. Projekte bündeln zusammengehörige Seiten und verwenden ihr eigenes Kalibrierungsprofil.
-- **Handschrift bearbeiten:** Eigene Stiftschriften mit mehreren Zeichenvarianten erstellen, im Schreibtest ausprobieren und als `.gcsfont` importieren oder exportieren.
-- **Dateien umwandeln:** SVG, Bilder, PDF, Office-Dokumente und native Xournal++-Stiftzüge übernehmen. Größere Importe laufen als Hintergrundaufträge.
-- **Vorlagen verwenden:** Spiele, Labyrinthe, Sudoku, Muster, Karten und technische STL-Linienzeichnungen erzeugen.
-- **Plotten vorbereiten:** Fahrwege in 3D prüfen, Papier- und Profilumrisse einblenden, Farblayer aufteilen und G-Code exportieren.
-- **Mehrere Drucker verwalten:** Gespeicherte Plotter über USB/Serial oder OctoPrint auswählen und ihre Verbindungen getrennt testen.
-- **Einrichten und steuern:** Papier über vier Ecken oder zwei diagonale Ecken bestimmen, Stifthöhen kalibrieren und Einsetz- sowie Parkpositionen verwenden.
-- **Optional KI nutzen:** Bilder über einen OpenAI-API-Schlüssel oder einen Codex-/ChatGPT-Zugang erzeugen und verbessern. Es gelten die Limits des ausgewählten Zugangs; ein automatischer Wechsel zur API-Abrechnung findet nicht statt.
-- **MCP anbinden:** Auch die laufende Desktop-App bietet einen lokalen, durch Token geschützten MCP-Zugang mit dauerhaftem Port.
+- **Design pages:** Arrange drawings, text and imported artwork. Projects group related pages and use their own calibration profile.
+- **Edit handwriting:** Create custom stroke fonts with multiple character variants, try them in the writing test, and import or export `.gcsfont` files.
+- **Convert files:** Import SVG, images, PDF, Office documents and native Xournal++ pen strokes. Larger imports run as background tasks.
+- **Generate templates:** Create games, mazes, Sudoku, patterns, maps and technical line drawings from STL files.
+- **Prepare plots:** Inspect tool paths in 3D, display paper and profile outlines, separate colour layers and export G-code.
+- **Manage multiple printers:** Switch between saved USB/serial and OctoPrint connections and test each connection separately.
+- **Calibrate and control:** Define paper using four corners or two diagonal corners, calibrate pen heights, and save insertion and parking positions.
+- **Use optional AI tools:** Generate and improve images using an OpenAI API key or a Codex/ChatGPT account. The selected provider's limits apply; the app does not automatically switch to API billing.
+- **Connect through MCP:** The running desktop app also provides a local, token-protected MCP endpoint with a persistent port.
 
 ## Installation
 
-### Linux-Desktop
+### Linux desktop
 
-Lade die passende Datei von der [Release-Seite](https://github.com/Friedjof/gcodescribe/releases/latest) herunter. Für die eigenständige GTK-/WebKit-Desktop-App ist das **Flatpak** vorgesehen:
+Download the appropriate package from the [release page](https://github.com/Friedjof/gcodescribe/releases/latest). Use the **Flatpak** for the standalone GTK/WebKit desktop app:
 
 ```sh
 flatpak install --user ./GCodeScribe-v0.6.1.flatpak
 flatpak run info.noweck.gcodescribe
 ```
 
-Der erste Aufruf zeigt die Einrichtungsführung. Die App folgt auf Wunsch dem Systemtheme; der kleine Schalter oben rechts wechselt zwischen hell und dunkel. Druckerauswahl, Sprache und Einstellungen sind direkt im Header erreichbar.
+The first launch opens the setup guide. The app can follow your system theme; the small button in the top-right corner switches between light and dark. Printer selection, language and Settings are directly accessible in the header.
 
-### Debian, RPM und AppImage
+### Debian, RPM and AppImage
 
-Die Releases enthalten außerdem Pakete für die Web-Anwendung. Beispiel für Debian/Ubuntu:
+Releases also include packages for the web application. On Debian/Ubuntu:
 
 ```sh
 sudo apt install ./gcodescribe_0.6.1_amd64.deb
 gcodescribe-web
 ```
 
-Öffne anschließend `http://localhost:8000`. Die Python-Anwendung benötigt Python 3.12 oder neuer. RPM und AppImage stehen beim selben Release bereit.
+Then open `http://localhost:8000`. The Python application requires Python 3.12 or later. RPM and AppImage downloads are available on the same release page.
 
 ### Docker Compose
 
@@ -70,77 +70,77 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Die Weboberfläche ist standardmäßig unter `http://localhost:8000` erreichbar. Verbindungen, optionale KI-Funktionen und den veröffentlichten Port kannst du über `.env` konfigurieren. Ein anderer Host-Port wird mit `PLOTTER_HOST_PORT` gesetzt.
+The web interface is available at `http://localhost:8000` by default. Configure connections, optional AI features and the published port in `.env`. Set `PLOTTER_HOST_PORT` to use a different host port.
 
-Für das fertige Container-Image:
+To use the prebuilt container image:
 
 ```sh
 docker compose -f compose.yml -f compose.prod.yml up -d
 ```
 
-## Vom ersten Start zum ersten Plot
+## From first launch to first plot
 
-1. **Profil und Projekt wählen.** Bettmaße, Papierformat und nutzbare Zeichenfläche passend zur Maschine festlegen.
-2. **Drucker verbinden.** USB/Serial oder OctoPrint einrichten und den Verbindungstest ausführen.
-3. **Papier und Stift kalibrieren.** Referenzfahrt, Papier-Ecken, Einsetzposition und Stifthöhen durch die geführten Schritte prüfen. Die Papieransicht hebt den Stift beim Einstieg an.
-4. **Eine Seite gestalten.** Beispieldatei, Vorlage oder eigene Zeichnung einsetzen und innerhalb der Zeichenfläche anordnen.
-5. **Vorschau prüfen und starten.** Fahrwege, Profilumrisse und gegebenenfalls Farblayer kontrollieren; anschließend G-Code erzeugen oder direkt plotten.
+1. **Choose a profile and project.** Set bed dimensions, paper size and drawing bounds to match your machine.
+2. **Connect a printer.** Configure USB/serial or OctoPrint and run the connection test.
+3. **Calibrate paper and pen.** Follow the guided steps for homing, paper corners, the insertion position and pen heights. Entering the paper view raises the pen.
+4. **Design a page.** Add an example file, template or drawing and arrange it within the drawing area.
+5. **Preview and plot.** Check tool paths, profile outlines and colour layers, then generate G-code or start plotting.
 
-Ein Druckerwechsel hebt die bisher bekannte Position auf. Führe danach eine neue Referenzfahrt aus und prüfe das passende Profil. Während laufender oder pausierter Plots ist der Wechsel gesperrt.
+Switching printers invalidates the previously known position. Home the selected printer again and check its profile. Printer switching is locked during running or paused plots.
 
-## Stifthalter selbst bauen
+## Build your pen holder
 
-Die mitgelieferte Konstruktion ist für den **Anycubic i3 Mega S (Ai3MS)** vorgesehen. Softwareversion **v0.6.1** und Hardwarestand **v2** sind voneinander unabhängig.
+The included hardware is designed for the **Anycubic i3 Mega S (Ai3MS)**. Software version **v0.6.1** and hardware revision **v2** are independent.
 
 <table>
   <tr>
-    <td width="45%"><a href="media/hardware/pen-mount-printer.jpg"><img src="media/hardware/pen-mount-printer.jpg" alt="Gedruckte magnetische Stifthalterung mit eingesetztem Stift am Druckkopf"></a><br>Die Halterung am Druckkopf. Vorhandenes Montagefoto; der verbindliche aktuelle Stand liegt in den v2-CAD-Dateien.</td>
-    <td width="55%"><a href="media/screenshots/stl-import.png"><img src="media/screenshots/stl-import.png" alt="Technische Ansicht des aktuellen v2-Druckteils im STL-Editor"></a><br>Aktuelles v2-Modell als 3D-Ansicht und projizierte Linienzeichnung.<br><br><a href="media/hardware/automaticchickenfeeder-plot.png">Beispiel: eine geplottete Konstruktionszeichnung</a></td>
+    <td width="45%"><a href="media/hardware/pen-mount-printer.jpg"><img src="media/hardware/pen-mount-printer.jpg" alt="Printed magnetic pen holder fitted to the printer's toolhead"></a><br>The pen holder on the toolhead. This existing assembly photo illustrates the mechanism; the v2 CAD files define the current design.</td>
+    <td width="55%"><a href="media/screenshots/stl-import.png"><img src="media/screenshots/stl-import.png" alt="The current v2 print part in the STL editor"></a><br>The current v2 model as a 3D view and projected line drawing.<br><br><a href="media/hardware/automaticchickenfeeder-plot.png">Example: a plotted construction drawing</a></td>
   </tr>
 </table>
 
-### Das brauchst du
+### What you need
 
-| Material | Menge |
+| Material | Quantity |
 |---|---:|
-| Kleine Magnete, 5 mm Durchmesser | 10 |
-| M3-Gewindeeinsätze mit Innengewinde | 2 |
-| M3-Schrauben | 2 |
-| Filament für die drei Druckteile | nach Druckprofil |
-| Mittelgroßes Gummiband | 1 |
-| Flüssiger Sekundenkleber | nach Bedarf |
+| Small magnets, 5 mm diameter | 10 |
+| M3 threaded inserts | 2 |
+| M3 screws | 2 |
+| Filament for the three printed parts | As required by your print profile |
+| Medium-sized rubber band | 1 |
+| Liquid superglue | As needed |
 
-**Werkzeug:** passender Innensechskantschlüssel; optional ein kleiner Hammer zum Einsetzen der Magnete. Magnetdicke, Einsatzabmessungen und Schraubenlänge vor der Montage mit der v2-Konstruktion und deinen Bauteilen abgleichen.
+**Tools:** a matching hex key and, optionally, a small hammer for inserting the magnets. Check magnet thickness, insert dimensions and screw length against the v2 design and your actual components before assembly.
 
-### Druckteile und CAD herunterladen
+### Download print parts and CAD
 
-| Datei | Verwendung |
+| File | Purpose |
 |---|---|
-| [Alle drei v2-STLs als ZIP](https://github.com/Friedjof/gcodescribe/releases/download/v0.6.1/GCodeScribe-Ai3MS-v2-print-parts.zip) | Druckteile gemeinsam herunterladen |
-| [Druckerhalterung · mount.stl](media/models/GCodeScribe-Ai3MS-v2-mount.stl) | Aufnahme an der Maschine |
-| [Stifthalter · pen.stl](media/models/GCodeScribe-Ai3MS-v2-pen.stl) | Aufnahme für den Stift |
-| [Platte · plate.stl](media/models/GCodeScribe-Ai3MS-v2-plate.stl) | Passendes Gegenstück der Konstruktion |
-| [v2-STEP-Modell](media/models/GCodeScribe-Ai3MS-v2.step) | CAD-System-unabhängige Weiterbearbeitung |
-| [v2-Fusion-Datei](media/models/GCodeScribe-Ai3MS-v2.f3d) | Native Konstruktionsdatei |
+| [All three v2 STLs as a ZIP](https://github.com/Friedjof/gcodescribe/releases/download/v0.6.1/GCodeScribe-Ai3MS-v2-print-parts.zip) | Download all print parts together |
+| [Printer mount · mount.stl](media/models/GCodeScribe-Ai3MS-v2-mount.stl) | Attachment to the machine |
+| [Pen holder · pen.stl](media/models/GCodeScribe-Ai3MS-v2-pen.stl) | Pen attachment |
+| [Plate · plate.stl](media/models/GCodeScribe-Ai3MS-v2-plate.stl) | Matching plate for the assembly |
+| [v2 STEP model](media/models/GCodeScribe-Ai3MS-v2.step) | Editing in other CAD systems |
+| [v2 Fusion design](media/models/GCodeScribe-Ai3MS-v2.f3d) | Native design file |
 
-Druckmaße, eine kompakte Montagefolge und die Dateizuordnung stehen in der [Modellübersicht](media/models/README.md). Frühere Modellstände sind unter [`media/models/old/`](media/models/old/) archiviert.
+See the [model overview](media/models/README.md) for dimensions, assembly steps and file descriptions. Earlier designs are archived under [`media/models/old/`](media/models/old/).
 
-## KI, MCP und Benachrichtigungen
+## AI, MCP and notifications
 
-**KI-Zugang:** Unter **Einstellungen → KI-Designer → Zugang** zwischen API-Schlüssel und Codex wählen. Das Flatpak bringt die Codex-CLI mit. Bei anderen Installationen muss die [offizielle Codex-CLI](https://developers.openai.com/codex/cli) auf dem Rechner des Backends verfügbar sein. Die Anmeldung erfolgt über den angezeigten Einmalcode und den offiziellen Anmeldelink. Kontozugänge liegen getrennt im privaten Datenverzeichnis der App.
+**AI access:** Open **Settings → AI Designer → Access** to choose between an API key and Codex. The Flatpak includes the Codex CLI. Other installations require the [official Codex CLI](https://developers.openai.com/codex/cli) on the backend machine. Sign in using the displayed one-time code and official login link. Account credentials are stored separately in the app's private data directory.
 
-**MCP:** Unter **Einstellungen → MCP** aktivieren, einen Token erzeugen und die angezeigte URL in den Client übernehmen. Für Desktop-Verbindungen muss die App laufen. [Details zu Desktop-MCP und Verbindungstests](docs/desktop-interface.md).
+**MCP:** Enable MCP under **Settings → MCP**, create a token and copy the displayed URL into your client. Keep the app running for desktop connections. [Desktop MCP and connection test details](docs/desktop-interface.md).
 
-**Benachrichtigungen:** Über **Extras → Benachrichtigungen** einschalten und den Test ausführen. Im Browser braucht es `localhost` oder HTTPS sowie die Browser-Freigabe; die Desktop-App verwendet die Systembenachrichtigungen. Die Anwendung muss geöffnet bleiben, darf aber minimiert sein. Die kleine Auftragsglocke zeigt Hintergrundaufträge und Ergebnisse.
+**Notifications:** Enable notifications through **Tools → Notify** and run the test. Browsers require `localhost` or HTTPS and notification permission; the desktop app uses system notifications. Keep the application open; it can be minimised. The small task bell shows background work and results.
 
-## Entwicklung
+## Development
 
 ```sh
 make setup
 make dev
 ```
 
-Für einen nicht interaktiven Start: `make dev-plain`. Der Frontend-Entwicklungsserver prüft Änderungen per Polling; mit `CHOKIDAR_USEPOLLING=false make dev` lässt sich natives File-Watching verwenden.
+Use `make dev-plain` for a non-interactive start. The frontend development server watches files using polling; run `CHOKIDAR_USEPOLLING=false make dev` to use native file watching.
 
 ```sh
 uv run pytest
@@ -149,4 +149,4 @@ npm --prefix frontend test
 npm --prefix frontend run build
 ```
 
-`make deb`, `make rpm`, `make appimage` und `make packages` erzeugen Installationspakete. Informationen zum aktuellen Stand stehen in den [Release Notes](docs/releases/0.6.1.md).
+`make deb`, `make rpm`, `make appimage` and `make packages` build installation packages. See the [release notes](docs/releases/0.6.1.md) for the current changes.

@@ -1,16 +1,16 @@
-# GCodeScribe · Icon-Paket
+# GCodeScribe icon pack
 
-Die bereitgestellten Iconvarianten sind nach Einsatzzweck geordnet:
+The supplied icon variants are organised by purpose:
 
-| Ordner | Inhalt | Verwendung |
+| Directory | Contents | Usage |
 |---|---|---|
-| `web/` | SVG-/ICO-Favicon, PNG-Favicons, Touch-Icons, WebP und Manifest | Browser und installierbare Webansicht |
-| `png/` | Transparente PNGs von 16 bis 1024 Pixeln | Dokumentation und Rasterdarstellung |
-| `vector/` | SVG-Varianten | Skalierbare Darstellung |
-| `desktop/` | ICO und ICNS | Windows-/macOS-Iconformate für weitere Paketierungen |
+| `web/` | SVG/ICO favicons, PNG favicons, touch icons, WebP and a manifest | Browsers and the installable web view |
+| `png/` | Transparent PNGs from 16 to 1024 pixels | Documentation and raster images |
+| `vector/` | SVG variants | Scalable artwork |
+| `desktop/` | ICO and ICNS | Windows/macOS icon formats for future packaging |
 
-Die Website verwendet die passende SVG-Datei sowie Browser- und Touch-Icons aus dem Paket. Das skalierbare Linux-Icon wird ebenfalls aus `vector/gcodescribe.svg` übernommen. Die README verwendet das bereitgestellte PNG.
+The website uses the supplied favicon and touch-icon variants. The scalable Linux icon comes from `vector/gcodescribe.svg`. The README uses the supplied PNG.
 
-**SVG-Unterschied:** `gcodescribe.svg` enthält echte Vektorpfade. `gcodescribe-pixel-perfect.svg` enthält dagegen ein eingebettetes PNG und ist trotz SVG-Endung nicht auflösungsunabhängig. Die Vektorzeichnung ist leicht vereinfacht und daher nicht pixelidentisch mit der PNG-Version.
+**SVG variants:** `gcodescribe.svg` contains actual vector paths. `gcodescribe-pixel-perfect.svg` embeds a PNG and is therefore resolution-dependent despite its SVG extension. The vector artwork is slightly simplified and is not pixel-identical to the PNG version.
 
-Das Manifest wird zusammen mit den Web-Icons ausgeliefert. Alle Dateien stammen aus dem für dieses Projekt bereitgestellten Icon-Paket.
+The manifest is distributed with the web icons. All files come from the icon pack supplied for this project.

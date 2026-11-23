@@ -1,89 +1,99 @@
-# GCodeScribe in Bildern
+# GCodeScribe screenshot gallery
 
-Alle Aufnahmen zeigen die deutsche Desktop-Oberfläche im Querformat **1920 × 1080**. Projekte, Zeichnungen und die Stiftschrift sind eigens erstellte Demo-Daten. Es werden keine privaten Projekte, Konten, Druckeradressen oder Personen gezeigt. Ein Klick öffnet jeweils die volle Auflösung.
+Every screenshot shows the English desktop interface in landscape format at **1920 × 1080**. Projects, drawings and the stroke font are original demo data. No private projects, accounts, printer addresses or people are shown. Click any image to open it at full resolution.
 
-## Gestalten
+## Design
 
-### Zeicheneditor · Ideen werden Linien
+### Drawing editor · Ideas become lines
 
-[![Zeicheneditor mit drei geometrischen Studien und selbst erstellter Stiftschrift](../media/screenshots/design-overview.png)](../media/screenshots/design-overview.png)
+[![Drawing editor with three geometric studies and an original stroke font](../media/screenshots/design-overview.png)](../media/screenshots/design-overview.png)
 
-Mehrere Objekte liegen auf einer gemeinsamen Seite. Links bleibt die Projektstruktur sichtbar; im Zeichenbereich lassen sich Texte, Muster und importierte Linien gemeinsam anordnen.
+Combine objects on a single page. The project structure stays visible on the left while text, patterns and imported lines share the drawing area.
 
-### Botanische Linienzeichnung
+### Botanical line drawing
 
-[![Drei stilisierte Zweige mit Überschrift und Bildunterschrift](../media/screenshots/design-botanical.png)](../media/screenshots/design-botanical.png)
+[![Three stylised branches with an English heading and caption](../media/screenshots/design-botanical.png)](../media/screenshots/design-botanical.png)
 
-Ein vollständiges Motiv aus offenen Stiftlinien und der Demo-Schrift „Werkstatt“. Die Zeichnung enthält keine Personendarstellung.
+A complete composition made from open pen paths and the Workshop demo font. The artwork does not depict any people.
 
-### Fiktiver Stadtplan
+### Imaginary city map
 
-[![Ein aus neutralen Linien erzeugter Demo-Stadtplan im Editor](../media/screenshots/design-map.png)](../media/screenshots/design-map.png)
+[![A synthetic city map made from neutral lines in the drawing editor](../media/screenshots/design-map.png)](../media/screenshots/design-map.png)
 
-Das Beispiel zeigt die Anordnung eines umfangreicheren Linienmotivs. Der Stadtplan ist synthetisch und stellt weder einen Wohnort noch einen tatsächlichen Kartenausschnitt dar.
+This example shows how a denser line drawing fits on a page. The map is synthetic and does not represent a home address or any real location.
 
-## Eigene Schriften
+## Custom fonts
 
-### Zeichen und Varianten bearbeiten
+### Edit characters and variants
 
-[![Schrifteditor mit geladener Werkstatt-Demoschrift, einem ausgewählten Zeichen und drei Varianten](../media/screenshots/font-editor.png)](../media/screenshots/font-editor.png)
+[![Font editor with the Workshop demo font, a selected character and three variants](../media/screenshots/font-editor.png)](../media/screenshots/font-editor.png)
 
-Die sichtbare Schrift ist ein tatsächlich gespeichertes und bearbeitbares `.gcsfont`-Dokument. Zeichen und ihre Varianten bestehen aus einzelnen Stiftzügen, nicht aus einem Screenshot oder einer gefüllten Textkontur.
+The visible font is a real, saved and editable `.gcsfont` document. Its characters and variants consist of individual pen strokes, rather than a screenshot or a filled text outline.
 
-[Beispielschrift herunterladen](../media/examples/werkstatt-demo.gcsfont) · [Informationen zum Beispiel](../media/examples/README.md)
+[Download the demo font](../media/examples/workshop-demo.gcsfont) · [About this example](../media/examples/README.md)
 
-### Schreibtest
+### Writing test
 
-[![Deutscher Schreibtest mit neutralem Text, Umlauten und Ziffern](../media/screenshots/font-preview.png)](../media/screenshots/font-preview.png)
+[![English writing test with neutral sample text, uppercase and lowercase letters, and digits](../media/screenshots/font-preview.png)](../media/screenshots/font-preview.png)
 
-Im Schreibtest werden mehrere Zeichen der eigenen Schrift gemeinsam dargestellt. Das Beispiel verwendet neutrale deutsche Sätze und zeigt auch Umlaute und Ziffern.
+Preview multiple characters from the custom font together. The sample uses neutral English sentences and includes letters and digits.
 
-## Plot vorbereiten
+## Prepare a plot
 
-### Farblayer
+### Colour layers
 
-[![Botanisches Motiv mit getrennten schwarzen, grünen, blauen und roten Stiftlagen](../media/screenshots/color-layers.png)](../media/screenshots/color-layers.png)
+[![Botanical drawing split into black, green, blue and red pen layers](../media/screenshots/color-layers.png)](../media/screenshots/color-layers.png)
 
-Farben sind einzelnen Liniensegmenten zugeordnet und bleiben mit der Seite gespeichert. Für jede verwendete Farbe kann anschließend ein eigener Auftrag erzeugt werden.
+Colours are assigned to individual line segments and saved with the page. Each colour can then become a separate plot job.
 
-### Technische Zeichnung aus STL
+### Technical drawing from STL
 
-[![Aktuelle v2-Druckerhalterung als schattiertes 3D-Modell und projizierte Linienzeichnung](../media/screenshots/stl-import.png)](../media/screenshots/stl-import.png)
+[![Current v2 printer mount as a shaded 3D model and a projected line drawing](../media/screenshots/stl-import.png)](../media/screenshots/stl-import.png)
 
-Das Beispiel verwendet die mitgelieferte v2-Druckerhalterung. Alle Einstellmöglichkeiten stehen gemeinsam links; die Mitte zeigt das Modell, rechts erscheint die daraus erzeugte technische Zeichnung.
+This example uses the included v2 printer mount. All controls appear together on the left, with the model in the centre and its technical drawing on the right.
 
-### Kalibrierungsprofil
+### Calibration profile
 
-[![Visuelle Kalibrierung mit neutralem Profil, Papier-Ecken und nutzbarem Zeichenbereich](../media/screenshots/profile-calibration.png)](../media/screenshots/profile-calibration.png)
+[![Visual calibration with a neutral demo profile, paper corners and usable drawing bounds](../media/screenshots/profile-calibration.png)](../media/screenshots/profile-calibration.png)
 
-Papier, Zeichenfläche und Sonderpositionen gehören zum Demo-Profil. Ein echter Drucker wird für diese Dokumentationsaufnahme nicht bewegt.
+The paper, drawing bounds and special positions belong to the demo profile. No physical printer is moved to create this documentation image.
 
-### G-Code-Vorschau
+### G-code preview
 
-[![Dreidimensionale Vorschau der Stiftbewegungen einer botanischen Zeichnung](../media/screenshots/gcode-preview.png)](../media/screenshots/gcode-preview.png)
+[![Three-dimensional preview of pen movements for a botanical drawing](../media/screenshots/gcode-preview.png)](../media/screenshots/gcode-preview.png)
 
-Zeichenwege und Leerfahrten lassen sich vor dem Plot kontrollieren. Die große Vorschau bietet getrennte Schalter für Fahrwege, Druckbett und Profilumrisse.
+Inspect drawing paths and travel moves before plotting. The large preview has independent controls for travel paths, the print bed and profile outlines.
 
-## Vorlagen
+## Templates
 
-### Käsekästchen
+### Dots & Boxes
 
-[![Deutsche Vorlagenoberfläche mit Käsekästchen-Spielfeld und sichtbaren Parametern](../media/screenshots/templates-grid.png)](../media/screenshots/templates-grid.png)
+[![English template interface with a Dots and Boxes board and visible parameters](../media/screenshots/templates-grid.png)](../media/screenshots/templates-grid.png)
 
-Vorlagen passen ihre Abmessungen an den Zeichenbereich an. Wiederholbare Zufallscodes und sichtbare Parameter ermöglichen Varianten desselben Entwurfs.
+Templates adapt their dimensions to the drawing area. Repeatable seeds and visible parameters let you create variations of the same design.
 
-### Labyrinth
+### Maze
 
-[![Erzeugtes Labyrinth mit Parameterleiste und Plot-Vorschau](../media/screenshots/templates-maze.png)](../media/screenshots/templates-maze.png)
+[![Generated maze with its parameter panel and plot preview](../media/screenshots/templates-maze.png)](../media/screenshots/templates-maze.png)
 
-Die erzeugte Zeichnung kann als neue Seite übernommen und anschließend weiterbearbeitet werden.
+Add a generated drawing as a new page, then continue editing it in the designer.
 
-## Medienstruktur und Herkunft
+## Media organisation and provenance
 
-- `media/screenshots/`: aktuelle, geprüfte Aufnahmen der Anwendung.
-- `media/hardware/`: bereitgestellte Montage- und Plotfotos.
-- `media/branding/`: bereitgestelltes Icon-Paket, nach Web, PNG, SVG und Desktop sortiert.
-- `media/examples/`: importierbare Demo-Schrift.
-- `media/models/`: aktueller v2-Drucksatz und CAD-Dateien; ältere Stände liegen unter `old/`.
+- `media/screenshots/`: current, reviewed app screenshots.
+- `media/hardware/`: supplied assembly and plot photographs.
+- `media/branding/`: supplied icon pack organised into web, PNG, SVG and desktop variants.
+- `media/examples/`: importable demo stroke font.
+- `media/models/`: current v2 print parts and CAD files; earlier designs are under `old/`.
 
-Die neun ursprünglich im Projekt-Root abgelegten Screenshots wurden durch entsprechende neue Ansichten ersetzt. Die unbearbeiteten Originale bleiben lokal gesichert und sind von Git sowie Release-Archiven ausgeschlossen. Der Zeicheneditor-Überblick und die G-Code-Vorschau ergänzen diese neun Ansichten.
+The nine screenshots originally placed in the repository root have been replaced with corresponding new views. Unedited originals remain backed up locally and are excluded from Git and release archives. The drawing overview and G-code preview supplement those nine views. All eleven current screenshots use English UI labels and English artwork.
+
+To create fresh demo data, run the following from the repository with its Python environment installed:
+
+```sh
+.venv/bin/python scripts/docs/create_demo.py \
+  --data-dir /tmp/gcodescribe-docs-demo \
+  --export-dir /tmp/gcodescribe-docs-export
+```
+
+Choose a new, empty directory each time. The fixture contains no configured printer. Use this data in a separate app session, select **English** in the language menu and capture the window at 1920 × 1080.

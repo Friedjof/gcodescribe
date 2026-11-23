@@ -1,77 +1,77 @@
-# Planung für stiftabhängige Plotoptimierung
+# Plan for pen-aware plot optimisation
 
-Stand: 16. November 2026. Status: Architektur und Offline-Prototypen; die produktive Plotpipeline ist unverändert. Die Umsetzung erfolgt in einzeln prüfbaren Commits auf `interface-refactoring`.
+As of 16 November 2026. Status: architecture and offline prototypes; the production plotting pipeline is unchanged at this planning stage. Implementation proceeds in independently reviewable commits on `interface-refactoring`.
 
-## Ziel und verbindliche Grenzen
+## Goal and constraints
 
-Ein Plot soll bei bekanntem Stift weniger unnötige Zeichenwege, Anhebungen und G-Code-Kommandos benötigen. Maßstab ist die sichtbare Zeichnung auf Papier bei finaler Größe. Eine reduzierte Anzahl von Bildschirm-Linien oder Koordinatenpunkten ist allein kein Erfolgsnachweis.
+With a known pen, a plot should need fewer unnecessary drawing moves, lifts and G-code commands. The reference is the visible drawing on paper at its final size. Fewer displayed lines or coordinate points alone do not demonstrate success.
 
-Drei verschiedene Dinge müssen getrennt behandelt werden:
+Distinguish three things:
 
-- **Koordinatenpunkte:** Zwischenpunkte einer Kurve erzeugen Bewegungsbefehle, aber keine separaten Tintenkleckse. Hier helfen kollineare Reduktion und begrenzte Kurvenvereinfachung.
-- **Gezeichnete Punkte:** Ein Stiftkontakt an einer Stelle erzeugt eine Fläche. Er kann überflüssig sein, wenn diese bereits eingefärbt wird. Ein freier Satzpunkt bleibt ein eigenständiges Detail.
-- **Mehrfachwege:** Identische oder überlappende Wege können redundant sein; beabsichtigte Schattierung, Druckvariation oder wiederholter Farbauftrag können sie aber erforderlich machen.
+- **Coordinate points:** intermediate curve samples generate movement commands, not separate ink dots. Collinear reduction and bounded curve simplification can help.
+- **Drawn dots:** a pen contact deposits ink over an area. A covered dot may be redundant; an isolated punctuation mark remains a separate detail.
+- **Repeated paths:** identical/overlapping paths may be redundant, but intentional shading, pressure variation or repeated ink application may require them.
 
-Die Originalobjekte, Quellpfade und ihre Undo-Historie bleiben editierbar. Optimiert wird ein abgeleiteter Plotplan. Die feine Bearbeitungsansicht zeigt weiterhin alle ursprünglichen Linien. Eine separate Ansicht zeigt das erwartete Plotbild mit physischer Strichbreite und eine weitere Ansicht die tatsächlichen optimierten Wege.
+Keep source objects, paths and Undo history editable. Optimise a derived plot plan. The precise editing view retains every original line; separate views show the expected physical ink coverage and the actual optimised tool paths.
 
-Die erste Version modelliert einen runden Stift mit gleichbleibender Breite und einem Farbauftrag. Keilspitzen, richtungsabhängige Breite, variable Druckschrift, transparente Tinte und gezielte Mehrfachdurchgänge werden erkannt bzw. ausdrücklich als ungeeignet markiert und behalten ihre Wege. Ihre Unterstützung wird erst mit passenden Modellen erweitert.
+The first version models a round, constant-width pen and one ink pass. Chisel tips, directional widths, variable-pressure lettering, transparent ink and intentional multiple passes must be recognised or explicitly marked unsupported and retain their paths. Extend support only with suitable models.
 
-## Bestandsaufnahme und konkrete Anschlussstellen
+## Existing integration points
 
-| Stelle | Heutiges Verhalten | Konsequenz für die Umsetzung |
+| Location | Current behaviour | Implementation consequence |
 | --- | --- | --- |
-| `plotter/core/calibration.py` | Maschinenmaße, Z-Höhen und Geschwindigkeiten; `merge_tolerance=0.5` mm; keine reale Strichbreite | Stiftmodell ergänzen, Strichbreite niemals mit Verbindungstoleranz gleichsetzen |
-| `plotter/gcode/scene.py` | Transformiert Objekte, verarbeitet Masken/Hindernisse, verbindet und ordnet Linien; eigene Pfade für Quellreihenfolge, Druck und variable Geschwindigkeit | Vor dem Verlust der Objektzuordnung einen attributierten Zwischenstand erzeugen |
-| `plotter/geometry/singlepass.py` | Entfernt identische Segmente anhand gleicher Endpunkte; kann Netze ohne Nachzeichnen zerlegen | Basis für eindeutige Wege, aber unterschiedlich unterteilte Überlappungen brauchen zusätzliche Normalisierung |
-| `plotter/geometry/oneline.py` | Verbindet Netze durch erneutes Abfahren vorhandener Kanten | Kandidat mit wenig Anhebungen; Nachzeichnen ist eine messbare Kosten- und Farbentscheidung |
-| `plotter/geometry/travel.py` | Greedy-Sortierung; große Mengen mit KD-Baum; bei SVG zusätzlich begrenztes 2-opt | Wiederverwenden, Reihenfolgegrenzen und tatsächliche Startposition berücksichtigen |
-| `plotter/artwork/drawing.py` | Eigene Platzierung, Skalierung und G-Code-Erzeugung; Teile der Optimierung vor finaler Skalierung | Millimetertoleranzen erst in finalen Papierkoordinaten anwenden |
-| `plotter/artwork/pipeline.py` | CLI-Pfad über vpype, eigene Reihenfolge von Vereinfachung/Layout | Gleiche Optionen/Einheiten gewährleisten; keine unbemerkte zweite Optimierung nach dem freigegebenen Plan |
-| `plotter/gcode/metrics.py` | Geschätzte Zeit inkl. Beschleunigung, 25 ms Bewegungsaufschlag und 150 ms Z-Beruhigung | Nicht als reale Firmwarezeit ausgeben; Segmentreduktion kann damit überschätzt werden |
-| `plotter/web/routes/pages.py` | Vorschau, Bewertung und Plot erzeugen G-Code aus derselben Grundfunktion | Gemeinsamen Plotplan als Schnittstelle einziehen, doppelte Berechnungen vermeiden |
-| `plotter/services/profiles.py`, `project_render.py` | Profil-Fingerprint und Kalibrierungssnapshot verhindern veraltete Jobs | Stift-/Optimierungssnapshot zusätzlich binden; Maschinenfingerprint nicht beiläufig migrieren |
-| `frontend/.../paint/lib/styling.ts` | Feste Abstände für Schraffur und Punktfüllung; fertige Linien verlieren teilweise ihre semantische Rolle | Generatorrolle und Ursprung erhalten, um Füllungen später gezielt neu erzeugen zu können |
+| `plotter/core/calibration.py` | Machine dimensions, Z heights/speeds, `merge_tolerance=0.5` mm; no physical stroke width | Add a pen model; never equate width and joining tolerance |
+| `plotter/gcode/scene.py` | Transforms, masks/obstacles, merging/ordering; separate source-order, pressure and variable-speed paths | Create an attributed intermediate representation before losing object identity |
+| `plotter/geometry/singlepass.py` | Deduplicates segments with matching endpoints; decomposes networks without retracing | Reuse for unique paths; normalise overlaps with different subdivisions separately |
+| `plotter/geometry/oneline.py` | Joins networks by retracing existing edges | A low-lift candidate; retracing has measurable time/ink costs |
+| `plotter/geometry/travel.py` | Greedy ordering, KD-tree for large sets, bounded SVG 2-opt | Reuse while respecting ordering boundaries and the actual start position |
+| `plotter/artwork/drawing.py` | Separate placement, scaling and G-code; some optimisation precedes final scale | Apply millimetre tolerances only in final paper coordinates |
+| `plotter/artwork/pipeline.py` | CLI uses vpype with its own simplification/layout order | Align options/units; no hidden second optimisation after approving a plan |
+| `plotter/gcode/metrics.py` | Estimated acceleration, 25 ms movement overhead and 150 ms Z settling | Do not present this as firmware timing; point reduction can exaggerate savings |
+| `plotter/web/routes/pages.py` | Preview, scoring and plotting generate G-code through the same base function | Introduce a shared plan and avoid duplicate computation |
+| `plotter/services/profiles.py`, `project_render.py` | Profile fingerprints/calibration snapshots prevent stale jobs | Also bind pen/optimisation snapshots; do not casually migrate machine fingerprints |
+| `frontend/.../paint/lib/styling.ts` | Fixed hatch/dot spacing; finished paths partly lose semantic roles | Retain generator roles and provenance so fills can be regenerated deliberately |
 
-Shapely 2.1.2 ist im bestehenden Lockfile und in der lokalen Umgebung verfügbar. Bei produktiver direkter Nutzung muss es auch eine explizite Projektabhängigkeit mit geprüfter DEB-/Flatpak-Verfügbarkeit werden. Für die Prototypen wurde nichts installiert.
+Shapely 2.1.2 is available in the existing lockfile and local environment. Direct production use requires an explicit dependency and verified DEB/Flatpak availability. Nothing was installed for the prototypes.
 
-## Was die Demos bereits nachweisen
+## What the demos establish
 
-Ausführung und Bilder: `experiments/pen-width/demo.py`, `results/index.html`, vollständige Zahlen in `results/metrics.json`. Die Eingaben sind synthetisch, deterministisch und in Millimetern. Der Stift wird als Kreisfläche entlang einer Mittellinie modelliert. Alle Werte beziehen sich auf dieses geometrische Modell, nicht auf gemessene Druckqualität.
+Run `experiments/pen-width/demo.py`; see `results/index.html` and full measurements in `results/metrics.json`. Inputs are synthetic, deterministic millimetre geometry. The pen is modelled as circular coverage along a centreline. Results describe that model, not measured print quality.
 
-| Fall | Vorher → nachher | Veränderte Farbfläche | Schlussfolgerung |
+| Case | Before → after | Ink-area change | Finding |
 | --- | --- | --- | --- |
-| Überlappende Linien mit anderer Unterteilung | 76 → 30 mm Zeichenweg; 3 → 1 Kontakt | 0 % fehlend und zusätzlich | Geometrisch exakte Dubletten sind ein guter erster Schritt |
-| Überabtastete Kurve, Stift 0,4 mm | 601 → 97 Punkte; 32,431 → 32,430 mm Weg | 0,1645 % fehlt; 0,1625 % hinzugefügt; Randabweichung ca. 0,002 mm | Deutlich weniger Befehle, praktisch gleicher Weg; Zeitersparnis separat prüfen |
-| 61 Schraffurlinien, Abstand 0,1 mm, Stift 0,5 mm | 1830 → 930 mm; 61 → 31 Kontakte | 0,0313 % fehlt; ca. 0,02094 mm Randabweichung | Erhebliche Wegersparnis im Modell; Randform begrenzt weitere Ausdünnung |
-| Zwei Linien, Abstand 0,12 mm, Stift 0,4 mm | Beide bleiben | 0 % | Löschen einer Linie würde 23,12 % Farbfläche entfernen |
-| Vier Punkte auf einer Linie plus freier Satzpunkt | 6 → 2 Kontakte | 0 % | Überdeckte Punkte verschwinden; freier Punkt bleibt |
-| Geschützter Schriftpunkt und kleine Schleife | Unverändert | 0 % | Detailsemantik wird nicht durch ein globales Flächenbudget ersetzt |
+| Overlaps with different subdivisions | 76 → 30 mm drawing; 3 → 1 contacts | 0% missing/added | Exact geometric duplicates are a useful first step |
+| Oversampled curve, 0.4 mm pen | 601 → 97 points; 32.431 → 32.430 mm | 0.1645% missing, 0.1625% added; about 0.002 mm boundary error | Far fewer commands, almost identical path; assess time separately |
+| 61 hatch lines, 0.1 mm spacing, 0.5 mm pen | 1830 → 930 mm; 61 → 31 contacts | 0.0313% missing; about 0.02094 mm boundary error | Large modelled path savings; boundary shape limits further thinning |
+| Two lines, 0.12 mm spacing, 0.4 mm pen | Both retained | 0% | Removing one loses 23.12% of ink area |
+| Four dots on a line plus isolated punctuation | 6 → 2 contacts | 0% | Covered dots removed; isolated punctuation retained |
+| Protected lettering dot and small loop | Unchanged | 0% | A global area budget cannot replace detail semantics |
 
-Zusätzliche Gegenbeispiele:
+Counterexamples:
 
-1. **Mittellinie innerhalb von Tinte reicht nicht:** Die zweite Parallel-Mittellinie liegt innerhalb der ersten Strichfläche. Ihre eigene Strichfläche ragt trotzdem deutlich heraus.
-2. **Prozentwerte allein reichen nicht:** Ein einzelner Satzpunkt neben einer großen Zeichnung macht in der Demo nur 0,00626 % der Fläche aus. Ihn zu löschen wäre trotzdem offensichtlich falsch; die Randabweichung beträgt 10 mm.
-3. **Kurzer Weg bedeutet nicht unsichtbar:** Eine nur 0,02 mm lange Linie erzeugt im Modell bei 0,4 mm Stiftbreite rund 0,1336 mm² Tinte. Eine pauschale Mindestlänge würde sie falsch entfernen.
-4. **Stiftbreite/10 ist keine belastbare Vereinfachungsregel:** Bei 0,04 mm Toleranz sinkt die Kurve auf 23 Punkte, aber etwa 3,08 % Fläche fehlen und 3,04 % kommen hinzu. Erst die strengere Prüfung mit Rücknahme auf 0,002 mm erreicht das gewählte Versuchsbudget.
-5. **Grenzen beeinflussen die Ersparnis:** Eine Randtoleranz von 0,020 mm erlaubt bei der Schraffur keine Löschung; 0,025 mm erlaubt etwa jede zweite Linie. Diese Werte sind Versuchseinstellungen und keine physisch validierten Standards.
+1. **A centreline inside existing ink is insufficient.** The second parallel centreline lies inside the first stroke's coverage, yet its own ink extends beyond it.
+2. **Percentages alone are insufficient.** One punctuation mark beside a large drawing represents only 0.00626% of this demo's area, but removing it is visibly wrong and causes a 10 mm boundary error.
+3. **Short does not mean invisible.** A 0.02 mm line with a 0.4 mm pen deposits about 0.1336 mm² in the model. A blanket minimum length would incorrectly remove it.
+4. **Pen width/10 is not a reliable simplification rule.** A 0.04 mm tolerance reduces the curve to 23 points but loses about 3.08% of coverage and adds 3.04%. Rolling back to 0.002 mm meets the experimental budget.
+5. **Limits determine savings.** A 0.020 mm boundary tolerance permits no hatch-line deletion; 0.025 mm permits roughly every other line. These are experimental settings, not physically validated defaults.
 
-### Zeitmodell und Zielkonflikt
+### Time models and trade-offs
 
-Die Demo vergleicht die vorhandenen Routenalgorithmen auf demselben Gitter:
+The demo compares existing routing algorithms on the same grid:
 
-| Gitterabstand / Hub | Durchgehend mit Nachzeichnen | Einmal je Strecke | Einordnung |
+| Grid spacing / lift | Continuous with retracing | Once per edge | Interpretation |
 | --- | --- | --- | --- |
-| 0,5 mm / 0,5 mm | 36 mm, 1 Kontakt, App-Schätzung 7,6 s | 30 mm, 8 Kontakte, 11,6 s | Weniger Weg ist hier in beiden Rechenmodellen langsamer |
-| 10 mm / 0,5 mm | 720 mm, 1 Kontakt, 31,4 s | 600 mm, 8 Kontakte, 33,1 s | Zweites Modell ohne Segmentstopps bevorzugt dagegen einmaliges Zeichnen: 23,70 statt 24,51 s |
-| 10 mm / 5 mm | 720 mm, 1 Kontakt, 32,4 s | 600 mm, 8 Kontakte, 38,3 s | Großer Hub macht Anhebungen teurer |
+| 0.5 mm / 0.5 mm | 36 mm, 1 contact, app estimate 7.6 s | 30 mm, 8 contacts, 11.6 s | Shorter drawing distance is slower in both models |
+| 10 mm / 0.5 mm | 720 mm, 1 contact, 31.4 s | 600 mm, 8 contacts, 33.1 s | The continuous-motion model instead favours once per edge: 23.70 versus 24.51 s |
+| 10 mm / 5 mm | 720 mm, 1 contact, 32.4 s | 600 mm, 8 contacts, 38.3 s | Larger lifts cost more |
 
-Bei der Kurve sinkt die App-Schätzung von 29,2 auf 9,0 Sekunden; das zweite Modell liegt vorher/nachher nahezu gleich bei 1,71 Sekunden. Diese Spannweite ist ein Befund zur Modellunsicherheit, kein gemessener Geschwindigkeitsgewinn. Firmware-Lookahead, Beschleunigung, Kurvenwinkel, Übertragung und Z-Mechanik müssen kalibriert werden, bevor die App starke Zeitversprechen macht.
+The curve's app estimate falls from 29.2 to 9.0 s, while the other model remains near 1.71 s. This spread demonstrates model uncertainty, not measured speedup. Calibrate firmware lookahead, acceleration, turn angles, transmission and Z mechanics before making strong time claims.
 
-## Stiftmodell und Messablauf
+## Pen model and measurement workflow
 
-### Datenstruktur
+### Data structure
 
-Vorschlag für Version 1: ein optionales, versioniertes `penSetup` neben `calibration` im bestehenden Profil. Keine neue Pflichtbibliothek und keine neue Hauptregisterkarte. Wiederverwendbare Stiftvorlagen können später dieselbe Struktur benutzen.
+Version 1 proposes optional, versioned `penSetup` alongside `calibration` in existing profiles. No new mandatory library or main tab is needed. Reusable pen presets can later share this structure.
 
 ```ts
 type PenSetup = {
@@ -86,7 +86,7 @@ type PenSetup = {
   paperNote: string;
   measurement: null | {
     samplesMm: number[];
-    method: 'manual' | 'scan'; // scan später
+    method: 'manual' | 'scan'; // scanning comes later
     capturedAt: string;
     conditions: {
       penDownZ: number;
@@ -98,218 +98,204 @@ type PenSetup = {
 };
 ```
 
-`widthLowMm`/`widthHighMm` sind ein ausdrücklich bestimmter Arbeitsbereich inklusive Messunsicherheit, kein aus wenigen Proben behauptetes statistisches Konfidenzintervall. Messwert, nominelle Breite und nicht bekannte Breite erhalten unterschiedliche sichtbare Zustände. Beispiel 0,4 mm dient nur als Eingabehilfe und darf nicht stillschweigend als gemessen gespeichert werden.
+`widthLowMm`/`widthHighMm` explicitly describe a working range including uncertainty, not a statistical confidence interval inferred from a few samples. Distinguish measured, nominal and unknown widths. A 0.4 mm input example must not silently become a saved measurement.
 
-Validator: endliche positive mm-Werte, konsistente Grenzen `low ≤ width ≤ high`, endliche Geschwindigkeiten/Z-Werte, begrenzte Zeichenlängen und Probemengen. UI zunächst 0,05–5 mm als unterstützter Arbeitsbereich; größere/kleinere Werte ausdrücklich außerhalb der getesteten Modellgrenzen behandeln. Keine automatische Umrechnung von Stiftdurchmesser in Strichbreite.
+Validate finite positive millimetre values, consistent `low ≤ width ≤ high` bounds, finite speed/Z values and bounded text/sample counts. Initially support 0.05–5 mm in the UI; explicitly mark other widths outside tested model limits. Do not convert pen diameter automatically into stroke width.
 
-Alte Profile erhalten `penSetup: null`; ihre Maschinenkalibrierung und vorhandenen Fingerprints bleiben gültig. Ein zusätzlicher `penFingerprint` wird aus normalisiertem effektivem Modell und Messbedingungen abgeleitet. Reine Umbenennung darf keinen Job veralten lassen. Änderungen an Breite, Messstatus oder relevanten Bedingungen invalidieren neue stiftoptimierte Pläne.
+Old profiles get `penSetup: null` and retain their machine calibration/fingerprints. Derive a separate `penFingerprint` from the normalised effective model and conditions. Renaming alone must not stale a job; changes to width, measurement status or relevant conditions invalidate new pen-optimised plans.
 
-### Bedienung im vorhandenen Einrichtungsablauf
+### Integration into existing setup
 
-1. Nach Kontakt- und Abhebehöhe erscheint die kompakte Aufgabe „Strichbreite bestimmen“. Eingabe „Herstellerangabe verwenden“ oder „Mit Testmuster messen“; spätere Messung möglich.
-2. Eine kleine Testkarte enthält horizontale, vertikale und diagonale Striche, einen Bogen sowie beschriftete Abstandsreihen. Sie nutzt das aktuelle Papier und das spätere Zeichentempo. Die Auswahl eines Musters bewegt keine Hardware; ein Testplot nutzt die bestehenden Vorschau-/Startbedingungen.
-3. Manuell mindestens drei Stellen je Hauptrichtung ablesen; bei sehr feinem Stift Lupe/Messskala verwenden. Die App rechnet mm-Werte zusammen und zeigt die Streuung. Bildschirm-Pixel sind keine Messreferenz.
-4. Der Nutzer bestätigt die wirksame Breite und einen konservativen Bereich. Bei stark richtungsabhängigen Ergebnissen bleibt flächenbasierte Entfernung gesperrt; exakte Geometrieoptimierung bleibt verfügbar.
-5. Nach Stift-/Papierwechsel oder geänderten Z-/Tempo-Bedingungen erscheint „Breite erneut prüfen“. Der alte Wert bleibt nachvollziehbar, wird aber nicht als aktuell gemessen dargestellt.
+1. After contact/lift heights, offer Determine stroke width, with Use manufacturer specification or Measure with a test pattern. Measurement can be deferred.
+2. A small card includes horizontal, vertical and diagonal lines, an arc and labelled spacing samples, using current paper and intended speed. Selecting it moves no hardware; plotting retains existing preview/start prerequisites.
+3. Measure at least three locations per main direction, using magnification/a scale for fine pens. Combine millimetre samples and display their spread. Screen pixels are not a measurement reference.
+4. Let the user confirm effective width and a conservative range. Strong directional dependence disables area-based removal while exact geometry optimisation remains available.
+5. After changing pen/paper, Z or speed, show Check width again. Preserve the historical value without claiming it is a current measurement.
 
-Eine spätere Scanmessung braucht ein Maßstabsreferenzfeld, Entzerrung, Hintergrund-/Tintensegmentierung und einen Unsicherheitsbericht. Ein Foto ohne Maßstab liefert keine zuverlässigen Millimeterwerte. Diese Funktion gehört nicht zum ersten Release des Optimierers.
+Later scan measurement needs a scale reference, rectification, background/ink segmentation and an uncertainty report. An unscaled photograph does not provide reliable millimetres. Scanning is outside the optimiser's first release.
 
-Variable Druckwerte dürfen nicht direkt in Strichbreite umgerechnet werden: Die vorhandenen Xournal-Werte sind relative Steuerwerte. Erst eine echte Messreihe `Breite(Druck, Tempo, Richtung)` würde einen geeigneten Zusammenhang liefern.
+Do not directly convert Xournal pressure controls to width; they are relative control values. An actual `width(pressure, speed, direction)` measurement series is needed first.
 
-## Fachliches Modell der Optimierung
+## Optimisation model
 
-### Gemeinsames Koordinatensystem und Attribute
+### Coordinates and attributes
 
-Alle Prüfungen erfolgen nach endgültiger Skalierung und Objekttransformation in Papier-mm. Stiftbreite skaliert nicht mit dem Objekt. Bei nicht gleichmäßiger Objektverzerrung wird zuerst die Mittellinie transformiert; erst danach wird sie mit der realen kreisförmigen Spitze verbreitert. Sonst würde auch die Spitze fälschlich elliptisch verzerrt.
+Perform all checks after final scaling/transforms, in paper millimetres. Pen width does not scale with an object. Under non-uniform transforms, transform the centreline first, then expand it using the real round nib; otherwise the nib would incorrectly become elliptical.
 
-Ein `PlotStroke` enthält `id`, Objekt-/Quellreferenz, Punkte, explizite Punktmarkierung, Strichrolle (`outline`, `fill`, `text`, `dot`, `unknown`), Stift-/Farbgruppe, Druck-/Geschwindigkeitsdaten, Reihenfolgegruppe, Schutzstatus und Absicht für Mehrfachdurchgänge. Rollen kommen von Generatoren/Importmetadaten; unbekannte Striche werden nicht allein anhand ihrer Länge als Rauschen eingestuft.
+A `PlotStroke` carries `id`, object/source reference, points, an explicit dot marker, role (`outline`, `fill`, `text`, `dot`, `unknown`), pen/colour group, pressure/speed data, ordering group, protection and repeated-pass intent. Roles come from generators/import metadata. Unknown short strokes are not automatically noise.
 
-Kompatible Gruppen dürfen zusammen optimiert werden. Unterschiedliche Farben, Druckregeln, beabsichtigte Wiederholungen, Maskenebenen und zwingende Reihenfolgen bilden Grenzen. Die aktuelle Reduktion zu nackten Polylinien muss dafür in einen attributerhaltenden Adapter ausgelagert werden.
+Optimise compatible groups together. Colours, pressure rules, intentional repeats, mask layers and required order form boundaries. Replace bare-polyline reduction with an attribute-preserving adapter.
 
-### Farbfläche und Fehlergrößen
+### Ink coverage and errors
 
-Referenz ist das bestehende Motiv in finaler Größe nach seinen Masken, nicht ein
-unbekanntes ideales Originalfoto. Bereits beim Nachzeichnen eines Bildes
-verlorene Details lassen sich durch diese Optimierung nicht wiederherstellen.
-Die Stiftvorschau muss außerdem vor der Optimierung auf Überstand am Papier bzw.
-Maskenrand hinweisen. Ein zu breiter Stift wird nicht automatisch durch
-Verkleinern oder Abschneiden des gesamten Motivs kompensiert.
+The reference is the existing final-sized, masked artwork, not an unknown ideal source photograph. Optimisation cannot recover details already lost during tracing. Before optimisation, the pen preview must show ink extending beyond paper/masks. Do not automatically shrink or crop the whole drawing to compensate for an overly broad pen.
 
-Für eine konstante runde Spitze mit Radius `r = d/2` ist die modellierte Fläche eines Weges die Vereinigung der Kreise entlang seiner Mittellinie. Ein echter Punkt bekommt einen Kreis; ein zufälliges Nullsegment wird nicht automatisch zu einem Punkt umgedeutet. Geometrische Grundlage: [Shapely buffer 2.1.2](https://shapely.readthedocs.io/en/2.1.2/reference/shapely.buffer.html).
+For a constant round nib, `r = d/2`, coverage is the union of circles along the centreline. An explicit dot receives a circle; an accidental zero-length segment does not automatically become a dot. Geometry reference: [Shapely buffer 2.1.2](https://shapely.readthedocs.io/en/2.1.2/reference/shapely.buffer.html).
 
-Seien `I₀` die ursprüngliche und `I₁` die optimierte Farbfläche:
+For original coverage `I₀` and optimised coverage `I₁`, measure:
 
-- Fehlende Tinte: `A− = area(I₀ \ I₁)`.
-- Zusätzliche Tinte: `A+ = area(I₁ \ I₀)`.
-- Relative Fehler jeweils bezogen auf `area(I₀)`; kleine Bereiche bekommen zusätzlich absolute Grenzen.
-- Maximale Randabweichung inklusive innerer Löcher, nicht nur Außenumriss.
-- Zahl/Identität geschützter Details, Komponenten, Verbindungen und erhaltener Weißräume.
-- Bei späteren Tonwertmodellen zusätzlich Änderung der örtlichen Anzahl von Überfahrten.
+- Missing ink: `A− = area(I₀ \ I₁)`.
+- Added ink: `A+ = area(I₁ \ I₀)`.
+- Relative errors against `area(I₀)`, with additional absolute limits for small regions.
+- Maximum boundary deviation, including holes rather than just outer contours.
+- Counts/identities of protected details, components, connections and retained white spaces.
+- In later tonal models, changes to local pass counts.
 
-Jeder Kandidat wird gegen die ursprüngliche Referenz der Gruppe geprüft. Ein Budget darf nicht mit jedem kleinen Löschschritt neu beginnen. Gelöschte Wege dürfen nicht weiterhin als Abdeckung für spätere Löschungen dienen. Am Ende wird der gesamte Plan erneut geprüft.
+Check each candidate against the group's original reference. Never reset the budget after each deletion, or use deleted paths as coverage for later removals. Recheck the entire final plan.
 
-Versuchseinstellung für „Ausgewogen“: je höchstens 0,25 % fehlende/zusätzliche Fläche und Randabweichung höchstens `min(0,03 mm, 0,05 × d)`. Dies ist ein Ausgangspunkt für Validierung, keine zugesicherte Unsichtbarkeit. Die gleichen Grenzen gelten auch lokal pro Detailgruppe/Kachel; geschützte Details haben keinen Verlustspielraum. Fenster über Kachelgrenzen überlappen, damit dort keine Fehler verschwinden. Zusammenhängende Löcher/Netzverbindungen werden separat geprüft.
+An experimental Balanced policy allows at most 0.25% missing/added coverage each and boundary error `min(0.03 mm, 0.05 × d)`. This starts validation; it does not guarantee invisibility. Apply the same limits locally per detail group/tile; protected details allow no loss. Overlap tile windows so errors cannot hide at seams. Check connected holes/network links separately.
 
-Für „Form exakt“ gelten keine absichtlichen Flächenänderungen, nur ein definiertes numerisches Rechenbudget. Für breitenabhängige Eingriffe bei unbekannter Breite gibt es keine Freigabe. Bei unsicherer Breite werden Kandidaten über den zugelassenen Bereich geprüft; wenige Stichproben sind nur ein Test, kein Beweis für das gesamte Intervall. Die erste produktive Version verwendet konservative Hüllen oder behält den Kandidaten, wenn sich robuste Abdeckung nicht belegen lässt.
+Exact shape permits no intentional coverage changes, only a defined numerical budget. Unknown width cannot authorise width-dependent edits. For uncertain width, check the allowed range; a few samples do not prove a whole interval. The first production version uses conservative envelopes or retains the original when robust coverage cannot be established.
 
-Der Kreis wird numerisch angenähert. Die Demo nutzt 32 Segmente je Viertelkreis. Produktion muss den maximalen radialen Näherungsfehler `r × (1 − cos(π/(4q)))` in das Fehlerbudget aufnehmen. Der in der Demo verwendete diskrete Hausdorff-Abstand ist ein Prüfwert, keine garantierte kontinuierliche Schranke. Produktion braucht adaptive Nachverdichtung bzw. eine konservative obere Schranke. Rasterbilder helfen bei der visuellen Kontrolle, entscheiden aber nicht allein über das Löschen subpixelgroßer Details.
+Circles are numerical approximations. The demo uses 32 segments per quadrant. Include maximum radial error `r × (1 − cos(π/(4q)))` in the production budget. Discrete Hausdorff distance is a check, not a guaranteed continuous bound; use adaptive densification or a conservative upper bound. Raster previews aid inspection but cannot alone authorise removal of subpixel details.
 
-### Verarbeitung in nachvollziehbaren Stufen
+### Explainable processing stages
 
-1. **Vorbereitung:** Unveränderlichen Dokument-/Profilstand aufnehmen; transformieren; Masken, Plotgrenzen und Hindernisse anwenden; Attribute/Quellen erhalten. Der eingefärbte Strichrand wird bei der Papierprüfung berücksichtigt. Werkzeug-/Halterkollisionen brauchen weiterhin die eigenen mechanischen Abstände, nicht den Tintenradius.
-2. **Exakte Bereinigung:** Aufeinanderfolgende Koordinatenduplikate und exakt kollineare Zwischenpunkte entfernen, sofern keine Druck-/Tempo-/Punktbedeutung daran hängt. Schnittstellen und Teilüberlappungen zerlegen; identische atomare Strecken richtungsunabhängig einmal behalten. Scharfe Knicke und Knoten schützen. Rundungsfehler dürfen keine nahe Parallelspur zusammenziehen.
-3. **Punktreduktion:** Kurven abschnittsweise zwischen geschützten Ankern vereinfachen. Toleranz zunächst klein und stiftabhängig, anschließend Flächen-/Randprüfung; bei Überschreitung zurücknehmen. Ein allgemeines `preserve_topology=True` allein garantiert nicht die Beziehungen zwischen unabhängig vereinfachten Objekten: Netzknoten müssen explizit geteilt und geprüft werden. [Shapely simplify](https://shapely.readthedocs.io/en/2.1.2/reference/shapely.simplify.html).
-4. **Überdeckung:** Zunächst ganze redundant eingefärbte Striche/Punkte entfernen. Kandidaten über räumliche Nachbarschaft finden und deterministisch prüfen. Priorität: große echte Einsparung bei kleinem Qualitätsrisiko. Später Teilstrecken kürzen; dabei zusätzliche Anhebungen und sichtbare Endkappen mitbewerten. Niemals die Mittellinie einfach aus der bisherigen Farbfläche herausschneiden: Der verbleibende Stiftauftrag ist wieder eine Fläche.
-5. **Füllungen:** Bei bekannter Generatorrolle Schraffurabstände aus Strichbreite und gewünschter Deckung neu erzeugen. Im Inneren einer ideal deckenden Fläche kann paralleler Abstand höchstens etwa der wirksamen Breite sein; Ränder, Kurven, Streuung und Tintenauftrag verlangen weitere Prüfung. Tonwertschraffur/Pointillismus und Kreuzschraffur bleiben zunächst geschützt. Sie durch einfaches Ausdünnen aufzuhellen wäre keine gleichwertige Optimierung.
-6. **Routen:** Mindestens unveränderte Reihenfolge, einmalige Kanten und gegebenenfalls Nachzeichnen vorhandener Kanten vergleichen. Keine sichtbaren neuen Verbindungslinien. Verbindungen durch bestehende Tinte sind spätere Kandidaten mit gleicher Flächenprüfung, keine Erlaubnis zum allgemeinen Überbrücken von Lücken. Der aktuelle Wert `merge_tolerance=0.5` wird nicht in die neue Pipeline als pauschale Qualitätstoleranz übernommen.
-7. **Abschluss:** Mit tatsächlichem Start, Hindernissen, Parkfahrt und Z-Profil G-Code erzeugen; Rundung auf 0,001 mm mitprüfen; Bewegungsgrenzen prüfen; Kennzahlen und Fehlerbericht am finalen Ergebnis berechnen. Wenn der Kandidat die Grenzen verfehlt, auf die letzte gültige Stufe zurückfallen und den Grund nennen.
+1. **Preparation:** capture immutable document/profile state; transform; apply masks, plot bounds and obstacles; preserve attributes/sources. Paper checks include ink edges. Tool/holder collision clearances remain mechanical constraints, not ink radius.
+2. **Exact cleanup:** remove consecutive duplicates and exactly collinear samples unless they carry pressure/speed/dot meaning. Split intersections/partial overlaps and retain identical atomic segments once regardless of direction. Protect corners/junctions. Rounding must not collapse nearby parallel strokes.
+3. **Point reduction:** simplify between protected anchors, starting with small pen-aware tolerances and rolling back on coverage/boundary failure. `preserve_topology=True` does not preserve relationships between independently simplified objects; share/check network junctions explicitly. See [Shapely simplify](https://shapely.readthedocs.io/en/2.1.2/reference/shapely.simplify.html).
+4. **Coverage:** initially remove only whole redundant strokes/dots. Find local candidates spatially and check deterministically, prioritising substantial savings with little quality risk. Partial trimming comes later and must account for extra lifts/visible end caps. Never simply subtract a centreline from existing ink: the remaining stroke also deposits an area.
+5. **Fills:** use known generator roles to regenerate hatch spacing for width/coverage. Inside an ideal opaque fill, parallel spacing can be at most roughly the effective width; boundaries, curvature, variation and deposition need further checks. Initially protect tonal hatching, pointillism and cross-hatching. Thinning them into lighter artwork is not equivalent optimisation.
+6. **Routing:** compare original order, single-pass edges and, where applicable, retracing existing edges. Add no visible connection lines. Connections within existing ink are later coverage-checked candidates, not permission to bridge gaps. Do not inherit `merge_tolerance=0.5` as a general quality tolerance.
+7. **Completion:** generate G-code with actual start, obstacles, parking and Z profile; check 0.001 mm rounding and motion limits; calculate final metrics/errors. On failure, retain the last valid stage and explain why.
 
-Die Auswahl ist eine beschränkte Optimierung: zuerst Qualitäts-/Semantikbedingungen erfüllen, dann Zeit, Nachzeichnen und Datenmenge vergleichen. Ein globales mathematisches Optimum wird nicht versprochen. Zeitvorteile innerhalb der Modellunsicherheit werden als „ähnlich“ behandelt. Bei unbekannter Dynamik bevorzugt die Empfehlung unter qualitativ gleichwertigen Kandidaten den Plan mit wenig Nachzeichnen; der Nutzer kann „Weniger Anheben“ ausdrücklich wählen.
+This is constrained optimisation: meet quality/semantic requirements first, then compare time, retracing and data size. It promises no global optimum. Treat time differences within uncertainty as similar. With unknown dynamics, prefer less retracing among equivalent candidates; users may explicitly choose Fewer lifts.
 
-## Architektur und API-Verträge
+## Architecture and API contracts
 
-Vorgeschlagene Module mit einer klaren Aufgabe:
+Proposed modules:
 
 ```text
 plotter/plotplan/
   model.py           PlotStroke, PenSetup, Policy, PlotPlan, Report
-  scene_adapter.py   Objekttransformation, Attribute, Masken
-  drawing_adapter.py SVG/PDF-Platzierung in finale mm
-  normalize.py       Knoten, Überlappungen, exakte Bereinigung
-  simplify.py        Anker und begrenzte Punktreduktion
-  coverage.py        Stiftflächen, lokale Indexierung, Löschkandidaten
-  quality.py         Fehlerbudgets, Semantik, abschließende Prüfung
-  routing.py         Routenvergleich und bestehende Routenhelfer
-  timing.py          Dynamikparameter und Unsicherheit
-  service.py         Jobsteuerung, Snapshot, Cache, Abbruch
+  scene_adapter.py   Object transforms, attributes, masks
+  drawing_adapter.py SVG/PDF placement in final millimetres
+  normalize.py       Junctions, overlaps, exact cleanup
+  simplify.py        Anchors and bounded point reduction
+  coverage.py        Pen coverage, local indexing, deletion candidates
+  quality.py         Error budgets, semantics, final validation
+  routing.py         Route comparison and existing helpers
+  timing.py          Dynamics and uncertainty
+  service.py         Tasks, snapshots, cache, cancellation
 ```
 
-`build_plot_plan(source, calibration, pen_setup, policy) -> PlotPlan` bleibt ohne Datei-/Druckerzugriff. `PlotPlan` enthält versionierte Eingabe-Hashes, Stift-/Policy-Snapshot, Wege mit Attributen, Messwerte vorher/nachher, verworfene Kandidaten samt Gründen und Prüfstatus. G-Code-Ausgabe und Planberechnung werden getrennt; der Encoder darf danach keine weitere versteckte Linienoptimierung ausführen.
+`build_plot_plan(source, calibration, pen_setup, policy) -> PlotPlan` performs no file/printer access. The plan includes versioned input hashes, pen/policy snapshots, attributed paths, before/after metrics, rejected candidates/reasons and validation status. Separate planning and encoding; the encoder must not perform hidden subsequent line optimisation.
 
-Die Auswahl wird pro Slide als optionale `plotOptimization` gespeichert:
-`{version: 1, mode: 'off' | 'exact' | 'balanced', route: 'auto' | 'single_pass' |
-'few_lifts', protectedObjectIds: string[]}`. Fehlender Wert bedeutet `off`.
-Toleranzen gehören zu einer versionierten Policy, nicht zu frei geratenen
-Anfänger-Reglern. Für die erste Messphase können sie in einem expliziten
-Experimentmodus verändert werden; jeder Bericht enthält die tatsächlichen
-Werte. `continuous` bleibt für alte Slides kompatibel. Sobald eine neue Policy
-aktiv ist, entscheidet nur deren `route`; ein alter Boolean darf das fertige
-Ergebnis nicht nachträglich verändern.
+Store optional per-slide `plotOptimization`:
 
-Beispiel eines erfolgreichen Reports:
-`{status: 'ready', inputHash, planHash, policyVersion, penFingerprint,
+```ts
+{version: 1, mode: 'off' | 'exact' | 'balanced', route: 'auto' | 'single_pass' |
+'few_lifts', protectedObjectIds: string[]}
+```
+
+Missing means `off`. Tolerances belong to a versioned policy, not arbitrary beginner controls. An explicit experimental mode may expose them during measurement; every report records actual values. Keep legacy `continuous` compatibility, but once a new policy is active, only its `route` decides routing. An old Boolean must not alter the completed plan.
+
+A successful report contains:
+
+```ts
+{status: 'ready', inputHash, planHash, policyVersion, penFingerprint,
 before: {drawMm, travelMm, contacts, points, estimatedSeconds}, after: {...},
 quality: {missingAreaMm2, addedAreaMm2, maxBoundaryErrorMm, protectedLost: 0},
-appliedStages, skippedGroups, warnings}`. `quality` darf nur als vollständig
-geprüft erscheinen, wenn alle erforderlichen Gruppenprüfungen abgeschlossen
-sind. Bei Teilprüfung erhält der unveränderte bzw. konservativ optimierte
-Fallback einen eigenen Hash und einen eigenen Status. Der Client zeigt dessen
-Kennzahlen, keine Mischung aus vorgeschlagenem und tatsächlich nutzbarem Plan.
+appliedStages, skippedGroups, warnings}
+```
 
-Vorgeschlagene Endpunkte (an vorhandene Jobinfrastruktur anpassen):
+Claim complete quality validation only after checking every required group. Partial validation returns an unchanged/conservative fallback with its own hash/status. Show its actual metrics rather than mixing proposed and usable plans.
 
-- `POST /api/pages/{id}/plot-plan`: erfasst `expectedRevision`, Projekt-/Profilidentität, effektive Einstellungen und Policy; liefert `202` mit Task-ID. Ein vorhandener gültiger Cachetreffer darf sofort geliefert werden.
-- `GET /api/plot-plans/{taskId}`: Fortschritt nach Stufe, Status, Hash, Kennzahlen, begrenzte Vorschau und Ergebnisreferenz. Große Wege binär/kompakt übertragen, keine mehrfachen riesigen JSON-Bäume.
-- `DELETE /api/plot-plans/{taskId}`: kooperativer Abbruch; laufende Prozessarbeit nötigenfalls verwerfen. Abbruch startet niemals die Originalzeichnung automatisch.
-- Plot-/Exportaufruf erhält `planId`, `planHash`, erwartete Dokumentrevision und Profil-/Stift-Hashes. Bei Abweichung `409` und Neuberechnung; kein stiller Wechsel auf einen anderen Plan.
+Proposed endpoints, adapted to existing tasks:
 
-Gespeicherte und noch nicht gespeicherte Vorschau müssen dieselbe Semantik besitzen. Entweder wartet der Client auf Autosave oder sendet einen expliziten Entwurf samt Inhaltshash. Der spätere Plot muss exakt denselben Inhalt binden. Ein Projektwechsel während der Berechnung ändert den Zielkontext nicht; verspätete Ergebnisse überschreiben keine neuere Vorschau.
+- `POST /api/pages/{id}/plot-plan`: capture `expectedRevision`, project/profile identity, effective settings and policy; return `202` with a task ID. A valid cache hit may return immediately.
+- `GET /api/plot-plans/{taskId}`: stage progress, status, hash, metrics, bounded preview and result reference. Transfer large paths compactly/binarily rather than duplicating huge JSON trees.
+- `DELETE /api/plot-plans/{taskId}`: cooperative cancellation, discarding process work when necessary. Cancellation never automatically plots the original.
+- Plot/export receives `planId`, `planHash`, expected document revision and profile/pen hashes. Mismatch returns `409` and requires recomputation, never a silent plan substitution.
 
-Cache-Schlüssel: Geometrie inklusive Masken/Transforms/Attribute, finaler Maßstab, relevante Kalibrierung, PenFingerprint, Policy-Version, Algorithmus-Version, Bewegungsmodell. Reine Layout-/Zoomänderungen invalidieren nichts. Vorschau, Score, Download und Druck verweisen auf denselben unveränderlichen Plan. Jobmetadaten enthalten diesen Snapshot. Alte Jobs laufen unter ihrer bisherigen Validierung; ihnen wird keine neue Optimierung unterstellt.
+Saved and unsaved previews need identical semantics: await autosave or send an explicit content-hashed draft. The eventual plot binds exactly that content. Project switching does not redirect a calculation; late results cannot replace newer previews.
 
-Datei-/Profilimport und -export müssen `penSetup` und Versionsgrenzen verlustfrei behandeln. Unbekannte zukünftige Policy-Versionen werden nicht als heutige Defaults interpretiert.
+Cache keys cover geometry, masks/transforms/attributes, final scale, relevant calibration, pen fingerprint, policy/algorithm versions and motion model. Layout/zoom invalidates nothing. Preview, scoring, download and printing reference the same immutable plan, whose snapshot is included in job metadata. Legacy jobs retain their existing validation without being retrospectively labelled optimised.
 
-## Performance und Stabilität
+Profile/file import/export must preserve `penSetup` and version boundaries. Unknown future policy versions are not interpreted as current defaults.
 
-`benchmark.py` misst Bausteine, keinen kompletten Optimierer. In einem lokalen Lauf brauchte die Vereinfachung von 400.000 Punkten bei 0,002 mm Toleranz etwa 239 ms. Der räumliche Index reduzierte beim getrennten Kurvensatz 10.000 mögliche Paare auf 100 Selbstpaare. Bei 1.000 dicht überlagerten Linien entstanden trotzdem 1.000.000 gerichtete Kandidatenpaare; die Abfrage dauerte etwa 608 ms.
+## Performance and stability
 
-Die kleine Schraffur-Demo baut dagegen pro Löschversuch alle Flächen neu auf und benötigt schon für 61 Linien ungefähr zwei Sekunden. Diese absichtlich einfache Referenz ist ungeeignet als Produktionsalgorithmus.
+`benchmark.py` measures components, not a complete optimiser. One local run simplified 400,000 points at 0.002 mm tolerance in about 239 ms. For separated curves, spatial indexing reduced 10,000 possible pairs to 100 self-pairs. With 1,000 densely overlapping lines, it still produced 1,000,000 directed candidate pairs and took about 608 ms to query.
 
-Produktionsstrategie:
+The small hatch demo rebuilds all coverage per deletion and already takes about two seconds for 61 lines. This intentionally simple reference is unsuitable for production.
 
-- Günstige exakte Reduktion vor teurer Flächenrechnung. Linien in begrenzte räumliche Stücke zerlegen, lange Diagonalen nicht als riesige Bounding-Box-Nachbarschaft behandeln.
-- STRtree oder gleichwertiger Index für Kandidaten; der Baum ist statisch und muss nach strukturellen Änderungen kontrolliert neu aufgebaut werden. Kandidatenlisten auf aktuelle Überlebende filtern. [STRtree-Dokumentation](https://shapely.readthedocs.io/en/2.1.2/strtree.html).
-- Lokale Flächen-Caches pro Kachel mit ausreichendem Überlappungsrand. Abhängigkeiten zwischen gelöschten Wegen und gecachter Abdeckung invalidieren. Globale Finalprüfung und Detailprüfung dürfen durch Kachelung nicht entfallen.
-- Für dichte Flächen Kandidaten blockweise und mit festen Arbeitsbudgets verarbeiten; keine unbeschränkte Million-Paar-Matrix im UI. Schraffuren mit bekannten Generatorparametern separat behandeln.
-- Rechenarbeit in abbrechbarem Hintergrundprozess; UI behält die letzte vollständige Zeichnung. Keine Anwendung des aktuellen Fortschritts als fertiger Plotplan.
-- Bei Speicher-/Zeitlimit bleibt ein geprüfter konservativer Plan verfügbar. UI meldet „Flächenoptimierung nicht vollständig geprüft“ und die tatsächlich angewandten Stufen. Kein stilles Auslassen von Geometrie.
-- Deterministische Sortierung mit stabilen Quell-IDs; gleiche Eingabe/Version ergibt gleichen Planhash. Caches begrenzen und bei Fehlern freigeben.
+Production strategy:
 
-Vorläufige Leistungsziele auf einer dokumentierten Referenzmaschine: UI-Antwort unter 100 ms, Abbruchbestätigung unter 500 ms, exakte Analyse von 100.000 Punkten im niedrigen Sekundenbereich, 400.000 Punkte mit sichtbarem Fortschritt und begrenztem Speicher. Das sind Abnahmekriterien für künftige Messungen, keine bereits erreichten End-to-End-Werte.
+- Perform cheap exact reduction before expensive coverage operations. Split paths into bounded spatial pieces; do not let long diagonals create enormous bounding-box neighbourhoods.
+- Use STRtree or equivalent for candidates. Rebuild the static tree deliberately after structural edits and filter against surviving paths. See [STRtree](https://shapely.readthedocs.io/en/2.1.2/strtree.html).
+- Cache local coverage in overlapping tiles. Invalidate dependencies between deleted paths and cached coverage. Tiling cannot replace global final/detail validation.
+- Process dense candidates in blocks with fixed work budgets, not an unbounded million-pair UI matrix. Handle known hatch generators separately.
+- Run cancellable background processes while retaining the last complete drawing. Intermediate progress is not a finished plan.
+- On memory/time limits, retain a validated conservative plan and report incomplete coverage optimisation plus the actual applied stages. Never silently omit geometry.
+- Use stable source IDs/deterministic ordering so identical inputs/versions produce the same hash. Bound caches and release them after failures.
 
-## Kompakte Bedienung im Editor
+Provisional acceptance targets on a documented reference machine: UI response below 100 ms, cancellation acknowledgement below 500 ms, exact analysis of 100,000 points within a few seconds, and visible progress/bounded memory at 400,000 points. These are future acceptance targets, not achieved end-to-end measurements.
 
-Kein neuer Haupttab. In den vorhandenen Plot-/Vorschaubereich kommt „Stift & Optimierung“. Stiftname, Breite und Messstatus stehen als kurze Statuszeile am Dokument; Bearbeitungswerkzeuge behalten ihren Platz.
+## Compact editor interaction
 
-Der angedockte Bereich hat drei kleine Unterseiten, jeweils mit fester Aktionszeile:
+Add Pen & optimisation to the existing plot/preview area, not a main tab. Show a short document status for pen name, width and measurement state without displacing editing tools.
 
-1. **Stift:** aktuelle Breite, Quelle, Papier, „Breite prüfen“. Kein zweiter vollständiger Einrichtungsassistent im Editor.
-2. **Optimierung:** `Aus`, `Form exakt`, `Ausgewogen`. „Aus“ ist der Migrationszustand. „Form exakt“ entfernt passende exakte Redundanz; „Ausgewogen“ nutzt nach ausdrücklicher Auswahl die gemessene Breite. Spezielle Details lassen sich über „Details schützen“ ausnehmen. Ungültige Druck-/Reihenfolgegruppen erklären ihren Ausschluss.
-3. **Vergleich:** ursprüngliches Plotbild, optimiertes Plotbild, Unterschiede oder Werkzeugwege. Ein zentraler Maßstab bleibt zwischen den Ansichten gleich. Rot markiert fehlende, Grün zusätzliche Tinte; Konturen/Legende machen den Vergleich auch ohne Farberkennung lesbar.
+Use three compact docked subpages with fixed actions:
 
-Die kompakte Ergebnistabelle zeigt Zeichenweg, Leerfahrt, Kontakte, Koordinatenpunkte, Nachzeichnen und geschätzte Zeit. Unsichere Zeiten sind als Schätzung gekennzeichnet, nicht als garantierte Prozentersparnis. „Keine sichere Vereinfachung gefunden“ ist ein gültiges Ergebnis. Ein erklärender Satz nennt etwa „Parallelstriche erhalten: würden das Motiv verbreitern“.
+1. **Pen:** width, source, paper and Check width; no duplicate setup wizard.
+2. **Optimisation:** Off, Exact shape and Balanced. Off is the migration default. Exact removes suitable exact redundancy; Balanced explicitly opts into measured-width processing. Protect details exempts special objects; explain excluded pressure/order groups.
+3. **Compare:** original ink, optimised ink, differences or tool paths at a shared scale. Missing ink is red, additions green; outlines/legends also make the comparison usable without colour perception.
 
-Breitenvorschau und Auswahlbedienung sind getrennt: physischer Strich skaliert mit dem Zoom, Trefferbereiche und Griffe behalten ihre Bildschirmgröße. Umrisse werden in endgültigen Papierkoordinaten gerendert, auch bei nicht gleichmäßigen Objekttransformationen. Große Ergebnisse verwenden vollständige Kacheln/Vektoren und dieselben Regeln gegen verschwindende Linien wie der korrigierte Designer.
+Summarise drawing distance, travel, contacts, coordinate points, retracing and estimated time. Mark uncertainty rather than promising percentage savings. No safe simplification found is valid. Explain retained geometry, for example: Parallel strokes retained because they contribute additional coverage.
 
-Bei 1024×768 und 1366×768 müssen die drei Unterseiten ohne abgeschnittene Aktionen passen. Lange Detailberichte können gezielt in einem eigenen lesbaren Bericht geöffnet werden; der normale Arbeitsablauf braucht keine wachsenden Einstellungslisten.
+Separate physical-width preview from selection controls. Ink scales with zoom while handles/hit targets keep their screen size. Render outlines in final paper coordinates even under non-uniform transforms. Large results use complete tiles/vectors and the corrected designer's rules against disappearing lines.
 
-## Umsetzung in prüfbaren Etappen
+At 1024×768 and 1366×768, all three subpages must fit without clipped actions. Open lengthy diagnostics in a dedicated report rather than expanding normal settings indefinitely.
 
-| Etappe | Inhalt und eigene Commits | Abnahme vor dem nächsten Schritt |
+## Reviewable implementation stages
+
+| Stage | Scope / separate commits | Acceptance before proceeding |
 | --- | --- | --- |
-| 0 – Referenz | Diese Planung, deterministische Fixtures, Demo und Rohdaten | Gegenbeispiele reproduzierbar; Modellgrenzen dokumentiert |
-| 1 – Gemeinsamer Plotplan | Zwischenmodell, Szene-Adapter, Encoder entkoppeln, Identitätsmodus | Bestehende ungeänderte Jobs erzeugen gleichen relevanten Bewegungsablauf; Druck/Tempo/Masken bleiben korrekt |
-| 2 – Stift erfassen | Profilmodell/Validator, Import/Export, Messbedingungen, kompakte UI/Testkarte | Alte Profile funktionieren; Stiftwechsel invalidiert nur passende neue Pläne; reale Testkarte später geprüft |
-| 3 – Vorschau und Report | Physische Tintenbreite, Original/Ergebnis/Differenz, Kennzahlen | Breite korrekt nach Zoom/Skalierung; keine Originaldatenänderung; gleiche Plan-ID für Preview/Plot |
-| 4 – Exakte Optimierung | Kollinearität, Teilüberlappungen, eindeutige Strecken, sichere Routenkandidaten | 0 absichtlicher Flächenverlust; kein Verlust markierter Punkte, Druck-/Tempo- oder Reihenfolgedaten |
-| 5 – Begrenzte Vereinfachung | Anker, Kurvenreduktion, Fehlerbudget und Rücknahme | Numerik-/Rundungsbudget eingehalten; lokale und globale Prüfungen bestehen |
-| 6 – Breitenabhängige Entfernung | Ganze überdeckte Wege/Punkte, Index/Caches, robuste Grenzen | Satzpunkte/kleine Schleifen bleiben; kein gegenseitiges Weglöschen; Last-/Abbruchtests |
-| 7 – Routen und Zeit | Messbare Dynamikparameter, Nachzeichnen gegen Anheben, Start-/Parkweg | Kein Zeitversprechen auf Segmentzahlbasis; auf realen Proben plausibel kalibriert |
-| 8 – Füllungen und Importpfade | Schraffurgenerator, später Teilstrecken; SVG/PDF/CLI-Adapter | Einheitliche mm-Semantik nach Skalierung; keine Doppeloptimierung; bewusst erhaltene Tonwerte |
-| 9 – Freigabe | Desktop-Browser, DEB/Flatpak, reale Vergleichsplots, Exportdokumentation | Qualitäts-, Stabilitäts- und Laufzeitkriterien erfüllt; unabhängiges Zurückrollen möglich |
+| 0 – Reference | Plan, deterministic fixtures, demo and raw data | Reproducible counterexamples and documented model limits |
+| 1 – Shared plan | Intermediate model, scene adapter, separate encoder, identity mode | Equivalent relevant motion for existing jobs; preserve pressure/speed/masks |
+| 2 – Pen setup | Profile model/validation, import/export, conditions, compact UI/test card | Legacy profiles work; changes invalidate appropriate new plans only; later physical card validation |
+| 3 – Preview/report | Physical width, original/result/difference, metrics | Correct zoom/scaling, unchanged sources, shared preview/plot plan ID |
+| 4 – Exact optimisation | Collinearity, partial overlaps, unique segments, safe route candidates | No intentional coverage loss or loss of marked dots/attributes/order |
+| 5 – Bounded simplification | Anchors, curve reduction, budgets and rollback | Numerical/rounding budgets and local/global checks pass |
+| 6 – Width-aware removal | Whole covered paths/dots, indexes/caches, robust bounds | Preserve punctuation/small loops; no mutually deleting paths; load/cancellation tests |
+| 7 – Routes/time | Measured dynamics, retracing versus lifting, start/parking | No point-count-based time promises; calibration against real samples |
+| 8 – Fills/imports | Hatch generator, later partial paths, SVG/PDF/CLI adapters | Final-mm consistency, no double optimisation, deliberate tonal preservation |
+| 9 – Release | Desktop/browser, DEB/Flatpak, physical comparisons, export docs | Quality/stability/timing criteria and independent rollback |
 
-Etappen 1–6 ergeben die erste nutzbare Variante für Designer-Seiten. Etappen 7–9 schließen Zeitkalibrierung und alle übrigen Erzeugungswege ab. Generative Schraffuranpassung und variable Stiftmodelle dürfen die konservative erste Variante nicht blockieren. Keine pauschale „in acht Stunden fertig“-Zusage: Nach Etappe 4 ist mit echten Beispielen zu bewerten, ob Flächenindexierung und Attributerhaltung weitere Arbeit benötigen.
+Stages 1–6 provide the first usable designer-page variant; 7–9 complete timing calibration and other generation paths. Generator-aware hatching and variable-pen models must not block the conservative initial version. There is no blanket eight-hour completion promise: reassess coverage indexing and attribute preservation on real examples after stage 4.
 
-## Prüfmatrix und Freigabekriterien
+## Validation matrix and release criteria
 
-| Gruppe | Fälle | Erwartung |
+| Group | Cases | Expected result |
 | --- | --- | --- |
-| Exakte Geometrie | Vorwärts/rückwärts, unterschiedliche Unterteilung, Teilüberlappung, kreuzende/kollineare Linien | Redundanz fällt weg; neue Verbindungen entstehen nicht |
-| Sichtbare Details | Satzpunkte, i/j-Punkte, kurze Striche, kleine Ringe, schmale Löcher, nahe Parallelspuren | Geschützte Details identisch; Verlustgrenzen lokal und global eingehalten |
-| Schriften/Import | Quellreihenfolge, variable Feeds, Xournal-Druck, maskierte Teilstücke, beabsichtigte Wiederholung | Attribute und Reihenfolge erhalten; ungeeignete Gruppen ausgeschlossen |
-| Transformation | 0,1×/1×/10×, Spiegelung, Rotation, nicht uniforme Skalierung, Papierwechsel | Stift bleibt physisch gleich breit; Entscheidungen abhängig von finalen mm |
-| Stift | Unbekannt, nominell, gemessen, ungültige Zahlen, unsicherer Bereich, neue Messbedingungen | Klare Zustände; keine Entfernung mit erfundener Genauigkeit |
-| Numerik | Fast identische Punkte, 0,001-mm-G-Code-Rundung, kollabierende Segmente, große Koordinaten | Finaler G-Code nochmals geprüft; kein NaN/Inf; markierte Punkte erhalten |
-| Pipeline | Scene/SVG/PDF/CLI, gleicher Plan für Vorschau/Score/Plot | Keine abweichende zweite Optimierung |
-| Nebenläufigkeit | Projektwechsel, Seitenrevision, Stiftwechsel während Rechnung, Abbruch, Wiederholung | Veraltete Antworten verworfen; Hash-/Snapshot-Konflikte explizit |
-| Last | 20k/100k/400k/1M Punkte, 1k/10k/50k Striche, dichte Überlagerung | Speicher-/Zeitbudget, reproduzierbarer Fallback, Oberfläche weiter bedienbar |
-| Eigenschaften | Determinismus, unveränderte Eingabe, Metadaten, erneute Optimierung | Gleiche Eingabe gleicher Plan; jede weitere Anwendung prüft gegen Original statt fortgesetzter Erosion |
-| Praxis | Dünner Fineliner, mittlerer Gelstift, dicker Stift; mindestens zwei Papiere | Echte Breite, Lesbarkeit, Tintenauftrag, Laufzeit vor/nachher dokumentiert |
+| Exact geometry | Reversal, different subdivisions, partial overlap, crossing/collinear lines | Remove redundancy without new connections |
+| Visible details | Punctuation, i/j dots, short strokes, small rings, narrow holes, nearby parallels | Identical protected details; local/global loss limits |
+| Fonts/imports | Source order, variable feed, Xournal pressure, masked portions, intentional repeats | Preserve attributes/order; exclude unsupported groups |
+| Transforms | 0.1×/1×/10×, mirrors, rotation, non-uniform scaling, paper changes | Constant physical pen width; decisions based on final millimetres |
+| Pen | Unknown/nominal/measured, invalid numbers, uncertain ranges, changed conditions | Explicit states; no invented precision |
+| Numerics | Near-identical points, 0.001 mm rounding, collapsing segments, large coordinates | Recheck emitted G-code; no NaN/Inf; retain explicit dots |
+| Pipeline | Scene/SVG/PDF/CLI; shared preview/score/plot plan | No divergent second optimisation |
+| Concurrency | Project/revision/pen changes during work, cancellation, repetition | Discard stale results; explicit hash/snapshot conflicts |
+| Load | 20k/100k/400k/1M points, 1k/10k/50k strokes, dense overlap | Bounded resources, reproducible fallback, responsive UI |
+| Properties | Determinism, unchanged inputs, metadata, repeated optimisation | Same input/plan; compare every application to the original, avoiding progressive erosion |
+| Physical | Fine liner, medium gel pen, broad pen; at least two papers | Record actual width, legibility, deposition and before/after duration |
 
-Hardware-Protokoll: Z-/Papierkalibrierung zuerst; identische Original-/Optimiert-Motive nebeneinander mit gleicher Größe/Geschwindigkeit; Richtung/Position der Proben variieren; mindestens drei Zeitläufe je gewähltem Fall. Tatsächliche Dauer, Stiftkontakte und Scan/Makrobild getrennt vom Modellbericht aufzeichnen. Ein einzelnes gutes Bild bestätigt keine allgemeine Qualitätsgrenze.
+Physical protocol: calibrate Z/paper first; plot equal-size/equal-speed original and optimised samples side by side, varying direction/position. Run each chosen case at least three times. Record real duration, contacts and scans/macro photographs separately from model reports. One attractive image does not establish a general quality bound.
 
-Freigabe erst, wenn die automatischen Tests wichtige Details erhalten, keine ungeprüften Pläne plotten und reale Testplots die gewählten Toleranzen tragen. Bis dahin bleibt „Ausgewogen“ bewusst wählbar und als modellbasierte Optimierung erkennbar. Eine spätere automatische Empfehlung basiert auf validierten Stift-/Papierbedingungen.
+Release only after automated checks preserve details, prevent unvalidated plotting and physical comparisons support the chosen tolerances. Until then Balanced stays an explicit, visibly model-based option. Later automatic recommendations require validated pen/paper conditions.
 
-## Offene Entscheidungen mit vorgesehenem Vorgehen
+## Open decisions and intended approach
 
-- **Tintenauftrag:** Binäre Fläche berücksichtigt keine Verdunkelung durch Mehrfachfahren. Zunächst beabsichtigte Mehrfachdurchgänge schützen; später optionales Tonwert-/Überfahrtenmodell.
-- **Unbekannte Importsemantik:** Nicht erraten, ob ein Punkt ein Satzzeichen oder Rauschen ist. Ganze unbekannte Details konservativ erhalten; Nutzer kann Gruppen gezielt freigeben.
-- **Variable Breite:** Rund und konstant zuerst. Messkurve bzw. elliptischer richtungsabhängiger Fußabdruck später mit eigener Validierung.
-- **Teilüberdeckungen:** Zunächst ganze Wege entfernen. Partielles Aufteilen folgt erst mit Kostenrechnung, Endkappenprüfung und Schwelle gegen viele winzige Reststücke.
-- **Zeitmodell:** Aktuelle Schätzung und einfache zweite Rechnung dienen als Diagnose. Gemessene Maschinenparameter und Lookahead-nähere Rechnung sind Voraussetzung für verlässliche automatische Zeitwahl.
-- **Skalierung:** Die Demo beweist die Fachregeln, nicht die Skalierbarkeit. Lokale Caches, Abbruch und dichte Worst-Case-Daten sind eine eigene Etappe.
+- **Ink deposition:** binary coverage ignores darkening from repeats. Protect intentional multiple passes initially; add an optional tonal/pass-count model later.
+- **Unknown import semantics:** do not guess whether a dot is punctuation or noise. Retain unknown details conservatively; users may explicitly release groups.
+- **Variable width:** start round/constant, then validate measured curves or directional elliptical footprints separately.
+- **Partial coverage:** remove whole paths first. Splitting requires cost modelling, end-cap checks and limits against many tiny remnants.
+- **Timing:** current and alternative estimates are diagnostics. Reliable automatic timing choices need measured dynamics and lookahead-aware models.
+- **Scaling:** the demo supports domain rules, not scalability. Local caches, cancellation and dense worst cases need a separate stage.
 
-Technische Referenzen: [vpype Optimierungsbefehle](https://vpype.readthedocs.io/en/stable/reference.html) für bestehende Linienwerkzeuge; [Shapely 2.1.2 buffer](https://shapely.readthedocs.io/en/2.1.2/reference/shapely.buffer.html), [simplify](https://shapely.readthedocs.io/en/2.1.2/reference/shapely.simplify.html) und [STRtree](https://shapely.readthedocs.io/en/2.1.2/strtree.html). Die Qualitätsschwellen und Architektur sind projektspezifische Vorschläge und werden nicht durch diese Bibliotheksdokumentation als physisch richtig bestätigt.
+References: [vpype optimisation commands](https://vpype.readthedocs.io/en/stable/reference.html), [Shapely 2.1.2 buffer](https://shapely.readthedocs.io/en/2.1.2/reference/shapely.buffer.html), [simplify](https://shapely.readthedocs.io/en/2.1.2/reference/shapely.simplify.html) and [STRtree](https://shapely.readthedocs.io/en/2.1.2/strtree.html). The architecture and thresholds are project-specific proposals; library documentation does not establish their physical validity.
 
-## Durchgeführte Prüfung der Prototypen
+## Prototype validation performed
 
-Alle sechs Demo-Fälle und acht Routenkandidaten wurden ausgeführt. Zehn
-zusätzliche Invariantenprüfungen bestehen, darunter gegenseitige Überdeckung,
-Schutz eines geometrisch redundanten Details, Rotations-/Translationsverhalten
-und Stabilität gegen unterschiedliche Kreisauflösungen. Ein zweiter kompletter
-Lauf ergab dieselben Geometrie-, Qualitäts- und Zeitmodellwerte; nur gemessene
-Rechenlaufzeiten wurden beim Vergleich ausgeschlossen. Ruff besteht für alle
-drei Skripte. Der HTML-Bericht mit 18 SVG-Ansichten wurde in Firefox bei 1440
-Pixeln Breite visuell geprüft; kein horizontaler Überlauf. Die App-Testreihen
-wurden für diese reine Planung nicht erneut ausgeführt. Hardwaretests stehen
-für die spätere Implementierung aus.
+All six demo cases and eight route candidates ran. Ten additional invariant checks passed, including mutual coverage, protected geometric redundancy, rotation/translation and circle-resolution stability. A second complete run reproduced geometry, quality and time-model values; measured computation times were excluded. Ruff passed for all three scripts. Firefox visually checked the HTML report's 18 SVG views at 1440 px without horizontal overflow. Full app suites were not repeated for this planning-only work. Physical validation remains for later implementation.

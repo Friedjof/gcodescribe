@@ -137,7 +137,7 @@ def fixtures():
     return [
         (
             "duplicates",
-            "Überlappungen mit anderer Unterteilung",
+            "Overlaps with different subdivisions",
             0.4,
             [
                 stroke([(5, 10), (35, 10)]),
@@ -148,28 +148,28 @@ def fixtures():
         ),
         (
             "curve",
-            "Überabtastete Kurve",
+            "Oversampled curve",
             0.4,
             [stroke([(5 + i * 0.05, 12 + 3 * math.sin(i * 0.05 / 5)) for i in range(601)])],
             "simplify",
         ),
         (
             "hatch",
-            "Dichte Schraffur",
+            "Dense hatching",
             0.5,
             [stroke([(5, 5 + i * 0.1), (35, 5 + i * 0.1)]) for i in range(61)],
             "coverage",
         ),
         (
             "parallel",
-            "Nahe Parallelstriche sind keine Dubletten",
+            "Nearby parallel strokes are not duplicates",
             0.4,
             [stroke([(5, 10), (35, 10)]), stroke([(5, 10.12), (35, 10.12)])],
             "coverage",
         ),
         (
             "dots",
-            "Punkte auf einer Linie und freier Satzpunkt",
+            "Dots on a line and isolated punctuation",
             0.4,
             [stroke([(5, 10), (35, 10)])]
             + [stroke([(x, 10)]) for x in (10, 15, 20, 25)]
@@ -178,7 +178,7 @@ def fixtures():
         ),
         (
             "protected",
-            "Schriftpunkt und kleine Schleife bleiben",
+            "Lettering dot and small loop retained",
             0.4,
             [
                 stroke([(5, 10), (35, 10)]),
@@ -215,7 +215,7 @@ def svg_panel(strokes, width, bounds, color="#172638"):
                 f'<path d="{path}" fill="none" stroke="{color}" stroke-width="{width}" stroke-linecap="round" stroke-linejoin="round"/>'  # noqa: E501 -- inline report markup
             )
     return (
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{x0 - 1} {y0 - 1} {max(1, x1 - x0) + 2} {max(1, y1 - y0) + 2}" role="img" aria-label="Strichbreitenmodell">'  # noqa: E501 -- inline report markup
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{x0 - 1} {y0 - 1} {max(1, x1 - x0) + 2} {max(1, y1 - y0) + 2}" role="img" aria-label="Stroke-width model">'  # noqa: E501 -- inline report markup
         + "".join(body)
         + "</svg>"
     )
@@ -304,7 +304,7 @@ def main():
             + "</svg>",
         )
         cards.append(
-            f'<article><h2>{html.escape(title)}</h2><p>Stift {width:g} mm · {row["before"]["strokes"]} → {row["after"]["strokes"]} Wege · {row["before"]["points"]} → {row["after"]["points"]} Punkte</p><div class="panels"><figure><figcaption>Original</figcaption>{first}</figure><figure><figcaption>Kandidat</figcaption>{second}</figure><figure><figcaption>Fehlend rot · zusätzlich grün</figcaption>{delta}</figure></div><p>Farbfläche fehlt: {diff["missing_pct"]:.4f}% · hinzugefügt: {diff["added_pct"]:.4f}% · Randabweichung: {diff["boundary_mm"]:.4f} mm<br>App-Zeitschätzung: {row["before"]["app_estimate_s"]:.1f} → {row["after"]["app_estimate_s"]:.1f} s · Modell ohne Segmentstopps: {row["before"]["continuous_feed_proxy_s"]:.1f} → {row["after"]["continuous_feed_proxy_s"]:.1f} s</p></article>'  # noqa: E501 -- inline report markup
+            f'<article><h2>{html.escape(title)}</h2><p>Pen {width:g} mm · {row["before"]["strokes"]} → {row["after"]["strokes"]} paths · {row["before"]["points"]} → {row["after"]["points"]} points</p><div class="panels"><figure><figcaption>Original</figcaption>{first}</figure><figure><figcaption>Candidate</figcaption>{second}</figure><figure><figcaption>Missing in red · added in green</figcaption>{delta}</figure></div><p>Missing ink: {diff["missing_pct"]:.4f}% · added: {diff["added_pct"]:.4f}% · boundary deviation: {diff["boundary_mm"]:.4f} mm<br>App time estimate: {row["before"]["app_estimate_s"]:.1f} → {row["after"]["app_estimate_s"]:.1f} s · Continuous-motion model: {row["before"]["continuous_feed_proxy_s"]:.1f} → {row["after"]["continuous_feed_proxy_s"]:.1f} s</p></article>'  # noqa: E501 -- inline report markup
         )
         proofs.append(key)
     # Counterexample: testing centerlines against ink is insufficient.
@@ -379,7 +379,7 @@ def main():
     }
     (args.output / "metrics.json").write_text(json.dumps(results, indent=2, allow_nan=False) + "\n")
     route_table = (
-        "<table><tr><th>Rasterabstand</th><th>Hub</th><th>Modus</th><th>Zeichenweg</th><th>Anhebungen</th><th>App-Schätzung</th><th>Ohne Segmentstopps</th></tr>"  # noqa: E501 -- inline report markup
+        "<table><tr><th>Grid spacing</th><th>Lift</th><th>Mode</th><th>Drawing distance</th><th>Lifts</th><th>App estimate</th><th>Without segment stops</th></tr>"  # noqa: E501 -- inline report markup
         + "".join(
             f"<tr><td>{r['scale']} mm</td><td>{r['lift_mm']} mm</td><td>{r['mode']}</td><td>{r['draw_mm']:.1f} mm</td><td>{r['lifts']}</td><td>{r['app_estimate_s']:.1f} s</td><td>{r['continuous_feed_proxy_s']:.1f} s</td></tr>"  # noqa: E501 -- inline report markup
             for r in routes
@@ -387,9 +387,9 @@ def main():
         + "</table>"
     )
     document = (
-        """<!doctype html><html lang="de"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Stiftbreite und Plotoptimierung</title><style>body{font:15px/1.5 system-ui;background:#eef1f4;color:#172638;margin:0}main{max-width:1260px;margin:auto;padding:28px}h1{font-size:28px}h2{font-size:20px}article{background:white;border:1px solid #d2dae2;border-radius:10px;padding:22px;margin:22px 0}p{max-width:1000px}.panels{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}figure{margin:0;border:1px solid #e1e6ea;padding:10px}figcaption{font-size:12px;color:#52606c;margin-bottom:12px}svg{width:100%;height:190px}table{border-collapse:collapse;width:100%;font-size:13px}td,th{padding:10px;border-bottom:1px solid #d2dae2;text-align:left}.note{border-left:3px solid #137f78;padding:8px 16px}a{color:#175bb4}</style><main><h1>Stiftbreite und Plotoptimierung</h1><p>Reproduzierbare Demo zur Planung. Alle Längen in Millimetern; synthetische Zeichnungen und ein kreisförmiger Stift mit konstanter Breite. Die Bilder sind vergrößerte Vergleiche, keine maßstäbliche Bildschirmmessung.</p><p class="note">Die App wird hier nicht verändert. Gemessen werden geometrische Farbflächen und berechnete Zeiten. Papier, Tintenauftrag und echte Maschinenbewegungen sind nicht simuliert.</p>"""  # noqa: E501 -- inline report markup
+        """<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pen width and plot optimisation</title><style>body{font:15px/1.5 system-ui;background:#eef1f4;color:#172638;margin:0}main{max-width:1260px;margin:auto;padding:28px}h1{font-size:28px}h2{font-size:20px}article{background:white;border:1px solid #d2dae2;border-radius:10px;padding:22px;margin:22px 0}p{max-width:1000px}.panels{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}figure{margin:0;border:1px solid #e1e6ea;padding:10px}figcaption{font-size:12px;color:#52606c;margin-bottom:12px}svg{width:100%;height:190px}table{border-collapse:collapse;width:100%;font-size:13px}td,th{padding:10px;border-bottom:1px solid #d2dae2;text-align:left}.note{border-left:3px solid #137f78;padding:8px 16px}a{color:#175bb4}</style><main><h1>Pen width and plot optimisation</h1><p>Reproducible planning demo. All lengths are in millimetres, using synthetic artwork and a round, constant-width pen. Images are enlarged comparisons, not a physical measurement scale.</p><p class="note">This demo does not change the app. It measures geometric ink coverage and calculated times. Paper, ink deposition and actual machine motion are not simulated.</p>"""  # noqa: E501 -- inline report markup
         + "".join(cards)
-        + f'<article><h2>Warum Abstand allein nicht reicht</h2><p>Bei 0,4 mm Stiftbreite und 0,12 mm Linienabstand liegt die zweite Mittellinie innerhalb der ersten Farbfläche. Sie zu löschen entfernt trotzdem {naive_loss["missing_pct"]:.2f}% der gemeinsamen Farbfläche. Ein Prozentbudget allein könnte außerdem einen ganzen Satzpunkt verschwinden lassen; hier wären das nur {punctuation_loss["missing_pct"]:.5f}%.</p></article><article><h2>Weniger Anhebungen oder weniger Nachzeichnen</h2><p>Gleiches Netz, zwei vorhandene Routenalgorithmen. Zeiten sind Schätzungen bei 30 mm/s Zeichnen, 100 mm/s Leerfahrt und 20 mm/s Z. Die zweite Rechnung setzt kontinuierliche Bewegung voraus. Keine gemessene Plotzeit.</p>{route_table}</article><p><a href="metrics.json">Messwerte als JSON</a> · Ausführung: <code>.venv/bin/python experiments/pen-width/demo.py</code></p></main></html>'  # noqa: E501 -- inline report markup
+        + f'<article><h2>Why spacing alone is insufficient</h2><p>With a 0.4 mm pen and 0.12 mm line spacing, the second centreline lies inside the coverage of the first stroke. Removing it still loses {naive_loss["missing_pct"]:.2f}% of the combined ink area. A percentage budget alone could also remove an entire punctuation mark; here that represents just {punctuation_loss["missing_pct"]:.5f}%.</p></article><article><h2>Fewer lifts or less retracing</h2><p>The same network, using two existing routing algorithms. Times are estimates at 30 mm/s drawing, 100 mm/s travel and 20 mm/s Z speed. The second model assumes continuous motion. These are not measured plotting times.</p>{route_table}</article><p><a href="metrics.json">Measurements as JSON</a> · Run: <code>.venv/bin/python experiments/pen-width/demo.py</code></p></main></html>'  # noqa: E501 -- inline report markup
     )
     (args.output / "index.html").write_text(document)
     print(

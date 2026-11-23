@@ -1,8 +1,8 @@
-# Stiftbreite und Plotoptimierung als Offline Experiment
+# Pen width and plot optimisation: offline experiment
 
-Die Skripte prüfen die fachlichen Annahmen der [Planung](../../docs/pen-width-optimization-plan.md). Sie schreiben ausschließlich eigene Berichte, verwenden synthetische Millimeter-Geometrie und kommunizieren mit keinem Drucker oder laufenden App-Datenspeicher.
+These scripts test the assumptions in the [plan](../../docs/pen-width-optimization-plan.md). They write only their own reports, use synthetic millimetre geometry and never communicate with printers or a running application's data store.
 
-Vom Repository aus:
+Run from the repository:
 
 ```bash
 .venv/bin/python experiments/pen-width/demo.py
@@ -10,15 +10,15 @@ Vom Repository aus:
 .venv/bin/python experiments/pen-width/benchmark.py
 ```
 
-Die bestehende Projektumgebung enthält Shapely und die App-Abhängigkeiten. `demo.py --output /tmp/pen-width-demo` erlaubt einen anderen Ausgabeordner. Der Demo-Aufruf prüft die sechs Referenzfälle und drei Gegenbeispiele selbst, einschließlich unveränderter Eingaben und identischer Farbfläche bei den acht Routenkandidaten. `checks.py` prüft zusätzlich Eingabereihenfolge, gegenseitige Überdeckung, geschützte Duplikate, Rotation/Translation und numerische Auflösung.
+The project environment already contains Shapely and the app dependencies. Use `demo.py --output /tmp/pen-width-demo` for another output directory. The demo checks six reference cases and three counterexamples, including unchanged inputs and identical ink coverage for eight routing candidates. `checks.py` also checks input order, mutual coverage, protected duplicates, rotation/translation and numerical resolution.
 
-- [Vergleichsbilder und Erläuterungen](results/index.html): eigenständige HTML-Datei, direkt im Browser zu öffnen.
-- [Rohwerte](results/metrics.json): Flächen, Wege, Punkte, zwei Zeitmodelle, Toleranzrücknahme und Breiten-/Abstandsraster.
-- [Bausteinbenchmark](results/benchmark.json): Laufzeiten von Geometrieaufbau, Vereinfachung und Indexierung; dichter Worst Case ausdrücklich enthalten.
-- Einzelne SVGs unter `results/` für Original und Kandidat; im Browser gezoomt, nicht zur Messung einer realen Stiftbreite geeignet.
+- [Comparison images and explanations](results/index.html): standalone HTML to open directly in a browser.
+- [Raw measurements](results/metrics.json): areas, distances, points, two time models, tolerance rollback and the width/spacing grid.
+- [Component benchmark](results/benchmark.json): geometry construction, simplification and indexing times, including a dense worst case.
+- Individual original/candidate SVGs are under `results/`. Browser zoom is not a way to measure a physical pen's width.
 
-Das Prototypmodell setzt runde, konstante, deckende Striche voraus. Wiederholter Tintenauftrag, Papierfasern, Stiftmechanik, variable Breite und Firmwaredynamik sind nicht simuliert. Geschützte Attribute sind in den Fixtures ausdrücklich markiert, nicht automatisch erkannt. Die naive Flächenberechnung baut pro Kandidat die komplette Vereinigung neu auf; sie ist eine Referenz für kleine Fälle und kein produktionsfähiger Optimierer.
+The prototype assumes round, constant-width, opaque strokes. It does not simulate repeated ink application, paper fibres, pen mechanics, variable width or firmware dynamics. Protected attributes are explicitly marked in fixtures, not detected automatically. The naive area calculation rebuilds the complete union for every candidate; it is a small-case reference, not a production optimiser.
 
-0,25 % Flächenbudget und 5 % der Stiftbreite als Randtoleranz sind Versuchsparameter. Die Demo prüft global; die Planung fordert für die App zusätzlich lokale Budgets, Semantik- und Topologieprüfungen. Der diskrete Hausdorff-Abstand und polygonal approximierte Kreise sind keine exakte Fehlergarantie. Die Ergebnisse stellen vorgeschlagene Kandidaten dar, keine automatisch freigegebenen Druckaufträge.
+The 0.25% area budget and boundary tolerance of 5% of pen width are experimental settings. The demo checks globally; the application plan additionally requires local budgets, semantics and topology checks. Discrete Hausdorff distance and polygonal circle approximations do not provide an exact error guarantee. Results are proposed candidates, not automatically approved print jobs.
 
-Die erste Zeitrechnung verwendet den bestehenden G-Code-Analysator, die zweite eine kontinuierliche Feedrate plus Hub-/Kontaktkosten. Keine davon ist gemessene Plotzeit. Der Benchmark ist ein einzelner lokaler Lauf; seine Zeiten schwanken. Bei erneuter Ausführung sind Geometrieergebnisse deterministisch, Laufzeiten dagegen nicht.
+The first time calculation uses the existing G-code analyser; the second assumes continuous feed plus lift/contact costs. Neither measures plotting time. The benchmark is one local run with variable timings. Geometry is deterministic on repetition; runtimes are not.
