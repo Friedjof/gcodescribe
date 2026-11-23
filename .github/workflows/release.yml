@@ -95,6 +95,18 @@ jobs:
             --notes-file notes.md \
             --verify-tag --draft
 
+      - name: Upload v2 models and editable demo font
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${GITHUB_REF_NAME}" \
+            media/models/GCodeScribe-Ai3MS-v2-print-parts.zip \
+            media/models/GCodeScribe-Ai3MS-v2-*.stl \
+            media/models/GCodeScribe-Ai3MS-v2.step \
+            media/models/GCodeScribe-Ai3MS-v2.f3d \
+            media/examples/werkstatt-demo.gcsfont \
+            --repo "${GITHUB_REPOSITORY}" --clobber
+
   # Build the Flatpak bundle and attach it to the GitHub release.
   flatpak:
     name: Build & upload Flatpak

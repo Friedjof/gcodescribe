@@ -12,3 +12,13 @@ class NotHomedError(ServiceError):
 
     def __init__(self, message: str = "Position unbekannt — bitte zuerst alle Achsen homen."):
         super().__init__(message)
+
+
+class PrinterSetupRequiredError(ServiceError):
+    status_code = 409
+
+    def __init__(self):
+        super().__init__(
+            "Noch kein Drucker eingerichtet. Öffne Einstellungen → Drucker und füge "
+            "deinen Drucker hinzu. Die Einrichtung kannst du bis dahin offline ansehen."
+        )

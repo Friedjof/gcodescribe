@@ -1,3 +1,5 @@
+import { spherePoint, trackballRotate } from "../features/stl/lib/trackball";
+export type StlControlMode = "orbit" | "trackball" | "cad";
 import { useEffect, useRef } from "react";
 import { useI18n } from "../i18n";
 import {
@@ -22,6 +24,8 @@ export default function StlView3D({
   model,
   azimuth,
   elevation,
+  roll = 0,
+  controlMode = "orbit",
   fov,
   up,
   distanceFactor,
@@ -39,6 +43,8 @@ export default function StlView3D({
   model: EdgeModel;
   azimuth: number;
   elevation: number;
+  roll?: number;
+  controlMode?: StlControlMode;
   fov: number;
   up: UpAxis;
   distanceFactor: number;
@@ -49,14 +55,16 @@ export default function StlView3D({
   showBox: boolean;
   orientToken?: number;
   resetToken?: number;
-  onOrient?: (azimuth: number, elevation: number) => void;
+  onOrient?: (azimuth: number, elevation: number, roll: number) => void;
   /** Slowly auto-spin and ignore all pointer/wheel input (gallery preview). */
   autoRotate?: boolean;
 }) {
   const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const view = useRef({ yaw: azimuth, pitch: elevation, zoom: 1, panX: 0, panY: 0 });
+  const view = useRef({ yaw: azimuth, pitch: elevation, roll, zoom: 1, panX: 0, panY: 0 });
+  const modeRef=useRef(controlMode);modeRef.current=controlMode;
+  const onOrientRef=useRef(onOrient);onOrientRef.current=onOrient;
   const drag = useRef<{ x: number; y: number; mode: "orbit" | "pan" } | null>(null);
   const renderRef = useRef<() => void>(() => {});
   const propsRef = useRef({ mesh, model, fov, up, distanceFactor, featureAngleDeg, showTriangles, shading, opacity, showBox });
@@ -66,6 +74,7 @@ export default function StlView3D({
   useEffect(() => {
     view.current.yaw = azimuth;
     view.current.pitch = elevation;
+    view.current.roll = roll;
     renderRef.current();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orientToken]);
@@ -106,6 +115,7 @@ export default function StlView3D({
         target: meshCenter(p.mesh),
         azimuth: view.current.yaw,
         elevation: view.current.pitch,
+        roll: view.current.roll,
         distance: meshDiagonal(p.mesh) * p.distanceFactor,
         perspective: false, // ortho inspect → rotates in place like the G-code view
         fov: p.fov,
@@ -141,6 +151,8 @@ export default function StlView3D({
     }
 
     const onDown = (e: PointerEvent) => {
+      if(modeRef.current==="cad" && e.button!==1 && e.button!==2)return;
+      e.preventDefault();
       container.setPointerCapture(e.pointerId);
       drag.current = { x: e.clientX, y: e.clientY, mode: e.button === 2 || e.shiftKey ? "pan" : "orbit" };
     };
@@ -148,21 +160,29 @@ export default function StlView3D({
       if (!drag.current) return;
       const dx = e.clientX - drag.current.x;
       const dy = e.clientY - drag.current.y;
-      drag.current.x = e.clientX;
-      drag.current.y = e.clientY;
       if (drag.current.mode === "orbit") {
-        view.current.yaw += dx * 0.01;
-        view.current.pitch = Math.max(-Math.PI / 2 + 0.02, Math.min(Math.PI / 2 - 0.02, view.current.pitch + dy * 0.01));
-        onOrient?.(view.current.yaw, view.current.pitch);
+        if(modeRef.current==="trackball") {
+          const rect=container.getBoundingClientRect(),p=propsRef.current;
+          const next=trackballRotate({target:meshCenter(p.mesh),azimuth:view.current.yaw,elevation:view.current.pitch,roll:view.current.roll,
+            distance:meshDiagonal(p.mesh)*p.distanceFactor,perspective:false,fov:p.fov,up:p.up},
+            spherePoint(drag.current.x-rect.left,drag.current.y-rect.top,rect.width,rect.height),
+            spherePoint(e.clientX-rect.left,e.clientY-rect.top,rect.width,rect.height));
+          view.current.yaw=next.azimuth;view.current.pitch=next.elevation;view.current.roll=next.roll;
+        } else {
+          view.current.yaw += dx * 0.01;
+          view.current.pitch = Math.max(-Math.PI / 2 + 0.02, Math.min(Math.PI / 2 - 0.02, view.current.pitch + dy * 0.01));
+        }
       } else {
         view.current.panX += dx;
         view.current.panY += dy;
       }
+      drag.current.x=e.clientX;drag.current.y=e.clientY;
       render();
     };
     const onUp = (e: PointerEvent) => {
+      if(drag.current?.mode==="orbit")onOrientRef.current?.(view.current.yaw,view.current.pitch,view.current.roll);
       drag.current = null;
-      container.releasePointerCapture?.(e.pointerId);
+      if(container.hasPointerCapture?.(e.pointerId))container.releasePointerCapture(e.pointerId);
     };
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
@@ -174,6 +194,8 @@ export default function StlView3D({
     container.addEventListener("pointerdown", onDown);
     container.addEventListener("pointermove", onMove);
     container.addEventListener("pointerup", onUp);
+    container.addEventListener("pointercancel", onUp);
+    container.addEventListener("lostpointercapture", onUp);
     container.addEventListener("wheel", onWheel, { passive: false });
     container.addEventListener("contextmenu", onContext);
     return () => {
@@ -182,6 +204,8 @@ export default function StlView3D({
       container.removeEventListener("pointerdown", onDown);
       container.removeEventListener("pointermove", onMove);
       container.removeEventListener("pointerup", onUp);
+      container.removeEventListener("pointercancel", onUp);
+      container.removeEventListener("lostpointercapture", onUp);
       container.removeEventListener("wheel", onWheel);
       container.removeEventListener("contextmenu", onContext);
     };
@@ -191,7 +215,7 @@ export default function StlView3D({
   return (
     <div className={`stl-view-3d ${autoRotate ? "stl-view-auto" : ""}`.trim()} ref={containerRef}>
       <canvas ref={canvasRef} className="stl-canvas" />
-      {!autoRotate && <span className="stl-view-hint muted">{t("g3d.controls")}</span>}
+      {!autoRotate && <span className="stl-view-hint muted">{t(`stl.controls.${controlMode}`)}</span>}
     </div>
   );
 }

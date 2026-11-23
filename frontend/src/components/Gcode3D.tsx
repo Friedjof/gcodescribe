@@ -14,6 +14,7 @@ export default function Gcode3D({
   chrome = true,
   showTravels: travelsProp,
   showBed: bedProp,
+  showProfile = false,
   resetToken = 0,
   viewState,
   onViewChange,
@@ -24,6 +25,7 @@ export default function Gcode3D({
   // modal footer): pass showTravels and bump resetToken to reset the view.
   showTravels?: boolean;
   showBed?: boolean;
+  showProfile?: boolean;
   resetToken?: number;
   viewState?: Gcode3DView;
   onViewChange?: (view: Gcode3DView) => void;
@@ -40,13 +42,15 @@ export default function Gcode3D({
   const bed = Array.isArray(data.bed) && data.bed.length === 2 &&
     data.bed.every((n) => Number.isFinite(n) && n > 0) ? data.bed : null;
   const showTravelsRef = useRef(showTravels);
+  const showProfileRef = useRef(showProfile);
+  showProfileRef.current=showProfile;
   const showBedRef = useRef(showBed);
   showTravelsRef.current = showTravels;
   showBedRef.current = showBed;
 
   useEffect(() => {
     renderRef.current();
-  }, [showTravels, showBed]);
+  }, [showTravels, showBed, showProfile]);
 
   useEffect(() => {
     if (!viewState) return;
@@ -151,6 +155,10 @@ export default function Gcode3D({
         ctx.setLineDash([]);
       };
 
+      if (showProfileRef.current && data.profileOutline) {
+        if(data.profileOutline.paper.length>1)stroke([data.profileOutline.paper], "#e6b345",1.4);
+        if(data.profileOutline.plot.length>1)stroke([data.profileOutline.plot], "#41c58a",1.4);
+      }
       if (showTravelsRef.current)
         stroke(data.travels, "rgba(152,152,158,0.5)", 0.8, [3, 3]);
       stroke(data.draws, "#0a84ff", 1.6);

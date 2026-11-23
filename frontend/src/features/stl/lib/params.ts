@@ -6,6 +6,7 @@ import type { Mesh, Vec3 } from "./types";
 
 export interface StlParams {
   azimuth: number;
+  roll?: number;
   elevation: number;
   /** Eye distance as a multiple of the model's bounding diagonal (scale-free). */
   distanceFactor: number;
@@ -70,6 +71,7 @@ export function cameraFromParams(params: StlParams, mesh: Mesh): Camera {
   return {
     target: meshCenter(mesh),
     azimuth: params.azimuth,
+    roll: params.roll??0,
     elevation: params.elevation,
     distance: meshDiagonal(mesh) * params.distanceFactor,
     perspective: params.perspective,

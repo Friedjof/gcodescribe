@@ -64,7 +64,7 @@ const DEFAULT_WRITING_TEXT: Record<string, string> = {
   en: "The quick brown fox jumps over the lazy dog while five dozen quills trace every curve.\nPack my box with five dozen liquor jugs, then write 0123456789 and punctuation!?",
   fr: "Portez ce vieux whisky au juge blond qui fume près du quai.\nVoix ambiguë d'un cœur qui au zéphyr préfère les jattes de kiwis.\nEssai: 0123456789, ç é è à ù !?",
   es: "El veloz murciélago hindú comía feliz cardillo y kiwi bajo la luna.\nLa cigüeña tocó el saxofón detrás del palenque de paja.\nPrueba: 0123456789, ñ á é í ó ú ¿? ¡!",
-  ba: "Čudna žena brzo piše lijepa slova dok se džez čuje kroz prozor.\nHladan vjetar nosi šarene znakove: č ć ž š đ 0123456789!?",
+  ba: "Mit am Stift fangt a neiche Idee o.\nFeine Linien machan scheene Muster aufs Papier.\nSchreibprob: 0123456789, äöü ÄÖÜ ß!?",
 };
 
 function strokePoints(stroke: Stroke): StrokePoint[] {

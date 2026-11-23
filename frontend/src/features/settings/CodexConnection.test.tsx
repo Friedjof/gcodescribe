@@ -24,11 +24,11 @@ it("shows the one-time code and recognizes a completed login automatically", asy
   const button = await screen.findByRole("button", { name: "codex.login" });
   vi.useFakeTimers();
   await act(async () => fireEvent.click(button));
-  expect(screen.getByText("ABCD-1234")).toBeInTheDocument();
+  expect(screen.getByDisplayValue("ABCD-1234")).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "codex.openLogin" })).toHaveAttribute("href", "https://auth.openai.com/codex/device");
   mocks.codexStatus.mockResolvedValue({ available: true, authenticated: true, imageGeneration: true, email: "user@example.test", plan: "plus" });
   await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
   expect(screen.getByRole("button", { name: "codex.logout" })).toBeInTheDocument();
-  expect(screen.queryByText("ABCD-1234")).toBeNull();
+  expect(screen.queryByDisplayValue("ABCD-1234")).toBeNull();
   expect(changed).toHaveBeenCalledOnce();
 });

@@ -13,7 +13,7 @@ from plotter.core.document import RevisionConflict
 from plotter.core.jobmeta import delete_job_meta, read_job_meta
 from plotter.core.storage import jobs_dir
 from plotter.gcode.metrics import evaluate_gcode
-from plotter.gcode.preview import parse_gcode_3d_text
+from plotter.gcode.preview import parse_gcode_3d_text, profile_outline
 from plotter.gcode.scene import page_polylines, save_scene_job
 from plotter.plotplan import build_scene_plan, encode_plot_plan
 from plotter.text import text_polylines
@@ -601,6 +601,7 @@ def page_preview_3d(page_id: str, req: SceneRequest) -> dict:
     except PlotterError as exc:
         raise HTTPException(400, str(exc)) from exc
     return {**parse_gcode_3d_text(gcode), "bed": [cal.bed_width, cal.bed_height],
+            "profileOutline": profile_outline(cal),
             "plotPlan": {"id": plan.plan_id, "version": plan.version, **asdict(plan.report)}}
 
 

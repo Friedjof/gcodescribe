@@ -7,7 +7,7 @@ import { isPrinterBusy } from "../lib/printerState";
 import { useToasts } from "./Toasts";
 
 export default function PrinterSelector({ status, onAction, onManage, onSwitching }: {
-  status: PrinterStatus | null; onAction: () => void; onManage: () => void;
+  status: PrinterStatus | null; onAction: () => void; onManage?: () => void;
   onSwitching: (switching: boolean) => void;
 }) {
   const { t } = useI18n();
@@ -52,6 +52,6 @@ export default function PrinterSelector({ status, onAction, onManage, onSwitchin
         {item.online ? "●" : item.available ? "◐" : "○"} {item.name ?? t(`printer.backend.${item.id}`)} · {state(item)}{item.id === selected ? ` · ${t("printers.selected")}` : ""}
       </option>)}
     </select>
-    <button type="button" onClick={onManage} disabled={switching} title={t("printers.manage")} aria-label={t("printers.manage")}>⚙</button>
+    {onManage && <button type="button" onClick={onManage} disabled={switching} title={t("printers.manage")} aria-label={t("printers.manage")}>⚙</button>}
   </div>;
 }

@@ -20,6 +20,8 @@ export function usePaintJobs({ page, profile, projectId, visible, status, printe
   const [busy, setBusy] = useState(false);
   const [sending, setSending] = useState(false);
   const [calibrating, setCalibrating] = useState(false);
+  const [insertion, setInsertion] = useState<"confirm" | "moving" | "insert" | null>(null);
+  const [insertionError, setInsertionError] = useState("");
   const [fullscreen, setFullscreen] = useState<GcodePreview3D | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [plotError, setPlotError] = useState<string | null>(null);
@@ -27,12 +29,13 @@ export function usePaintJobs({ page, profile, projectId, visible, status, printe
   const printerId = status?.printer_id ?? status?.backend;
   const readiness = useRef({ online: !!status?.online, backend: printerId, busy: printerBusy, calibrating });
   readiness.current = { online: !!status?.online, backend: printerId, busy: printerBusy, calibrating };
+  useEffect(() => {setInsertion(null);setInsertionError("");},[printerId]);
   const previewSequence = useRef(0);
   const scopeKey = JSON.stringify([page?.id, projectId, profile?.id, profile?.fingerprint, visible]);
   const scope = useRef({ key: scopeKey });
   if (scope.current.key !== scopeKey) scope.current = { key: scopeKey };
   useEffect(() => {
-    setPlotError(null); setFullscreen(null);
+    setPlotError(null); setFullscreen(null); setInsertion(null); setInsertionError("");
   }, [scopeKey]);
   useEffect(() => {
     // React StrictMode repeats effect setup after its development cleanup.
@@ -90,11 +93,11 @@ export function usePaintJobs({ page, profile, projectId, visible, status, printe
     finally { release(); pending.current = false; setSending(false); }
   };
   const moveToCalibration = async () => {
-    if (!visible || !status?.online || pending.current || printerBusy || calibrating) return;
-    pending.current = true; setCalibrating(true);
-    const session = scope.current;
-    try { await api.homeAndMoveToPosition("calibration", projectId); onAction?.(); }
-    catch (error) { if (current(session)) fail(error); }
+    if (!visible || !profile || insertion !== "confirm" || !status?.online || pending.current || printerBusy || calibrating) return;
+    pending.current = true; setCalibrating(true); setInsertion("moving"); setInsertionError("");
+    const session = scope.current, backend = printerId;
+    try { await api.homeAndMoveToPosition("calibration", projectId, false, true); onAction?.(); if (current(session) && readiness.current.backend === backend) setInsertion("insert"); }
+    catch (error) { if (current(session) && readiness.current.backend === backend) { setInsertion("confirm"); setInsertionError(errorMessage(error)); } }
     finally { pending.current = false; setCalibrating(false); }
   };
   const openFullscreen = async () => {
@@ -110,6 +113,9 @@ export function usePaintJobs({ page, profile, projectId, visible, status, printe
   return {
     busy, sending, calibrating, setCalibrating, fullscreen, setFullscreen, loadingPreview, plotError, setPlotError,
     createGcode: () => { void runJob(false); }, directPlot: () => { void runJob(true); },
-    plotSelection: () => { void runJob(true, true); }, moveToCalibration, openFullscreen
+    plotSelection: () => { void runJob(true, true); },
+    moveToCalibration: () => { if (visible && profile && status?.online && !pending.current && !printerBusy && !calibrating) { setInsertionError(""); setInsertion("confirm"); } },
+    insertion, insertionError, confirmInsertionMove: moveToCalibration,
+    closeInsertion: () => { if (!pending.current) setInsertion(null); }, openFullscreen
   };
 }

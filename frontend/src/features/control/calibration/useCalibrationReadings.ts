@@ -3,12 +3,12 @@ import { api, type GcodePreview, type Job, type Position } from "../../../api";
 import { isAbortError } from "../../../api/errors";
 
 /** Read-only resources. Stopping a view cancels reads, never machine commands. */
-export function useCalibrationReadings({ visible, scope, onError }: {
-  visible: boolean; scope: string; onError: (error: unknown) => void;
+export function useCalibrationReadings({ visible, scope, connected = true, onError }: {
+  visible: boolean; scope: string; connected?: boolean; onError: (error: unknown) => void;
 }) {
-  const session = useRef({ visible, scope, epoch: 0 });
-  if (session.current.visible !== visible || session.current.scope !== scope)
-    session.current = { visible, scope, epoch: session.current.epoch + 1 };
+  const session = useRef({ visible, scope, connected, epoch: 0 });
+  if (session.current.visible !== visible || session.current.scope !== scope || session.current.connected !== connected)
+    session.current = { visible, scope, connected, epoch: session.current.epoch + 1 };
   const epoch = session.current.epoch;
   const current = useRef({ visible, scope, epoch, onError });
   current.current = { visible, scope, epoch, onError };
@@ -23,7 +23,7 @@ export function useCalibrationReadings({ visible, scope, onError }: {
     && current.current.scope === scope && current.current.epoch === epoch, [scope, epoch]);
 
   const refreshPosition = useCallback((force = false): Promise<void> => {
-    if (!isCurrent()) return Promise.resolve();
+    if (!connected || !isCurrent()) return Promise.resolve();
     if (positionRead.current && !force) return positionRead.current.promise;
     positionRead.current?.controller.abort();
     const controller = new AbortController();
@@ -40,7 +40,7 @@ export function useCalibrationReadings({ visible, scope, onError }: {
     });
     positionRead.current = { controller, promise };
     return promise;
-  }, [epoch, isCurrent]);
+  }, [connected, epoch, isCurrent]);
 
   const updatePosition = useCallback((value: Position) => {
     if (!isCurrent()) return;
@@ -67,7 +67,7 @@ export function useCalibrationReadings({ visible, scope, onError }: {
     if (!visible) return;
     void refreshPosition();
     void refreshJobs();
-    const timer = window.setInterval(() => { void refreshPosition(); }, 2000);
+    const timer = connected ? window.setInterval(() => { void refreshPosition(); }, 2000) : undefined;
     return () => {
       active.current = false;
       window.clearInterval(timer);
@@ -76,7 +76,7 @@ export function useCalibrationReadings({ visible, scope, onError }: {
       jobsRead.current?.abort();
       jobsRead.current = null;
     };
-  }, [visible, scope, refreshPosition, refreshJobs]);
+  }, [visible, scope, connected, refreshPosition, refreshJobs]);
 
   const previewJob = selection.scope === scope ? selection.filename : "";
   const setPreviewJob = (filename: string) => setSelection({ scope, filename });
@@ -92,7 +92,7 @@ export function useCalibrationReadings({ visible, scope, onError }: {
   }, [visible, epoch, previewJob, isCurrent]);
 
   return {
-    pos: visible && head?.epoch === epoch ? head.value : null,
+    pos: visible && connected && head?.epoch === epoch ? head.value : null,
     setPos: updatePosition, refreshPosition, jobs, refreshJobs, previewJob, setPreviewJob,
     preview: visible && drawing?.epoch === epoch && drawing.filename === previewJob ? drawing.value : null,
   };

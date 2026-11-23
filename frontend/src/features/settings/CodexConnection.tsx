@@ -56,7 +56,7 @@ export default function CodexConnection({ onChanged }: { onChanged: () => void }
           if (mounted.current) { setStatus(next); changed.current(); }
         })}>{t("codex.logout")}</button>
       </> : login ? <div className="codex-login">
-        <p>{t("codex.enterCode")}</p><code>{login.userCode}</code>
+        <p>{t("codex.enterCode")}</p><input className="codex-device-code" readOnly aria-label={t("codex.title")} value={login.userCode}/>
         <a className="btn-link" href={login.verificationUrl} target="_blank" rel="noreferrer">{t("codex.openLogin")}</a>
         <p className="muted">{t("codex.waiting")}</p>
         <button disabled={busy} onClick={() => void run(async () => {

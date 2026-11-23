@@ -1,4 +1,8 @@
 export type PrinterTransport = "octoprint" | "serial";
+export interface PrinterCheckResult {
+  id: string; ok: boolean; canProbe: boolean;
+  steps: { key: string; state: "ok" | "failed" | "skipped" | "busy"; message: string; messageKey?:string;variables?:Record<string,string|number> }[];
+}
 export type PrinterBackendId = string;
 
 /** Shared subset of OctoPrint's job payload and the serial worker snapshot. */

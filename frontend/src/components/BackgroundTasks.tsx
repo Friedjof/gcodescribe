@@ -2,23 +2,35 @@ import { useEffect, useState } from "react";
 import { useAssetTasks, watchAssetTasks, taskAction, dismissAllTasks } from "../api/assetTasks";
 import { useI18n } from "../i18n";
 import { useToasts } from "./Toasts";
+import EditorIcon from "./editor/EditorIcon";
 
 export default function BackgroundTasks({ onOpenResult }: { onOpenResult: (id: string) => void }) {
   const tasks = useAssetTasks();
   const { t } = useI18n();
   const toast = useToasts();
   const [open, setOpen] = useState(false);
+  const [compact, setCompact] = useState(() => {
+    try { return localStorage.getItem("gcs.tasks.compact.v1") === "true"; } catch { return false; }
+  });
   const [error, setError] = useState(false);
   const [closing, setClosing] = useState(false);
   useEffect(() => watchAssetTasks((problem) => setError(!!problem)), []);
   const active = tasks.filter((task) => ["uploading", "queued", "running"].includes(task.state)).length;
   const failed = tasks.some((task) => ["failed", "interrupted"].includes(task.state));
+  const summary = t("tasks.summary", { active, done: tasks.filter(task => task.state === "done").length,
+    failed: tasks.filter(task => ["failed", "interrupted"].includes(task.state)).length });
+  const minimize = () => {
+    setCompact(true); setOpen(false);
+    try { localStorage.setItem("gcs.tasks.compact.v1", "true"); } catch { /* In-memory preference. */ }
+  };
   if (!tasks.length && !error) return null;
-  return <aside className="background-tasks" aria-label={t("tasks.title")}>
-    <button className="tasks-toggle" onClick={() => setOpen(!open)} aria-expanded={open}>
-      <span className={active ? "task-spinner" : failed ? "err" : ""}>{active ? "◌" : failed ? "!" : "✓"}</span>
-      {t("tasks.title")} · {active || tasks.length}
+  return <aside className={`background-tasks${compact && !open ? " tasks-mini" : ""}`} aria-label={t("tasks.title")}>
+    <div className="tasks-toggle-row"><button className="tasks-toggle" onClick={() => setOpen(!open)} aria-expanded={open}
+      aria-label={`${t("tasks.title")} · ${summary}`} title={summary}>
+      <span className={failed || error ? "err" : ""}><EditorIcon name="bell" size={compact && !open ? 15 : 17}/></span>
+      {compact && !open ? <span className="tasks-counter">{tasks.length}</span> : <>{t("tasks.title")} · {tasks.length}</>}
     </button>
+    {(!compact || open) && <button className="ghost tiny tasks-minimize" title={t("tasks.compact")} aria-label={t("tasks.compact")} onClick={minimize}><EditorIcon name="down" size={13}/></button>}</div>
     {open && <div className="tasks-list">
       {tasks.length > 0 && <div className="tasks-list-actions"><button className="ghost tiny" disabled={closing}
         title={t("tasks.dismissAllHint")} onClick={() => {

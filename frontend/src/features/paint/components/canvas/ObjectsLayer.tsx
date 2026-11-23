@@ -1,5 +1,5 @@
 import { DISPLAY_INK_PX } from "../../../../lib/displayStroke";
-import { memo, useId, useMemo } from "react";
+import { memo, useMemo, useRef } from "react";
 import type { SceneObject } from "../../../../api";
 import { EMPTY_LINES, IDENTITY, localBounds, type Pt, type Transform } from "../../lib/geometry";
 import { sourcePageFrame } from "../../lib/sourcePage";
@@ -19,14 +19,17 @@ const ObjectView = memo(function ObjectView({ obj, selected, stroke, interactive
   const pageBounds = sourcePage ? localBounds(sourcePage) : null;
   const lines = (obj.cachedPolylines ?? EMPTY_LINES) as Pt[][];
   const large = !mask && rasterGeometry(lines);
-  const rasterEligible = large && rasterFitsDisplay(lines, stroke / scale);
+  // Keep the prepared bitmap throughout a gesture; only rebuild at rest.
+  const rasterView = useRef({ lines, stroke: stroke / scale });
+  if (!interactive || rasterView.current.lines !== lines) rasterView.current = { lines, stroke: stroke / scale };
+  const rasterStroke = rasterView.current.stroke;
+  const rasterEligible = large && rasterFitsDisplay(lines, rasterStroke);
   const pressurePaths = useMemo(() => obj.data?.pressureEnabled && !large && active && !interactive
     ? pressurePreviewPaths(lines, obj.data?.cachedSegmentPressures ?? obj.data?.baseSegmentPressures) : undefined,
   [obj.data?.pressureEnabled, obj.data?.cachedSegmentPressures, obj.data?.baseSegmentPressures, lines, large, active, interactive]);
-  const { image: raster } = useGeometryRaster(lines, stroke / scale, rasterEligible && active && !interactive);
+  const { image: raster } = useGeometryRaster(lines, rasterStroke, rasterEligible && active);
   // Bitmap refreshes and navigation share the complete vector fallback.
   const d = useGeometryPath(lines, interactive, active);
-  const maskId = useId();
   return <g transform={objTransform(t)} opacity={obj.plotted ? 0.25 : 1} pointerEvents="none">
     {selected && pageBounds &&
       <rect x={pageBounds[0]} y={pageBounds[1]}
@@ -35,12 +38,8 @@ const ObjectView = memo(function ObjectView({ obj, selected, stroke, interactive
         strokeDasharray={`${stroke * 4 / scale} ${stroke * 3 / scale}`} />}
     {pressurePaths ? pressurePaths.map((path, i) => path && <path key={i} d={path} fill="none"
       stroke={obj.plotted ? "var(--muted)" : "var(--ink)"} strokeOpacity={0.35 + i / 7 * 0.65}
-      strokeWidth={DISPLAY_INK_PX} vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />) : raster ? <>
-      <defs><mask id={maskId} maskUnits="userSpaceOnUse" x={raster.x} y={raster.y} width={raster.width} height={raster.height}>
-        <image href={raster.url} x={raster.x} y={raster.y} width={raster.width} height={raster.height} preserveAspectRatio="none" />
-      </mask></defs>
-      <rect x={raster.x} y={raster.y} width={raster.width} height={raster.height} fill={obj.plotted ? "var(--muted)" : "var(--ink)"} mask={`url(#${maskId})`} />
-    </> : <path d={d} fill={mask ? "var(--paper)" : "none"} fillOpacity={mask ? 0.92 : undefined}
+      strokeWidth={DISPLAY_INK_PX} vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />) : raster ? <image className="paint-raster" href={raster.url} x={raster.x} y={raster.y} width={raster.width} height={raster.height}
+      style={{filter:"var(--raster-ink, brightness(0))"}} preserveAspectRatio="none"/> : <path d={d} fill={mask ? "var(--paper)" : "none"} fillOpacity={mask ? 0.92 : undefined}
       stroke={mask ? selected ? "var(--accent)" : "var(--paper-mask)" : obj.plotted ? "var(--muted)" : "var(--ink)"}
       strokeWidth={mask ? stroke / scale : DISPLAY_INK_PX} vectorEffect={mask ? undefined : "non-scaling-stroke"} strokeDasharray={mask ? `${stroke * 2 / scale} ${stroke / scale}` : undefined}
       strokeLinejoin="round" strokeLinecap="round" />}

@@ -21,6 +21,33 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
+it("loads offline resources without querying printer position or starting its polling timer", async () => {
+  vi.useFakeTimers();
+  const initial = { ...props(), connected: false };
+  const { result } = renderHook(useCalibrationReadings, { initialProps: initial });
+  await act(async () => { await vi.advanceTimersByTimeAsync(6000); });
+  expect(mocks.listJobs).toHaveBeenCalledOnce();
+  expect(mocks.position).not.toHaveBeenCalled();
+  expect(vi.getTimerCount()).toBe(0);
+  expect(result.current.pos).toBeNull();
+});
+
+it("discards a pending head position on disconnect and resumes fresh reads on reconnect", async () => {
+  const pending = deferred<Position>();
+  mocks.position.mockReturnValueOnce(pending.promise);
+  const initial = { ...props(), connected: true };
+  const { result, rerender } = renderHook(useCalibrationReadings, { initialProps: initial });
+  await waitFor(() => expect(mocks.position).toHaveBeenCalledOnce());
+  const signal = mocks.position.mock.calls[0][0];
+  rerender({ ...initial, connected: false });
+  expect(signal.aborted).toBe(true);
+  await act(async () => pending.resolve(head));
+  expect(result.current.pos).toBeNull();
+  mocks.position.mockResolvedValue({ ...head, homed: false });
+  rerender(initial);
+  await waitFor(() => expect(result.current.pos?.homed).toBe(false));
+});
+
 it("keeps the newest preview even when the previous file resolves late", async () => {
   const a = deferred<GcodePreview>(), b = deferred<GcodePreview>();
   mocks.jobPreview.mockImplementation(name => name === "a" ? a.promise : b.promise);

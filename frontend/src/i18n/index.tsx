@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import en from "./en";
 import de from "./de";
 import ba from "./ba";
@@ -21,6 +21,11 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     const saved = localStorage.getItem("lang");
     return saved === "de" || saved === "ba" || saved === "fr" || saved === "es" ? saved : "en";
   });
+  useEffect(() => {
+    const previous=document.documentElement.lang;
+    document.documentElement.lang=lang==="ba"?"bar":lang;
+    return ()=>{document.documentElement.lang=previous;};
+  },[lang]);
   const value = useMemo(() => ({
     lang,
     setLang: (next: Lang) => {

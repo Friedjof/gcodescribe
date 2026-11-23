@@ -16,7 +16,7 @@ from plotter.printer.types import PrinterStatus
 
 from ..printer import PrinterBackend, get_printer_client
 from ..printer.base import PrinterBusyError, require_manual_motion
-from .errors import NotHomedError, ServiceError
+from .errors import NotHomedError, PrinterSetupRequiredError, ServiceError
 from .profiles import ProfileService
 
 log = logging.getLogger(__name__)
@@ -49,6 +49,8 @@ class PrinterController:
 
     def _require_manual_motion(self, action: str) -> None:
         status = self.client.status()
+        if status.get("configured") is False:
+            raise PrinterSetupRequiredError()
         job = status.get("job") or {}
         try:
             require_manual_motion(job.get("state"))
@@ -146,10 +148,14 @@ class PrinterController:
         self._require_position_action("calibration")
         cal = cal or Calibration.load()
         height = self._raised_height(cal, self.tracker.snapshot()["z"])
-        self.client.gcode([
-            "G90", z_max_feedrate_line(cal),
-            f"G0 Z{height:.3f} {feed_word(cal.z_feed)}", "M400",
-        ])
+        self.client.gcode(
+            [
+                "G90",
+                z_max_feedrate_line(cal),
+                f"G0 Z{height:.3f} {feed_word(cal.z_feed)}",
+                "M400",
+            ]
+        )
         self.tracker.set_axes(z=height)
         return self.position()
 
@@ -189,13 +195,31 @@ class PrinterController:
         return self.move_to_position("calibration", cal=cal)
 
     def home_and_move_to_position(
-        self, kind: PositionKind, *, cal: Calibration | None = None, lift_only: bool = False
+        self,
+        kind: PositionKind,
+        *,
+        cal: Calibration | None = None,
+        lift_only: bool = False,
+        insert_pen: bool = False,
     ) -> dict:
         """Explicitly home all axes, then visit the chosen saved position."""
         if kind not in POSITION_FIELDS:
             raise ServiceError(f"unknown position type: {kind}")
         if self.client.status().get("online") is False:
             raise ServiceError("Drucker ist nicht verbunden.")
+        if insert_pen:
+            cal = cal or Calibration.load()
+            if kind != "calibration" or lift_only:
+                raise ServiceError("Stift-Einsetzen benötigt die Kalibrierungsposition.")
+            offset = cal.calibration_pressure_offset
+            if not math.isfinite(offset) or not -3 <= offset <= 3:
+                raise ServiceError("Der gespeicherte Anpressdruck-Versatz ist ungültig.")
+            if not 0 <= cal.pen_down_z < cal.pen_up_z <= cal.z_max:
+                raise ServiceError("Die Stifthöhen im Projektprofil sind ungültig.")
+            self._validate_position(cal, *cal.resolved_calibration_position())
+            self.home(cal=cal)
+            self.move_to_position(kind, cal=cal, lift_only=True)
+            return self.calibration_height(offset, cal=cal)
         self.home(cal=cal)
         return self.move_to_position(kind, cal=cal, lift_only=lift_only)
 
@@ -322,16 +346,21 @@ class PrinterController:
         pos = self.tracker.snapshot()
         self._validate_position(cal, pos["x"], pos["y"])
         if not cal.pen_calibrated or not (
-            math.isfinite(cal.pen_down_z) and math.isfinite(cal.pen_up_z)
+            math.isfinite(cal.pen_down_z)
+            and math.isfinite(cal.pen_up_z)
             and 0 <= cal.pen_down_z < cal.pen_up_z <= cal.z_max
         ):
             raise ServiceError("Zuerst Papierkontakt und Abhebehöhe kalibrieren.")
-        self.client.gcode([
-            "G90", z_max_feedrate_line(cal),
-            f"G1 Z{cal.pen_down_z:.3f} {feed_word(cal.z_feed)}",
-            "G4 P100",
-            f"G0 Z{cal.pen_up_z:.3f} {feed_word(cal.z_feed)}", "M400",
-        ])
+        self.client.gcode(
+            [
+                "G90",
+                z_max_feedrate_line(cal),
+                f"G1 Z{cal.pen_down_z:.3f} {feed_word(cal.z_feed)}",
+                "G4 P100",
+                f"G0 Z{cal.pen_up_z:.3f} {feed_word(cal.z_feed)}",
+                "M400",
+            ]
+        )
         self.tracker.set_axes(z=cal.pen_up_z)
         return self.position()
 

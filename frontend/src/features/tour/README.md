@@ -10,8 +10,9 @@ renders a non-modal spotlight and keyboard-accessible controls.
 - Back/Next change the explanation and visible view. They never save a profile,
   mark setup complete, issue printer commands or start a plot. Those actions
   remain explicit in the underlying application.
-- Setup and calibration actions can advance the explanation. Locked calibration
-  tasks stay locked; their tab is highlighted with a prerequisite explanation.
+- Setup and calibration actions can advance the explanation. The tour can show
+  locked calibration steps as previews; their machine controls stay locked.
+  Offline views do not poll printer positions, and explain the connection prerequisite.
 - Settings, dialogs and active printer work suspend the overlay. Visiting a
   different workspace minimizes it; Resume deliberately returns to its step.
 - Tour-only workspaces are temporarily visible. Saved tab preferences survive

@@ -8,6 +8,7 @@ export default function FontEditorHeader({
   busy,
   onCreate,
   onOpenList,
+  onCloseCurrent,
 }: {
   hasCurrent: boolean;
   currentLabel: string | null;
@@ -15,6 +16,7 @@ export default function FontEditorHeader({
   busy: boolean;
   onCreate: (label: string) => void;
   onOpenList: () => void;
+  onCloseCurrent?:()=>void;
 }) {
   const { t } = useI18n();
   const [name, setName] = useState("");
@@ -48,6 +50,7 @@ export default function FontEditorHeader({
       {hasCurrent && (
         <div className="fe-header-current">
           <span className="fe-current-label">{currentLabel}</span>
+          {onCloseCurrent && <button className="ghost" disabled={busy} onClick={onCloseCurrent}>{t("fontWorkspace.close")}</button>}
           <span className={`fe-dirty-badge ${dirty ? "is-dirty" : "is-saved"}`}>
             {dirty ? t("fontEditor.unsaved") : t("fontEditor.saved")}
           </span>

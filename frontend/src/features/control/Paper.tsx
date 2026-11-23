@@ -13,7 +13,7 @@ export default function Paper(props: CalibrationControllerProps & { guided?: boo
     pos } = controls;
   useEffect(() => { props.onBusyChange?.(controls.busy || positions.busy || controls.pressureBusy); return () => props.onBusyChange?.(false); }, [controls.busy, positions.busy, controls.pressureBusy, props.onBusyChange]);
   if (error) return <div className="card banner err" role="alert"><p>{error}</p>
-    <button onClick={retry}>Erneut laden</button></div>;
+    <button onClick={retry}>{t("common.reload")}</button></div>;
   if (!cal) return <div className="card">{t("common.loading")}</div>;
   return (
     <>

@@ -59,13 +59,6 @@ export default function PaintJobActions({
       action: props.onOpenPressure,
     },
     {
-      id: "calibration",
-      label: t("paper.moveToCalib"),
-      icon: "draw",
-      disabled: settingsBlocked || !props.printerOnline,
-      action: props.onMoveToCalibration,
-    },
-    {
       id: "help",
       label: t("paint.info.button"),
       icon: "help",
@@ -127,6 +120,9 @@ export default function PaintJobActions({
         onPlotSelection={props.onPlotSelection}
         onOpenColoring={props.onOpenColoring}
       />
+      <button type="button" className="pen-insertion-button" title={t("paper.moveToCalib")}
+        aria-label={t("paper.moveToCalib")} disabled={settingsBlocked || props.pageBlocked || !props.printerOnline}
+        onClick={props.onMoveToCalibration}><EditorIcon name="draw" size={19}/></button>
       <EditorMenu
         label={t("paint.moreActions")}
         items={items}

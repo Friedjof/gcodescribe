@@ -1,3 +1,4 @@
+import PenInsertionDialog from "./components/PenInsertionDialog";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type Page, type SceneObject } from "../../api";
 import { startImport } from "../../api/assetTasks";
@@ -141,7 +142,7 @@ export default function Paint({
     projectMatches, visible, agentRevision, ops, setSelectedIds, fail });
 
   const { busy, sending, calibrating, setCalibrating, fullscreen, setFullscreen, loadingPreview, plotError,
-    setPlotError, createGcode, directPlot, plotSelection, moveToCalibration, openFullscreen } = usePaintJobs({
+    setPlotError, createGcode, directPlot, plotSelection, moveToCalibration, openFullscreen, insertion, insertionError, confirmInsertionMove, closeInsertion } = usePaintJobs({
       page, profile: renderProfile, projectId: index?.project?.id, visible, status,
       printerBusy: isPrinterBusy(status), ops, selectedIds, setSelectedIds, onAction, refresh, fail,
     });
@@ -296,8 +297,8 @@ export default function Paint({
     onTextAdd: insertText, onBucketFill: handleBucketFill, onAreaFill: handleAreaFill, onErase: ops.eraseAcrossObjects,
   });
   if (calibrationError) return <div className="card banner err" role="alert">
-    <strong>Projektkalibrierung konnte nicht geladen werden</strong><p>{calibrationError}</p>
-    <button onClick={() => { void refresh(true).catch(fail); }}>Erneut laden</button>
+    <strong>{t("projects.couldNotLoadTheProjectCalibration")}</strong><p>{calibrationError}</p>
+    <button onClick={() => { void refresh(true).catch(fail); }}>{t("common.reload")}</button>
   </div>;
   if (!cal || !index || !page) return <DelayedLoading />;
 
@@ -395,15 +396,15 @@ export default function Paint({
           <button onClick={() => discardEdits(page.id).then(setPage).catch(fail)}>{t("save.reload")}</button>
         </div>}
         {plotError && <div className="banner err paint-plot-error" role="alert">
-          <div><strong>Plotprüfung fehlgeschlagen</strong><p>{plotError}</p></div>
+          <div><strong>{t("projects.plotValidationFailed")}</strong><p>{plotError}</p></div>
           {plotError.includes("außerhalb der aktuellen Projektfläche") && <>
-            <button disabled={pageBlocked || ops.processing} onClick={fitDrawing}>Zeichnung proportional einpassen</button>
+            <button disabled={pageBlocked || ops.processing} onClick={fitDrawing}>{t("projects.fitDrawingProportionally")}</button>
             <button disabled={pageBlocked || ops.processing} title={t("paint.clipHint")} onClick={() => {
               void ops.clipToPlot().then(ok => { if (ok) setPlotError(null); });
             }}>{t("paint.clipToPlot")}</button></>}
           {/kalibrierung|profil|papier/i.test(plotError) &&
-            <button onClick={() => { reloadIndex(); setProjectsOpen(true); }}>Projektprofil prüfen</button>}
-          <button className="ghost" aria-label="Plot-Hinweis schließen" onClick={() => setPlotError(null)}>×</button>
+            <button onClick={() => { reloadIndex(); setProjectsOpen(true); }}>{t("projects.checkProjectProfile")}</button>}
+          <button className="ghost" aria-label={t("projects.closePlotNotice")} onClick={() => setPlotError(null)}>×</button>
         </div>}
         {ops.processing && <span className="geometry-status" role="status">{t("paint.processingGeometry")}</span>}
 
@@ -482,6 +483,9 @@ export default function Paint({
         projectId={index.project?.id} profileId={index.project?.profileId}
         canMove={!!status?.online && !busy && !sending && !isPrinterBusy(status)}
         onClose={() => setPressureOpen(false)} onBusyChange={setCalibrating} onAction={onAction} />}
+      {insertion && <PenInsertionDialog step={insertion} error={insertionError}
+        canMove={!!status?.online && !isPrinterBusy(status) && !pageBlocked}
+        onConfirm={() => void confirmInsertionMove()} onClose={closeInsertion}/>}
       {fullscreen && <Gcode3DOverlay data={fullscreen} viewState={gcode3dView} onViewChange={setGcode3dView} onClose={() => setFullscreen(null)} />}
       {coloringOpen && cal && renderProfile && (
         <ColoringEditor

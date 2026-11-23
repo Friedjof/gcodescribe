@@ -1,3 +1,4 @@
+import { useI18n } from "../../i18n";
 import PaginationBar from "../../components/paging/PaginationBar";
 import { useFitListPage } from "../../components/paging/useFitListPage";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
@@ -30,6 +31,7 @@ export default function ProjectPagePanel({ index, activePageId, onOpenProjects, 
   sidebarCollapsed?: boolean;
   onToggleSidebar: () => void;
 }) {
+  const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<"manual" | "name" | "modified">("manual");
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
@@ -80,7 +82,7 @@ export default function ProjectPagePanel({ index, activePageId, onOpenProjects, 
   const search = query.trim().toLocaleLowerCase();
   const canDrag = sort === "manual" && !search && !sidebarCollapsed;
   const folderName = selectedFolder ? groups.find((g) => g.id === selectedFolder)?.name : null;
-  const selectedLocation = folderName ?? "Projekt";
+  const selectedLocation = folderName ?? t("setup.projectSelect");
   const children = (parentId: string | null) => groups.filter((g) => (g.parentId ?? null) === parentId);
   const directPages = (folderId: string | null, showAll = false) => {
     const matching = pages.filter((page) => (page.groupId ?? null) === folderId &&
@@ -154,15 +156,15 @@ export default function ProjectPagePanel({ index, activePageId, onOpenProjects, 
         <PageThumbnail page={page} />
         {!sidebarCollapsed && <span className="project-slide-info">
           <strong>{page.name}</strong>
-          <small>{loadingPageId === page.id ? "Wird geladen …" : page.objectCount === 0 ? "Leerer Slide" : `${page.objectCount} ${page.objectCount === 1 ? "Objekt" : "Objekte"}`}</small>
+          <small>{loadingPageId === page.id ? t("projects.loading") : page.objectCount === 0 ? t("projects.emptySlide") : t(page.objectCount === 1 ? "projects.oneObject" : "projects.objectCount", {count:page.objectCount})}</small>
         </span>}
       </button>
-      {!sidebarCollapsed && <div className="project-slide-actions" role="group" aria-label={`Slide bearbeiten: ${page.name}`}>
-        <button type="button" title="Umbenennen" aria-label={`Umbenennen: ${page.name}`} onClick={() => onRename(page.id, page.name)}><EditorIcon name="text" size={13}/></button>
-        <button type="button" title="Duplizieren" aria-label={`Duplizieren: ${page.name}`} onClick={() => onDuplicate(page.id)}><EditorIcon name="copy" size={13}/></button>
-        <button type="button" title="In anderes Projekt verschieben" aria-label={`Verschieben: ${page.name}`} onClick={() => onMove(page.id)}><EditorIcon name="folder" size={13}/></button>
-        {page.groupId && <button type="button" title="Aus Ordner nehmen" aria-label={`Aus Ordner nehmen: ${page.name}`} onClick={() => onSetPageGroup(page.id, null)}><EditorIcon name="previous" size={13}/></button>}
-        <button type="button" className="danger" title="Löschen" aria-label={`Löschen: ${page.name}`} onClick={() => onRemove(page.id)}><EditorIcon name="trash" size={13}/></button>
+      {!sidebarCollapsed && <div className="project-slide-actions" role="group" aria-label={t("projects.editSlide",{name:page.name})}>
+        <button type="button" title={t("profiles.renameAction")} aria-label={t("projects.renameNamed",{name:page.name})} onClick={() => onRename(page.id, page.name)}><EditorIcon name="text" size={13}/></button>
+        <button type="button" title={t("fontEditor.variantDuplicate")} aria-label={t("projects.duplicateNamed",{name:page.name})} onClick={() => onDuplicate(page.id)}><EditorIcon name="copy" size={13}/></button>
+        <button type="button" title={t("projects.moveToAnotherProject")} aria-label={t("projects.moveNamed",{name:page.name})} onClick={() => onMove(page.id)}><EditorIcon name="folder" size={13}/></button>
+        {page.groupId && <button type="button" title={t("projects.removeFromFolder")} aria-label={t("projects.removeNamed",{name:page.name})} onClick={() => onSetPageGroup(page.id, null)}><EditorIcon name="previous" size={13}/></button>}
+        <button type="button" className="danger" title={t("common.delete")} aria-label={t("projects.deleteNamed",{name:page.name})} onClick={() => onRemove(page.id)}><EditorIcon name="trash" size={13}/></button>
       </div>}
     </li>;
   };
@@ -177,7 +179,7 @@ export default function ProjectPagePanel({ index, activePageId, onOpenProjects, 
         onDragEnd={() => { setDrag(null); setDropTarget(null); }}
         onDragOver={(event) => { if (canDrag && drag?.id !== folderId) { event.preventDefault(); setDropTarget(folderId); } }}
         onDrop={(event) => { event.preventDefault(); event.stopPropagation(); dropInto(folderId); }}>
-        <button className="project-folder-caret" aria-label={`${folder.name} ${isClosed ? "öffnen" : "schließen"}`}
+        <button className="project-folder-caret" aria-label={t(isClosed?"projects.openFolder":"projects.closeFolder",{name:folder.name})}
           onClick={() => setClosed((value) => ({ ...value, [folderId]: !value[folderId] }))}>{isClosed ? "▸" : "▾"}</button>
         <button className="project-folder-open" title={folder.name} aria-label={folder.name}
           onClick={() => { setSelectedFolder(folderId); setClosed((value) => ({ ...value, [folderId]: false })); }}>
@@ -185,14 +187,14 @@ export default function ProjectPagePanel({ index, activePageId, onOpenProjects, 
           <small>{counts.get(folderId) ?? 0}</small>
         </button>
         <div className="project-action-menu" data-project-action-menu>
-          <button className="project-more" title={`Aktionen für Ordner ${folder.name}`} aria-label={`Aktionen für Ordner ${folder.name}`}
+          <button className="project-more" title={t("projects.folderActions",{name:folder.name})} aria-label={t("projects.folderActions",{name:folder.name})}
             aria-haspopup="menu" aria-expanded={menu?.id === menuId}
             onClick={(event) => toggleMenu(menuId, event.currentTarget)}>⋯</button>
           {popover(menuId, <>
-            <button role="menuitem" onClick={() => action(() => onNew(folderId))}>Slide hier erstellen</button>
-            <button role="menuitem" onClick={() => action(() => startFolder(folderId))}>Unterordner erstellen</button>
-            <button role="menuitem" onClick={() => action(() => onRenameGroup(folderId, folder.name))}>Umbenennen</button>
-            <button role="menuitem" className="danger" onClick={() => action(() => onDeleteGroup(folderId))}>Ordner löschen</button>
+            <button role="menuitem" onClick={() => action(() => onNew(folderId))}>{t("projects.createSlideHere")}</button>
+            <button role="menuitem" onClick={() => action(() => startFolder(folderId))}>{t("projects.createSubfolder")}</button>
+            <button role="menuitem" onClick={() => action(() => onRenameGroup(folderId, folder.name))}>{t("profiles.renameAction")}</button>
+            <button role="menuitem" className="danger" onClick={() => action(() => onDeleteGroup(folderId))}>{t("paint.deleteGroup")}</button>
           </>)}
         </div>
       </div>
@@ -223,50 +225,50 @@ export default function ProjectPagePanel({ index, activePageId, onOpenProjects, 
 
   return <aside className={`paint-pages project-pages${sidebarCollapsed ? " collapsed" : ""}`}>
     <div className="project-sidebar-head">
-      <button className="project-switch" onClick={onOpenProjects} title="Projektübersicht öffnen"
+      <button className="project-switch" onClick={onOpenProjects} title={t("projects.openProjectOverview")}
         aria-haspopup="dialog"
-        aria-label={`Projektübersicht öffnen: ${index.project?.name ?? "Projekt"}`}>
+        aria-label={t("projects.openNamedOverview",{name:index.project?.name??t("setup.projectSelect")})}>
         <span className="project-switch-icon" aria-hidden="true">▤</span>
-        {!sidebarCollapsed && <><span className="project-switch-text"><strong>{index.project?.name ?? "Projekt"}</strong>
-          <small>{index.activeProfile?.name ?? "Projektprofil"}</small></span><EditorIcon name="open" size={14} /></>}
+        {!sidebarCollapsed && <><span className="project-switch-text"><strong>{index.project?.name ?? t("setup.projectSelect")}</strong>
+          <small>{index.activeProfile?.name ?? t("projects.defaultProfile")}</small></span><EditorIcon name="open" size={14} /></>}
       </button>
       <button className="ghost tiny pages-collapse-btn" onClick={onToggleSidebar}
-        aria-label={sidebarCollapsed ? "Leiste öffnen" : "Leiste schließen"}
-        title={sidebarCollapsed ? "Leiste öffnen" : "Leiste schließen"}>{sidebarCollapsed ? "▶" : "◀"}</button>
+        aria-label={t(sidebarCollapsed ? "projects.openPanel" : "projects.closePanel")}
+        title={t(sidebarCollapsed ? "projects.openPanel" : "projects.closePanel")}>{sidebarCollapsed ? "▶" : "◀"}</button>
     </div>
     {!sidebarCollapsed && <>
       <div className="project-pages-tools">
-        <button className="primary" onClick={() => onNew(selectedFolder)}>＋ Slide</button>
-        <button className="ghost" onClick={() => startFolder(selectedFolder)}>＋ Ordner</button>
+        <button className="primary" onClick={() => onNew(selectedFolder)}>{t("projects.slide")}</button>
+        <button className="ghost" onClick={() => startFolder(selectedFolder)}>{t("projects.folder")}</button>
       </div>
-      <p className="project-target-label">Neue Elemente in <strong>{selectedLocation}</strong></p>
+      <p className="project-target-label">{t("projects.newItemsIn")} <strong>{selectedLocation}</strong></p>
       {newFolderParent !== undefined && <form className="project-folder-create" onSubmit={(event) => { event.preventDefault(); submitFolder(); }}>
         <input autoFocus value={newFolderName} onChange={(event) => setNewFolderName(event.target.value)}
-          placeholder={`Ordner in ${groups.find((group) => group.id === newFolderParent)?.name ?? "Projekt"}`}
-          aria-label="Ordnername" onKeyDown={(event) => { if (event.key === "Escape") setNewFolderParent(undefined); }} />
-        <button type="submit" disabled={!newFolderName.trim()}>Anlegen</button>
-        <button type="button" className="ghost" aria-label="Abbrechen" onClick={() => setNewFolderParent(undefined)}>×</button>
+          placeholder={t("projects.folderIn",{name:groups.find((group)=>group.id===newFolderParent)?.name??t("setup.projectSelect")})}
+          aria-label={t("paint.groupNamePrompt")} onKeyDown={(event) => { if (event.key === "Escape") setNewFolderParent(undefined); }} />
+        <button type="submit" disabled={!newFolderName.trim()}>{t("fontEditor.create")}</button>
+        <button type="button" className="ghost" aria-label={t("common.cancel")} onClick={() => setNewFolderParent(undefined)}>×</button>
       </form>}
       <div className="paint-pages-controls project-pages-controls">
-        <input className="paint-pages-search" type="search" placeholder="Slides suchen…" aria-label="Slides suchen"
+        <input className="paint-pages-search" type="search" placeholder={t("projects.searchSlides")} aria-label={t("projects.searchSlides")}
           value={query} onChange={(event) => { setQuery(event.target.value); paging.setPage(0); }} />
-        <select className="paint-pages-sort" value={sort} onChange={(event) => setSort(event.target.value as typeof sort)} aria-label="Slides sortieren">
-          <option value="manual">Manuell</option><option value="name">Name</option><option value="modified">Zuletzt geändert</option>
+        <select className="paint-pages-sort" value={sort} onChange={(event) => setSort(event.target.value as typeof sort)} aria-label={t("projects.sortSlides")}>
+          <option value="manual">{t("projects.manual")}</option><option value="name">{t("projects.name")}</option><option value="modified">{t("projects.lastModified")}</option>
         </select>
       </div>
-      <p className="project-slide-count">{pages.length} {pages.length === 1 ? "Slide" : "Slides"}</p>
+      <p className="project-slide-count">{pages.length} {t(pages.length === 1 ? "projects.oneSlide" : "projects.slides")}</p>
     </>}
     {!sidebarCollapsed && <div className={`project-root-row${selectedFolder === null ? " selected" : ""}${dropTarget === "root" ? " drop-into" : ""}`}
       onDragOver={(event) => { if (canDrag && drag) { event.preventDefault(); setDropTarget("root"); } }}
       onDrop={(event) => { event.preventDefault(); dropInto(null); }}>
-      <button onClick={() => setSelectedFolder(null)}><span aria-hidden="true">▤</span> Projekt<small>{pages.filter((page) => !page.groupId).length}</small></button>
+      <button onClick={() => setSelectedFolder(null)}><span aria-hidden="true">▤</span>  {t("setup.projectSelect")}<small>{pages.filter((page) => !page.groupId).length}</small></button>
     </div>}
     <div className="paint-pages-scroll project-pages-tree" ref={paging.viewport}>
       {paging.items.map((row) => <div className="project-tree-row" key={row.kind === "folder" ? `folder:${row.folder.id}` : row.page.id} style={{ paddingLeft: sidebarCollapsed ? 0 : Math.min(40, row.depth * 10) }}>
         {row.kind === "folder" ? renderFolder(row.folder, row.depth) : <ul className="project-slide-list">{renderPage(row.page)}</ul>}
       </div>)}
-      {search && rows.length === 0 && <p className="paint-pages-empty muted">Keine Slides gefunden.</p>}
+      {search && rows.length === 0 && <p className="paint-pages-empty muted">{t("projects.noSlidesFound")}</p>}
     </div>
-    <PaginationBar page={paging.page} pages={paging.pages} onChange={paging.setPage} label="Slides" dragPaging={!!drag}/>
+    <PaginationBar page={paging.page} pages={paging.pages} onChange={paging.setPage} label={t("projects.slides")} dragPaging={!!drag}/>
   </aside>;
 }

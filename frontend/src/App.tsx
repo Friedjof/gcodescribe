@@ -4,13 +4,15 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react"
 import type { PrinterStatus } from "./api/types/printer";
 import { api, onAppEvent, type AiImageStatus, type EffectiveSettings } from "./api";
 import PrinterSelector from "./components/PrinterSelector";
+import ThemeToggle from "./components/editor/ThemeToggle";
+import { isDesktop } from "./interface/desktop";
 import { usePlotNotifications } from "./hooks/usePlotNotifications";
 import QuickStopPlot, { canStopPlot } from "./components/QuickStopPlot";
 const AiImageDesigner = lazy(() => import("./features/ai-designer/AiImageDesigner"));
 import AuthGate from "./features/auth/AuthGate";
 const Convert = lazy(() => import("./features/convert/Convert"));
 const Paint = lazy(() => import("./features/paint/Paint"));
-const FontEditor = lazy(() => import("./features/font-editor/components/FontEditor"));
+const FontEditor = lazy(() => import("./features/font-editor/FontWorkspace"));
 const Games = lazy(() => import("./features/games/Games"));
 const Gallery = lazy(() => import("./features/gallery/Gallery"));
 const Calibrate = lazy(() => import("./features/control/Calibrate"));
@@ -70,7 +72,8 @@ function AdminApp() {
   const [status, setStatus] = useState<PrinterStatus | null>(null);
   const [aiStatus, setAiStatus] = useState<AiImageStatus | null>(null);
   const [aiInitialFile, setAiInitialFile] = useState<File | null>(null);
-  const [desktop, setDesktop] = useState(false);
+  const [desktop, setDesktop] = useState(isDesktop);
+  useEffect(() => { document.documentElement.dataset.desktop = String(desktop); }, [desktop]);
   const visibleTabs = tourWorkspace && !preferences.visibleWorkspaces.includes(tourWorkspace) ? [...preferences.visibleWorkspaces, tourWorkspace] : preferences.visibleWorkspaces;
   const tab = usableWorkspace(requestedTab, preferences.workspaceOrder, visibleTabs, aiStatus?.enabled ?? false);
   const workspaces = visibleWorkspaces(preferences.workspaceOrder, visibleTabs, aiStatus?.enabled ?? false);
@@ -160,20 +163,22 @@ function AdminApp() {
       <header className="app-titlebar">
         <h1 className="app-brand"><EditorIcon name="draw" size={20} />GCodeScribe</h1>
         <div className="app-main-menu">
-          <ProgramMenus aiEnabled={aiStatus?.enabled ?? false} onNavigate={setTab} onSettings={() => setSettingsOpen(true)} onCustomize={() => setTabSettingsOpen(true)} onHelp={() => setHelpOpen(true)}
+          <ProgramMenus aiEnabled={aiStatus?.enabled ?? false} onNavigate={setTab} onCustomize={() => setTabSettingsOpen(true)} onHelp={() => setHelpOpen(true)}
             onProjects={() => { setPaintCommand({ id: ++commandId.current, type: "projects" }); setTab("paint"); }}
             onNewPage={() => { setPaintCommand({ id: ++commandId.current, type: "new-page" }); setTab("paint"); }}
             notifications={{ supported: notificationPermission !== "unsupported", granted: notificationPermission === "granted", action: notificationPermission === "granted" ? notifications.test : notifications.request }} />
         </div>
         <div className="header-actions">
-          <select className="lang-select" value={lang} onChange={(e) => setLang(e.target.value as "de" | "ba" | "en" | "fr" | "es")}>
+          <PrinterSelector status={status} onAction={refreshStatus} onSwitching={switchingPrinter} />
+          <select aria-label={t("app.language")} className="lang-select" value={lang} onChange={(e) => setLang(e.target.value as "de" | "ba" | "en" | "fr" | "es")}>
             <option value="de">{t("lang.de")}</option>
             <option value="ba">{t("lang.ba")}</option>
             <option value="en">{t("lang.en")}</option>
             <option value="fr">{t("lang.fr")}</option>
             <option value="es">{t("lang.es")}</option>
           </select>
-          <PrinterSelector status={status} onAction={refreshStatus} onManage={() => setSettingsOpen(true)} onSwitching={switchingPrinter} />
+          <button type="button" className="app-menu-button app-settings-button" onClick={() => setSettingsOpen(true)} title={t("settings.title")} aria-label={t("settings.title")}><EditorIcon name="settings" size={15}/><span className="app-settings-label">{t("settings.title")}</span></button>
+          <ThemeToggle />
           {canStopPlot(status) && <QuickStopPlot status={status} onAction={refreshStatus} />}
         </div>
       </header>
@@ -183,7 +188,7 @@ function AdminApp() {
       <Suspense fallback={<DelayedLoading />}>
       {helpOpen && <PaintInfoModal onClose={() => setHelpOpen(false)} />}
       {settingsOpen && (
-        <SettingsDialog
+        <SettingsDialog desktop={desktop}
           status={status}
           onClose={() => setSettingsOpen(false)}
           onSaved={(saved: EffectiveSettings) => {

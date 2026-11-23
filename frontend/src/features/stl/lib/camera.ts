@@ -14,6 +14,7 @@ export interface Camera {
   target: Vec3;
   /** Orbit angles, radians. */
   azimuth: number;
+  roll?: number;
   elevation: number;
   /** Eye distance from target (drives perspective + depth ordering). */
   distance: number;
@@ -66,8 +67,11 @@ export function cameraBasis(cam: Camera): CameraBasis {
   let up = upVec(cam.up);
   // Guard against gimbal lock when looking straight down the up axis.
   if (Math.abs(dot(forward, up)) > 0.999) up = [1, 0, 0];
-  const right = normalize(cross(forward, up));
-  const camUp = cross(right, forward); // already unit length
+  let right = normalize(cross(forward, up));
+  let camUp = cross(right, forward);
+  const c=Math.cos(cam.roll??0),s=Math.sin(cam.roll??0),r=right;
+  right=r.map((v,i)=>v*c+camUp[i]*s) as Vec3;
+  camUp=camUp.map((v,i)=>v*c-r[i]*s) as Vec3; // already unit length
   const focal = 1 / Math.tan(cam.fov / 2);
   return { eye, right, camUp, forward, perspective: cam.perspective, focal };
 }

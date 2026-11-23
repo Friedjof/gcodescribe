@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import logging
 import os
-import socket
 import subprocess
 import sys
 import threading
@@ -28,6 +27,9 @@ gi.require_version("WebKit", "6.0")
 
 from gi.repository import Gdk, Gio, GLib, Gtk, WebKit  # noqa: E402
 
+from .appearance import DesktopAppearance  # noqa: E402
+from .endpoint import desktop_port  # noqa: E402
+from .links import DesktopLinks  # noqa: E402
 from .notifications import DesktopNotifications  # noqa: E402
 
 log = logging.getLogger(__name__)
@@ -37,12 +39,6 @@ BACKEND_TIMEOUT = 30.0  # seconds to wait for /api/health
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
-
-
-def _free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
 
 
 def _poll_health(url: str, timeout: float) -> bool:
@@ -180,6 +176,8 @@ class MainWindow(Gtk.ApplicationWindow):
             Path(application._data_dir()) / "desktop_notifications.json",
         )
         self._wv = WebKit.WebView(web_context=context)
+        self._appearance = DesktopAppearance(self._wv, application._url)
+        self._links = DesktopLinks(self._wv, self, application._url)
         self._notifications.attach(self._wv, self)
         wv_settings = self._wv.get_settings()
         wv_settings.set_enable_developer_extras(False)
@@ -253,7 +251,12 @@ class App(Gtk.Application):
             application_id=APP_ID,
             flags=Gio.ApplicationFlags.FLAGS_NONE,
         )
-        self._port: int = _free_port()
+        self._startup_error: str | None = None
+        try:
+            self._port = desktop_port(Path(self._data_dir()))
+        except (OSError, RuntimeError) as exc:
+            self._port = 0
+            self._startup_error = str(exc)
         self._url: str = f"http://127.0.0.1:{self._port}"
         self._backend: subprocess.Popen | None = None  # type: ignore[type-arg]
         self._window: MainWindow | None = None
@@ -265,7 +268,8 @@ class App(Gtk.Application):
         show_window = Gio.SimpleAction.new("show-window", None)
         show_window.connect("activate", lambda *_: self.activate())
         self.add_action(show_window)
-        self._launch_backend()
+        if self._startup_error is None:
+            self._launch_backend()
 
     def do_activate(self) -> None:
         if self._window is not None:
@@ -273,7 +277,10 @@ class App(Gtk.Application):
             return
         self._window = MainWindow(application=self)
         self._window.present()
-        threading.Thread(target=self._health_thread, daemon=True).start()
+        if self._startup_error:
+            GLib.idle_add(self._fatal, self._startup_error)
+        else:
+            threading.Thread(target=self._health_thread, daemon=True).start()
 
     # ── backend management ────────────────────────────────────────────────────
 

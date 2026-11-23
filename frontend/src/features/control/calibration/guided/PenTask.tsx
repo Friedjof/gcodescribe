@@ -72,6 +72,7 @@ export default function PenTask({ controls: c }: Props) {
               disabled={!c.canMove || !c.homed || !c.atPenPosition}
               onClick={() => c.jogZ(1)}
             >
+
               ↑ Z + {c.zStep}
             </button>
             <button
@@ -79,6 +80,7 @@ export default function PenTask({ controls: c }: Props) {
               disabled={!c.canMove || !c.homed || !c.atPenPosition}
               onClick={() => c.jogZ(-1)}
             >
+
               ↓ Z − {c.zStep}
             </button>
           </div>

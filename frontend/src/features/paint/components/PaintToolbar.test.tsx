@@ -70,15 +70,14 @@ describe("calibration position shortcut", () => {
     expect(onOpenPressure).toHaveBeenCalledOnce();
     expect(onMoveToCalibration).not.toHaveBeenCalled();
   });
-  it("allows calibrating the active profile even when the page cannot be plotted", () => {
-    const { openMenu, onMoveToCalibration } = renderToolbar({
+  it("blocks insertion while the project calibration is loading", () => {
+    const { onMoveToCalibration } = renderToolbar({
       pageBlocked: true,
     });
-    openMenu();
-    const button = screen.getByRole("menuitem", { name: "paper.moveToCalib" });
-    expect(button).toBeEnabled();
+    const button = screen.getByRole("button", { name: "paper.moveToCalib" });
+    expect(button).toBeDisabled();
     fireEvent.click(button);
-    expect(onMoveToCalibration).toHaveBeenCalledOnce();
+    expect(onMoveToCalibration).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -88,9 +87,8 @@ describe("calibration position shortcut", () => {
     { sending: true },
     { calibrating: true },
   ])("blocks calibration while unavailable: %j", (overrides) => {
-    const { openMenu, onMoveToCalibration } = renderToolbar(overrides);
-    openMenu();
-    const button = screen.getByRole("menuitem", { name: "paper.moveToCalib" });
+    const { onMoveToCalibration } = renderToolbar(overrides);
+    const button = screen.getByRole("button", { name: "paper.moveToCalib" });
     expect(button).toBeDisabled();
     fireEvent.click(button);
     expect(onMoveToCalibration).not.toHaveBeenCalled();

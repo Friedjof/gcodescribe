@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../api";
-import type { PrinterConnection, PrinterConnectionInput, PrinterStatus, SerialPortCandidate } from "../../api";
+import type { PrinterCheckResult, PrinterConnection, PrinterConnectionInput, PrinterStatus, SerialPortCandidate } from "../../api";
 import { errorMessage } from "../../api/errors";
 import { useI18n } from "../../i18n";
 import { isPrinterBusy } from "../../lib/printerState";
@@ -21,6 +21,9 @@ export default function PrintersPanel({ status, onChanged, onBusyChange, onDirty
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [removing, setRemoving] = useState<string | null>(null);
+  const [checks, setChecks] = useState<Record<string, PrinterCheckResult>>({});
+  const [checking, setChecking] = useState<string | null>(null);
+  const [probeConfirm, setProbeConfirm] = useState<string | null>(null);
   const pending = useRef(false);
   const nameInput = useRef<HTMLInputElement>(null);
   useEffect(() => { onBusyChange?.(busy); }, [busy, onBusyChange]);
@@ -50,6 +53,13 @@ export default function PrintersPanel({ status, onChanged, onBusyChange, onDirty
     catch (err) { setError(errorMessage(err)); }
     finally { pending.current = false; setBusy(false); }
   };
+  const test = async (id: string, probe = false) => {
+    if (pending.current) return;
+    pending.current = true; setBusy(true); setChecking(id); setError(""); setProbeConfirm(null);
+    try { const result = await api.testPrinterConnection(id, probe); setChecks(prev => ({ ...prev, [id]: result })); }
+    catch (err) { setError(errorMessage(err)); }
+    finally { pending.current = false; setChecking(null); setBusy(false); }
+  };
   const update = <K extends keyof PrinterConnectionInput>(key: K, value: PrinterConnectionInput[K]) => setForm(prev => ({ ...prev, [key]: value }));
   return <section className="printers-panel" aria-label={t("printers.manage")}>
     <h3>{t("printers.manage")}</h3>
@@ -59,8 +69,18 @@ export default function PrintersPanel({ status, onChanged, onBusyChange, onDirty
       {printers.map(item => <li key={item.id}>
         <div><strong>{item.name}</strong>{item.id === activeId && <span className="pbadge pbadge-active">{t("printers.selected")}</span>}
           <small>{item.transport === "serial" ? `USB / Serial · ${item.serial_port}` : `OctoPrint · ${item.octoprint_url}`}</small></div>
+        <button disabled={busy} onClick={() => void test(item.id)}>{t(checking === item.id ? "common.loading" : "printers.test")}</button>
         <button disabled={busy || locked(item.id)} onClick={() => edit(item)}>{t("common.edit")}</button>
         <button disabled={busy || locked(item.id)} onClick={() => { setRemoving(item.id); setEditing(undefined); }}>{t("common.delete")}</button>
+        {checks[item.id] && <div className="printer-check-result" role="status">
+          <ul>{checks[item.id].steps.map(step => <li key={step.key} data-state={step.state}>
+            <span aria-hidden="true">{step.state === "ok" ? "✓" : step.state === "failed" ? "!" : "–"}</span> {step.messageKey?t(step.messageKey,step.variables):step.message}
+          </li>)}</ul>
+          {checks[item.id].canProbe && <button disabled={busy} onClick={() => setProbeConfirm(item.id)}>{t("printers.probe")}</button>}
+          {probeConfirm === item.id && <div><p>{t("printers.probeHint")}</p>
+            <button disabled={busy} onClick={() => setProbeConfirm(null)}>{t("common.cancel")}</button>
+            <button disabled={busy} onClick={() => void test(item.id, true)}>{t("printers.probe")}</button></div>}
+        </div>}
         {removing === item.id && <div className="printers-remove"><p>{t("printers.removeHint", { name: item.name })}</p>
           <button disabled={busy} onClick={() => setRemoving(null)}>{t("common.cancel")}</button>
           <button className="danger" disabled={busy} onClick={() => void run(() => api.deletePrinterConnection(item.id))}>{t("common.delete")}</button></div>}

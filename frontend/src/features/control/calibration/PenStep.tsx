@@ -58,6 +58,7 @@ export default function PenStep({ cal, controls }: { cal: Calibration; controls:
             disabled={!canMove || !homed || !controls.atPenPosition}
             onClick={() => jogZ(1)}
           >
+
             Z + {zStep}
           </button>
           <button
@@ -65,6 +66,7 @@ export default function PenStep({ cal, controls }: { cal: Calibration; controls:
             disabled={!canMove || !homed || !controls.atPenPosition}
             onClick={() => jogZ(-1)}
           >
+
             Z − {zStep}
           </button>
         </div>

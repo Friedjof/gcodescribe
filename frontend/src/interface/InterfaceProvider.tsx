@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { InterfacePreferencesStore, INTERFACE_STORAGE_KEY } from "./preferences";
+import { syncDesktopTheme, systemIsDark } from "./desktop";
 const Context = createContext<InterfacePreferencesStore | null>(null);
 export function InterfaceProvider({ children }: { children: ReactNode }) {
   const [store] = useState(() => {
@@ -13,13 +14,16 @@ export function InterfaceProvider({ children }: { children: ReactNode }) {
     const previous = { theme: root.dataset.theme, density: root.dataset.density, experience: root.dataset.experience, scheme: root.style.colorScheme };
     const media = typeof window.matchMedia === "function" ? window.matchMedia("(prefers-color-scheme: dark)") : null;
     const apply = () => {
-      const theme = preferences.theme === "system" ? media?.matches ? "dark" : "light" : preferences.theme;
+      const theme = preferences.theme === "system" ? systemIsDark() ? "dark" : "light" : preferences.theme;
       root.dataset.theme = theme; root.dataset.density = preferences.density; root.dataset.experience = preferences.experience;
       root.style.colorScheme = theme;
     };
-    apply(); media?.addEventListener("change", apply);
+    apply(); syncDesktopTheme(preferences.theme);
+    media?.addEventListener("change", apply);
+    window.addEventListener("gcs:desktop-appearance", apply);
     return () => {
       media?.removeEventListener("change", apply);
+      window.removeEventListener("gcs:desktop-appearance", apply);
       for (const key of ["theme", "density", "experience"] as const) {
         if (previous[key] === undefined) delete root.dataset[key]; else root.dataset[key] = previous[key];
       }

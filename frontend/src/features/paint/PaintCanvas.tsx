@@ -162,6 +162,9 @@ function PaintCanvas({
   const frame = useRef<number | null>(null);
   const queuedPointer = useRef<React.PointerEvent | null>(null);
   const [zooming, setZooming] = useState(false);
+  const wheelFrame = useRef<number>();
+  const wheelChange = useRef<{factor:number;anchor:Pt} | null>(null);
+  useEffect(() => () => { if(wheelFrame.current!==undefined)cancelAnimationFrame(wheelFrame.current); clearTimeout(zoomTimer.current); }, []);
   const zoomTimer = useRef<ReturnType<typeof setTimeout>>();
   const activePointer = useRef<number | null>(null);
   const drafting = useRef(false); drafting.current = !!(draft || marquee);
@@ -312,7 +315,13 @@ function PaintCanvas({
   const onWheel = (e: React.WheelEvent) => {
     e.preventDefault();
     const factor = Math.exp(-e.deltaY * 0.0015);
-    zoomAt(factor, rotatePoint(clientToMM(e.clientX, e.clientY), W, H, viewRotation));
+    const anchor = rotatePoint(clientToMM(e.clientX, e.clientY), W, H, viewRotation);
+    wheelChange.current = {factor:factor*(wheelChange.current?.factor??1),anchor};
+    if(wheelFrame.current===undefined)wheelFrame.current=requestAnimationFrame(()=>{
+      wheelFrame.current=undefined;
+      const change=wheelChange.current;wheelChange.current=null;
+      if(change&&visibleRef.current)zoomAt(change.factor,change.anchor);
+    });
   };
 
   const onSvgDown = (e: React.PointerEvent) => {

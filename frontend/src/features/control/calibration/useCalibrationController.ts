@@ -47,9 +47,9 @@ export function useCalibrationController({ status, onAction, visible = true, pro
 
   const scope = JSON.stringify([projectId, profileId, status?.printer_id ?? status?.backend]);
   const fail = (error: unknown) => { if (!isAbortError(error)) toast.error(errorMessage(error)); };
-  const { pos, setPos, refreshPosition, jobs, refreshJobs, previewJob, setPreviewJob, preview } =
-    useCalibrationReadings({ visible, scope, onError: fail });
   const online = !!status?.online;
+  const { pos, setPos, refreshPosition, jobs, refreshJobs, previewJob, setPreviewJob, preview } =
+    useCalibrationReadings({ visible, scope, connected: online, onError: fail });
   const motionLocked = loading || isPrinterBusy(status);
   const homed = !!pos?.homed;
   const heightSaved = !!cal?.pen_calibrated;

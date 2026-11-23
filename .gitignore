@@ -52,3 +52,7 @@ packaging/flatpak/poppler-sha256.txt
 Thumbs.db
 *.swp
 *.swo
+
+# Private source screenshots and local documentation sessions
+media/.private-originals/
+.docs-demo/

@@ -42,6 +42,17 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.6.1" date="2026-11-23">
+      <description>
+        <p>Refined desktop workflows, connection diagnostics and documentation.</p>
+        <ul>
+          <li>System appearance, quick theme switching, compact task notifications and font workspace.</li>
+          <li>Guided pen insertion, profile outlines, faster zoom and improved STL controls.</li>
+          <li>Desktop MCP with a persistent local endpoint and mandatory access token.</li>
+          <li>New app icon, German screenshot gallery and downloadable v2 hardware models.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.6.0" date="2026-11-23">
       <description>
         <p>Redesigned editor with customizable workspaces, guided setup and tour,

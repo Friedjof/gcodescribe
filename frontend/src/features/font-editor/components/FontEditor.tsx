@@ -99,10 +99,11 @@ function eraseStrokeArea(strokes: Stroke[], center: StrokePoint, radius: number)
   return changed ? next : strokes;
 }
 
-export default function FontEditor({ visible }: { visible: boolean }) {
+export default function FontEditor({ visible,onDocumentChange }: { visible: boolean;onDocumentChange?:(id:string|null)=>void }) {
   const { t } = useI18n();
   const toast = useToasts();
   const font = useStrokeFont();
+  useEffect(()=>{onDocumentChange?.(font.current?.id??null);},[font.current?.id,onDocumentChange]);
   const editing = useGlyphEditing();
   const [listOpen, setListOpen] = useState(false);
   const [activeKey, setActiveKey] = useState("");
@@ -205,10 +206,10 @@ export default function FontEditor({ visible }: { visible: boolean }) {
   }, [tool]);
 
   useEffect(() => {
-    if (!visible || font.current) return;
+    if (!visible) return;
     font.refreshList().catch(fail);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, font.current?.id]);
+  }, [visible, font.refreshList]);
 
   const handleCreate = (label: string) => {
     withDiscardedGlyphChanges(() => {
@@ -559,6 +560,7 @@ export default function FontEditor({ visible }: { visible: boolean }) {
         busy={font.busy}
         onCreate={handleCreate}
         onOpenList={handleOpenList}
+        onCloseCurrent={()=>withDiscardedGlyphChanges(()=>{if(confirmDiscardFontChanges()){font.close();resetSession();}})}
       />
 
       {font.current ? (

@@ -3,12 +3,10 @@ import { useI18n } from "../../i18n";
 import type { WorkspaceId } from "../../interface/workspaces";
 import EditorMenu from "./EditorMenu";
 import InterfaceMenu from "./InterfaceMenu";
-import EditorIcon from "./EditorIcon";
 export default function ProgramMenus({
   onNavigate,
   onProjects,
   onNewPage,
-  onSettings,
   onCustomize,
   onHelp,
   aiEnabled,
@@ -17,7 +15,6 @@ export default function ProgramMenus({
   onNavigate: (id: WorkspaceId) => void;
   onProjects: () => void;
   onNewPage: () => void;
-  onSettings: () => void;
   onCustomize: () => void;
   onHelp: () => void;
   aiEnabled: boolean;
@@ -119,9 +116,7 @@ export default function ProgramMenus({
           },
         ]}
       />
-      <button type="button" className="app-menu-button app-settings-button" onClick={onSettings} title={t("settings.title")} aria-label={t("settings.title")}>
-        <EditorIcon name="settings" size={14} /><span className="app-settings-label">{t("settings.title")}</span>
-      </button>
+
     </>
   );
 }

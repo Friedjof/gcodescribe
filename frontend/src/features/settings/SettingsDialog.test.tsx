@@ -60,3 +60,16 @@ it("keeps non-printer drafts across sections", async () => {
  fireEvent.click(screen.getByRole("button", { name: "common.save" }));
  await waitFor(() => expect(mocks.patchSettings).toHaveBeenCalledWith({ "ai.model": "new-model" }));
 });
+
+it("keeps desktop settings focused on local features and removes Fonts everywhere", async()=>{
+ const {rerender}=render(<SettingsDialog desktop onClose={vi.fn()}/>);
+ await screen.findByText("Plotter links");
+ expect(screen.queryByRole("button",{name:"settings.section.server"})).toBeNull();
+ expect(screen.queryByRole("button",{name:"settings.section.auth"})).toBeNull();
+ expect(screen.queryByRole("button",{name:"settings.section.fonts"})).toBeNull();
+ expect(screen.getByRole("button",{name:"settings.section.mcp"})).toBeDefined();
+ rerender(<SettingsDialog onClose={vi.fn()}/>);
+ expect(screen.getByRole("button",{name:"settings.section.server"})).toBeDefined();
+ expect(screen.getByRole("button",{name:"settings.section.auth"})).toBeDefined();
+ expect(screen.queryByRole("button",{name:"settings.section.fonts"})).toBeNull();
+});

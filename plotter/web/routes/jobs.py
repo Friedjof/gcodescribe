@@ -22,7 +22,7 @@ from plotter.core.jobmeta import (
 )
 from plotter.core.storage import jobs_dir
 from plotter.gcode.pressure import job_uses_pressure
-from plotter.gcode.preview import parse_gcode, parse_gcode_3d
+from plotter.gcode.preview import parse_gcode, parse_gcode_3d, profile_outline
 from plotter.gcode.profile import TEST_PATTERNS, test_pattern
 from plotter.gcode.safety import GcodeSafetyChecker, SafetyViolation
 from plotter.web.deps import profile_service
@@ -236,7 +236,8 @@ def job_preview_3d(filename: str) -> dict:
         profile = _profiles_by_id().get(profile_id) if isinstance(profile_id, str) else None
         saved_cal = profile.get("calibration") if profile else None
     cal = Calibration.from_dict(saved_cal) if isinstance(saved_cal, dict) else _active()[0]
-    return {**parse_gcode_3d(path), "bed": [cal.bed_width, cal.bed_height]}
+    return {**parse_gcode_3d(path), "bed": [cal.bed_width, cal.bed_height],
+            "profileOutline": profile_outline(cal) if isinstance(saved_cal, dict) else None}
 
 
 @router.post("/testpattern/{name}")

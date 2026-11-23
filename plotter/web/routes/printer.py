@@ -90,6 +90,20 @@ def list_connections() -> list[dict]:
     return [public_connection(item) for item in connection_snapshot(printer_settings())]
 
 
+class PrinterCheckRequest(BaseModel):
+    probe: bool = False
+
+
+@router.post("/printer/connections/{printer_id}/test")
+def test_connection(printer_id: str, req: PrinterCheckRequest) -> dict:
+    from ...services.printer_checks import check_connection
+
+    try:
+        return check_connection(printer_id, probe=req.probe)
+    except KeyError:
+        raise HTTPException(404, "Drucker nicht gefunden.") from None
+
+
 @router.post("/printer/connections", status_code=201)
 def create_connection(req: ConnectionInput) -> dict:
     return _save_connection(req)
@@ -431,6 +445,7 @@ def move_to_position(req: PositionMoveRequest) -> dict:
 class PositionVisitRequest(BaseModel):
     kind: PositionKind
     lift_only: bool = False
+    insert_pen: bool = False
     projectId: str | None = None
     profileId: str | None = None
 
@@ -443,7 +458,8 @@ def _active_project_calibration(project_id: str, profile_id: str | None = None) 
 def home_and_move_to_position(req: PositionVisitRequest) -> dict:
     cal = project_calibration(req.projectId, req.profileId)
     return {"ok": True, "position": controller().home_and_move_to_position(
-        req.kind, cal=cal, lift_only=req.lift_only
+        req.kind, cal=cal, lift_only=req.lift_only,
+        **({"insert_pen": True} if req.insert_pen else {})
     )}
 
 

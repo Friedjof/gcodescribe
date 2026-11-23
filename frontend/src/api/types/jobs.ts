@@ -56,6 +56,7 @@ export interface GcodePreview {
 }
 
 export interface GcodePreview3D {
+  profileOutline?: {paper:number[][];plot:number[][]}|null;
   draws: number[][][]; // polylines of [x, y, z] mm where the pen draws
   travels: number[][][]; // pen-up moves incl. Z lifts
   bounds: [number, number, number, number, number, number] | null; // x,y,z min/max

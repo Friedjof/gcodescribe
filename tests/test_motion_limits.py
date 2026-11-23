@@ -206,6 +206,10 @@ class TestSendRevalidation:
         events = []
         with (
             patch.object(
+                op.OctoPrintClient, "status",
+                return_value={"configured": True, "online": True},
+            ),
+            patch.object(
                 op.OctoPrintClient,
                 "upload",
                 side_effect=lambda *_args, **_kwargs: events.append("upload") or {},

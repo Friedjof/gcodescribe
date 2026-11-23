@@ -75,9 +75,7 @@ class FakePrinterController:
         return self.position()
 
     def move_to(self, x, y, *, pen_up_first=True, limit="bed") -> dict:
-        self.__class__.moves.append(
-            {"x": x, "y": y, "pen_up_first": pen_up_first, "limit": limit}
-        )
+        self.__class__.moves.append({"x": x, "y": y, "pen_up_first": pen_up_first, "limit": limit})
         return {"x": x, "y": y, "z": 7.4, "homed": True, "homed_axes": ["x", "y", "z"]}
 
     def pen(self, down: bool) -> dict:
@@ -97,16 +95,16 @@ def test_mcp_disabled_returns_404(client):
     assert r.status_code == 404
 
 
-def test_mcp_unavailable_in_flatpak(workspace):
+def test_mcp_authenticated_in_flatpak(workspace):
     with patch.dict("os.environ", {"GCODESCRIBE_PACKAGING": "flatpak"}, clear=False):
-        c = TestClient(create_app())
+        c = TestClient(create_app(), client=("127.0.0.1", 50000))
         token = _enable_mcp(c)
         r = c.post(
             "/mcp",
             headers=_headers(token),
             json={"jsonrpc": "2.0", "id": 1, "method": "initialize"},
         )
-    assert r.status_code == 404
+    assert r.status_code == 200
 
 
 def test_mcp_missing_token_returns_401(client):
@@ -188,7 +186,7 @@ def test_mcp_notification_returns_no_content(client):
         headers=_headers(token),
         json={"jsonrpc": "2.0", "method": "notifications/initialized"},
     )
-    assert r.status_code == 204
+    assert r.status_code == 202
 
 
 def test_mcp_get_status_requires_valid_token(client):
@@ -530,11 +528,20 @@ def test_mcp_plot_existing_page(monkeypatch, client):
     assert FakePrinterController.homes == 1
 
 
-@pytest.mark.parametrize("tool_name", [
-    "plot_page", "create_page_and_plot_polylines", "add_polylines_to_page_and_plot",
-])
+@pytest.mark.parametrize(
+    "tool_name",
+    [
+        "plot_page",
+        "create_page_and_plot_polylines",
+        "add_polylines_to_page_and_plot",
+    ],
+)
 def test_mcp_page_plot_uses_current_project_for_gcode_snapshot_and_homing(
-    monkeypatch, client, cal, workspace, tool_name,
+    monkeypatch,
+    client,
+    cal,
+    workspace,
+    tool_name,
 ):
     from plotter.core.jobmeta import read_job_meta
     from plotter.gcode.preview import parse_gcode_3d
@@ -550,18 +557,39 @@ def test_mcp_page_plot_uses_current_project_for_gcode_snapshot_and_homing(
     original_snapshot = client.get(f"/api/pages/{page_id}").json()["profileSnapshot"]
     polylines = [[[15, 15], [40, 15]]]
     if tool_name == "plot_page":
-        client.put(f"/api/pages/{page_id}", json={"objects": [{
-            "id": "line", "type": "line", "cachedPolylines": polylines,
-            "transform": {"x": 0, "y": 0, "scale": 1, "rotation": 0},
-        }]})
+        client.put(
+            f"/api/pages/{page_id}",
+            json={
+                "objects": [
+                    {
+                        "id": "line",
+                        "type": "line",
+                        "cachedPolylines": polylines,
+                        "transform": {"x": 0, "y": 0, "scale": 1, "rotation": 0},
+                    }
+                ]
+            },
+        )
     profiles = ProfileService()
-    project_profile = profiles.update(index["project"]["profileId"], calibration={
-        "origin_x": 45, "plot_width": 140, "pen_down_z": 2.2, "pen_up_z": 9.4,
-    })
+    project_profile = profiles.update(
+        index["project"]["profileId"],
+        calibration={
+            "origin_x": 45,
+            "plot_width": 140,
+            "pen_down_z": 2.2,
+            "pen_up_z": 9.4,
+        },
+    )
     other = profiles.create("Globales Referenzprofil")
-    profiles.update(other["id"], calibration={
-        "origin_x": 5, "plot_width": 5, "pen_down_z": 3.3, "pen_up_z": 12.3,
-    })
+    profiles.update(
+        other["id"],
+        calibration={
+            "origin_x": 5,
+            "plot_width": 5,
+            "pen_down_z": 3.3,
+            "pen_up_z": 12.3,
+        },
+    )
     profiles.activate(other["id"])
 
     args = {"page_id": page_id} if tool_name == "plot_page" else {"polylines": polylines}
@@ -600,9 +628,13 @@ def test_mcp_page_svg_uses_current_project_dimensions(client, cal):
     index = client.get("/api/pages").json()
     page_id = index["activeId"]
     profiles = ProfileService()
-    profiles.update(index["project"]["profileId"], calibration={
-        "plot_width": 120, "plot_height": 95,
-    })
+    profiles.update(
+        index["project"]["profileId"],
+        calibration={
+            "plot_width": 120,
+            "plot_height": 95,
+        },
+    )
     other = profiles.create("Anderes Referenzprofil")
     profiles.update(other["id"], calibration={"plot_width": 7, "plot_height": 8})
     profiles.activate(other["id"])
@@ -612,11 +644,20 @@ def test_mcp_page_svg_uses_current_project_dimensions(client, cal):
     assert 'viewBox="0 0 120.000 95.000"' in data["svg"]
 
 
-@pytest.mark.parametrize("tool_name", [
-    "plot_page", "create_page_and_plot_polylines", "add_polylines_to_page_and_plot",
-])
+@pytest.mark.parametrize(
+    "tool_name",
+    [
+        "plot_page",
+        "create_page_and_plot_polylines",
+        "add_polylines_to_page_and_plot",
+    ],
+)
 def test_mcp_page_plot_bounds_follow_current_project_without_saving_or_uploading(
-    monkeypatch, client, cal, workspace, tool_name,
+    monkeypatch,
+    client,
+    cal,
+    workspace,
+    tool_name,
 ):
     from plotter.services.profiles import ProfileService
 
@@ -628,10 +669,19 @@ def test_mcp_page_plot_bounds_follow_current_project_without_saving_or_uploading
     page_id = index["activeId"]
     polylines = [[[15, 15], [40, 15]]]
     if tool_name == "plot_page":
-        client.put(f"/api/pages/{page_id}", json={"objects": [{
-            "id": "line", "type": "line", "cachedPolylines": polylines,
-            "transform": {"x": 0, "y": 0, "scale": 1, "rotation": 0},
-        }]})
+        client.put(
+            f"/api/pages/{page_id}",
+            json={
+                "objects": [
+                    {
+                        "id": "line",
+                        "type": "line",
+                        "cachedPolylines": polylines,
+                        "transform": {"x": 0, "y": 0, "scale": 1, "rotation": 0},
+                    }
+                ]
+            },
+        )
     before = client.get(f"/api/pages/{page_id}").json()
     profiles = ProfileService()
     profiles.update(index["project"]["profileId"], calibration={"plot_width": 30})
@@ -654,12 +704,22 @@ def test_mcp_page_plot_bounds_follow_current_project_without_saving_or_uploading
     assert FakePrinterController.homes == 0
 
 
-@pytest.mark.parametrize("tool_name", [
-    "plot_page", "create_page_and_plot_polylines", "add_polylines_to_page_and_plot",
-])
+@pytest.mark.parametrize(
+    "tool_name",
+    [
+        "plot_page",
+        "create_page_and_plot_polylines",
+        "add_polylines_to_page_and_plot",
+    ],
+)
 @pytest.mark.parametrize("change", ["project_bed", "project_changed_during_render"])
 def test_mcp_project_jobs_revalidate_before_any_homing_or_upload(
-    monkeypatch, client, cal, workspace, tool_name, change,
+    monkeypatch,
+    client,
+    cal,
+    workspace,
+    tool_name,
+    change,
 ):
     from plotter.gcode.scene import save_scene_job
     from plotter.services.profiles import ProfileService
@@ -673,15 +733,25 @@ def test_mcp_project_jobs_revalidate_before_any_homing_or_upload(
     project_profile_id = index["project"]["profileId"]
     polylines = [[[15, 15], [40, 15]]]
     if tool_name == "plot_page":
-        client.put(f"/api/pages/{page_id}", json={"objects": [{
-            "id": "line", "type": "line", "cachedPolylines": polylines,
-            "transform": {"x": 0, "y": 0, "scale": 1, "rotation": 0},
-        }]})
+        client.put(
+            f"/api/pages/{page_id}",
+            json={
+                "objects": [
+                    {
+                        "id": "line",
+                        "type": "line",
+                        "cachedPolylines": polylines,
+                        "transform": {"x": 0, "y": 0, "scale": 1, "rotation": 0},
+                    }
+                ]
+            },
+        )
     before = client.get(f"/api/pages/{page_id}").json()
     profiles = ProfileService()
     if change == "project_bed":
         profiles.update(project_profile_id, calibration={"bed_width": 45})
     else:
+
         def change_profile_after_render(*args, **kwargs):
             path = save_scene_job(*args, **kwargs)
             profiles.update(project_profile_id, calibration={"origin_x": 35})
@@ -923,3 +993,27 @@ def test_mcp_cannot_delete_manual_page_after_adding_mcp_content(monkeypatch, cli
     assert result["isError"] is True
     assert error["error"] == "not_mcp_created"
     assert client.get(f"/api/pages/{page_id}").status_code == 200
+
+
+@pytest.mark.parametrize(
+    "host,origin,token,expected",
+    [
+        ("127.0.0.1", None, None, 401),
+        ("127.0.0.1", None, "wrong", 401),
+        ("192.0.2.10", None, "mcp-test-token", 403),
+        ("127.0.0.1", "https://untrusted.example", "mcp-test-token", 403),
+    ],
+)
+def test_desktop_mcp_requires_local_client_and_token(
+    workspace, monkeypatch, host, origin, token, expected
+):
+    monkeypatch.setenv("GCODESCRIBE_PACKAGING", "flatpak")
+    c = TestClient(create_app(), client=(host, 50000))
+    _enable_mcp(c)
+    headers = {} if token is None else _headers(token)
+    if origin:
+        headers["Origin"] = origin
+    response = c.post(
+        "/mcp", headers=headers, json={"jsonrpc": "2.0", "id": 1, "method": "initialize"}
+    )
+    assert response.status_code == expected

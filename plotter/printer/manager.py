@@ -204,7 +204,7 @@ class PrinterManager:
                 meta = self._metadata.get(bid, {})
                 reachable = bool(status.get("online", False))
                 connection_state = ((status.get("connection") or {}).get("state") or "").lower()
-                disconnected = meta.get("transport") == OCTOPRINT and any(
+                disconnected = meta.get("transport", bid) == OCTOPRINT and any(
                     word in connection_state
                     for word in ("closed", "offline", "error", "connecting")
                 )
@@ -272,6 +272,13 @@ class PrinterManager:
             st: PrinterStatus = {**backend.status()}
             st["backend"] = self._metadata.get(backend_id, {}).get("transport", backend_id)
             st["printer_id"] = backend_id
+            # Reaching OctoPrint does not mean its physical printer is connected.
+            # Use the same readiness as the selector, before enabling motion.
+            state = ((st.get("connection") or {}).get("state") or "").lower()
+            if st["backend"] == OCTOPRINT and any(
+                word in state for word in ("closed", "offline", "error", "connecting")
+            ):
+                st["online"] = False
             return st
 
     def upload(self, gcode_path: Path, *, start: bool = False) -> dict:

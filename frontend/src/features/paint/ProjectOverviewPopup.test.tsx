@@ -13,7 +13,14 @@ const calls = vi.hoisted(() => ({ listProjects: vi.fn(), listProfiles: vi.fn(), 
   getProfile: vi.fn(), saveProfile: vi.fn(), updateProject: vi.fn(), createProject: vi.fn() }));
 vi.mock("../../api/events", () => ({ onAppEvent: () => () => {} }));
 vi.mock("../../api", () => ({ api: calls }));
-vi.mock("../../i18n", () => ({ useI18n: () => ({ t: (key: string) => key }) }));
+vi.mock("../../i18n", async () => {
+ const de=(await import("../../i18n/de")).default;
+ return {useI18n:()=>({t:(key:string,vars:Record<string,string|number>={})=>{
+  let value=key.startsWith("paging.")?key:de[key]??key;
+  for(const [name,item] of Object.entries(vars))value=value.split(`{${name}}`).join(String(item));
+  return value;
+ }})};
+});
 afterEach(cleanup);
 
 beforeEach(() => {

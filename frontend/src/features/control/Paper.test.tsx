@@ -105,7 +105,11 @@ async function setup(status = { online: true }) {
   const onAction = vi.fn();
   const view = render(<Paper status={{ configured: true, ...status }} onAction={onAction} />);
   await screen.findByRole("button", { name: /paper.positions.title/ });
-  await waitFor(() => expect(screen.getByRole("button", { name: "paper.clickMove" })).toBeEnabled());
+  await waitFor(() => {
+    const toggle = screen.getByRole("button", { name: "paper.clickMove" });
+    if (status.online === false) expect(toggle).toBeDisabled();
+    else expect(toggle).toBeEnabled();
+  });
   const svg = view.container.querySelector("svg")!;
   Object.defineProperty(svg, "createSVGPoint", { value: () => ({
     x: 0, y: 0, matrixTransform() { return { x: this.x, y: this.y }; },

@@ -106,3 +106,25 @@ it.each(["offline","backend","busy"])("rechecks printer readiness after generati
   await act(async()=>generation.resolve({filename:"ready.gcode"} as Awaited<ReturnType<typeof api.pageGcode>>));
   expect(send).not.toHaveBeenCalled();expect(hook.result.current.plotError).toBe("paint.printerUnavailable");
 });
+
+it("requires confirmation, suppresses double submissions and does not show insertion instructions after failure",async()=>{
+ const move=vi.spyOn(api,"homeAndMoveToPosition").mockRejectedValueOnce(new Error("Movement rejected"));
+ const h=setup();
+ act(()=>h.result.current.moveToCalibration());
+ expect(h.result.current.insertion).toBe("confirm");expect(move).not.toHaveBeenCalled();
+ await act(async()=>{await h.result.current.confirmInsertionMove();});
+ expect(h.result.current.insertion).toBe("confirm");expect(h.result.current.insertionError).toBe("Movement rejected");
+ const moving=deferred<Awaited<ReturnType<typeof api.homeAndMoveToPosition>>>();move.mockReturnValue(moving.promise);
+ act(()=>{void h.result.current.confirmInsertionMove();void h.result.current.confirmInsertionMove();});
+ expect(move).toHaveBeenCalledTimes(2);expect(h.result.current.insertion).toBe("moving");
+ await act(async()=>moving.resolve({} as Awaited<ReturnType<typeof api.homeAndMoveToPosition>>));
+ expect(h.result.current.insertion).toBe("insert");
+ expect(move).toHaveBeenLastCalledWith("calibration","project",false,true);
+});
+it("retires pen insertion after switching printers during the move",async()=>{
+ const moving=deferred<Awaited<ReturnType<typeof api.homeAndMoveToPosition>>>();vi.spyOn(api,"homeAndMoveToPosition").mockReturnValue(moving.promise);
+ const h=setup();act(()=>h.result.current.moveToCalibration());act(()=>{void h.result.current.confirmInsertionMove();});
+ h.rerender({current:h.initialPage,visible:true,currentProfile:profile,currentStatus:{online:true,configured:true,printer_id:"another"}});
+ await act(async()=>moving.resolve({} as Awaited<ReturnType<typeof api.homeAndMoveToPosition>>));
+ expect(h.result.current.insertion).toBeNull();
+});

@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   open: vi.fn(),
   save: vi.fn(),
+  close:vi.fn(),
   remove: vi.fn(),
   updateCurrent: vi.fn(),
 }));
@@ -44,11 +45,13 @@ vi.mock("../hooks/useStrokeFont", () => ({
       createdAt: "2026-01-01T00:00:00Z",
       updatedAt: "2026-01-01T00:00:00Z",
     },
+    refreshList: () => Promise.resolve(),
     dirty: false,
     busy: false,
     create: mocks.create,
     open: mocks.open,
     save: mocks.save,
+    close:mocks.close,
     remove: mocks.remove,
     updateCurrent: mocks.updateCurrent,
   }),
@@ -166,6 +169,17 @@ describe("FontEditor keyboard shortcuts", () => {
     fireEvent.click(screen.getByRole("button", { name: /discard changes/i }));
 
     expect(mocks.load).toHaveBeenCalledWith([]);
+  });
+
+  it("protects unsaved glyphs when closing a font for library management",()=>{
+    renderEditor();
+    fireEvent.click(screen.getByRole("button",{name:/close font/i}));
+    expect(mocks.close).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button",{name:/keep editing/i}));
+    expect(mocks.close).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button",{name:/close font/i}));
+    fireEvent.click(screen.getByRole("button",{name:/discard changes/i}));
+    expect(mocks.close).toHaveBeenCalledOnce();
   });
 
   it("does not render a global font save button", () => {

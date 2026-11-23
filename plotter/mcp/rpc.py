@@ -4,8 +4,8 @@ tool-call envelope."""
 from __future__ import annotations
 
 import json
-import os
 import secrets
+from importlib.metadata import version
 from typing import Any
 
 from fastapi import HTTPException
@@ -26,9 +26,6 @@ def _settings():
 
 
 def require_mcp_enabled(authorization: str | None) -> None:
-    if os.environ.get("GCODESCRIBE_PACKAGING", "").lower() == "flatpak":
-        raise HTTPException(status_code=404, detail="MCP is not available in desktop mode.")
-
     cfg = _settings().mcp
     if not cfg.enabled:
         raise HTTPException(status_code=404, detail="MCP is disabled.")
@@ -56,7 +53,7 @@ def _initialize_result() -> dict:
     return {
         "protocolVersion": MCP_PROTOCOL_VERSION,
         "capabilities": {"tools": {}},
-        "serverInfo": {"name": "gcodescribe", "version": "0.4.0"},
+        "serverInfo": {"name": "gcodescribe", "version": version("gcodescribe")},
     }
 
 
@@ -104,6 +101,8 @@ def handle_message(message: dict) -> dict | None:
         return None
     if method == "initialize":
         return _result(request_id, _initialize_result())
+    if method == "ping":
+        return _result(request_id, {})
     if method == "tools/list":
         return _result(request_id, {"tools": TOOLS})
     if method == "tools/call":

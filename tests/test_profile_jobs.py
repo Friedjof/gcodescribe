@@ -48,12 +48,14 @@ class TestSidecars:
         sidecar = job_meta_path(workspace / "jobs" / filename)
         meta = json.loads(sidecar.read_text())
         meta["calibrationSnapshot"] = {
-            "calibration": {**cal.as_dict(), "bed_width": 321, "bed_height": 287},
+            "calibration": {**cal.as_dict(), "bed_width": 321, "bed_height": 287, "origin_x": 42},
         }
         sidecar.write_text(json.dumps(meta))
         preview = client.get(f"/api/jobs/{filename}/preview3d")
         assert preview.status_code == 200
         assert preview.json()["bed"] == [321, 287]
+        assert preview.json()["profileOutline"]["plot"][0] == [42, cal.origin_y, 0]
+        assert preview.json()["profileOutline"]["paper"][0] == [20, 30, 0]
 
     def test_rename_moves_sidecar(self, client, workspace):
         filename = _make_job(client)

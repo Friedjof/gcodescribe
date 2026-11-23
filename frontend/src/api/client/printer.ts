@@ -2,9 +2,12 @@ import { targetBody, type CalibrationTarget } from "../calibrationTarget";
 import { req } from "./req";
 import type { Position, SerialPortCandidate } from "../types/jobs";
 import type { PositionKind } from "../types/calibration";
-import type { PrinterStatus, PrinterBackendId, PrinterBackendInfo, OctoPrintCheckResult, PrinterConnection, PrinterConnectionInput } from "../types/printer";
+import type { PrinterStatus, PrinterBackendId, PrinterBackendInfo, OctoPrintCheckResult, PrinterConnection, PrinterConnectionInput, PrinterCheckResult } from "../types/printer";
 
 export const printerClient = {
+  testPrinterConnection: (id: string, probe = false) => req<PrinterCheckResult>(`/api/printer/connections/${encodeURIComponent(id)}/test`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ probe }),
+  }),
   printerConnections: () => req<PrinterConnection[]>("/api/printer/connections"),
   savePrinterConnection: (data: PrinterConnectionInput, id?: string) =>
     req<PrinterConnection>(`/api/printer/connections${id ? `/${encodeURIComponent(id)}` : ""}`, {
@@ -93,11 +96,11 @@ export const printerClient = {
     req<{ ok: boolean; position: Position }>("/api/printer/move-to-calibration", {
       method: "POST",
     }),
-  homeAndMoveToPosition: (kind: PositionKind, projectId?: CalibrationTarget, liftOnly = false) =>
+  homeAndMoveToPosition: (kind: PositionKind, projectId?: CalibrationTarget, liftOnly = false, insertPen = false) =>
     req<{ ok: boolean; position: Position }>("/api/printer/home-and-move-to-position", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ kind, lift_only: liftOnly, ...targetBody(projectId) }),
+      body: JSON.stringify({ kind, lift_only: liftOnly, ...(insertPen ? {insert_pen:true}:{}), ...targetBody(projectId) }),
     }),
   calibrationHeight: (profileId: string, offset: number, projectId?: string) =>
     req<{ ok: boolean; position: Position }>("/api/printer/calibration-height", {

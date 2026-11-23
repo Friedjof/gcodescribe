@@ -1,4 +1,5 @@
 import { DEFAULT_VISIBLE, WORKSPACE_IDS, isWorkspaceId, type WorkspaceId } from "./workspaces";
+import { isDesktop } from "./desktop";
 
 export type ThemePreference = "light" | "dark" | "system";
 export type InterfaceDensity = "comfortable" | "compact";
@@ -20,7 +21,7 @@ const number = (value: unknown, fallback: number, min: number, max: number) => t
 const boolean = (value: unknown, fallback: boolean) => typeof value === "boolean" ? value : fallback;
 const ids = (value: unknown, fallback: readonly WorkspaceId[]) => Array.isArray(value) ? [...new Set(value.map(id => id === "start" ? "paper" : id).filter(isWorkspaceId))] : [...fallback];
 export function defaultInterfacePreferences(): InterfacePreferences {
-  return { version: 1, theme: "light", density: "compact", experience: "guided", workspaceOrder: WORKSPACE_IDS.filter(id => id !== "start"),
+  return { version: 1, theme: isDesktop() ? "system" : "light", density: "compact", experience: "guided", workspaceOrder: WORKSPACE_IDS.filter(id => id !== "start"),
     visibleWorkspaces: [...DEFAULT_VISIBLE], pagesPanel: { open: true, width: 220 }, propertiesPanel: { open: false, width: 260 },
     canvas: { rulers: true, gridVisible: false, padding: 32 } };
 }

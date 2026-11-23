@@ -4,7 +4,7 @@ import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import PrintersPanel from "./PrintersPanel";
 
-const mocks = vi.hoisted(() => ({ printerConnections: vi.fn(), listSerialPorts: vi.fn(), savePrinterConnection: vi.fn(), deletePrinterConnection: vi.fn() }));
+const mocks = vi.hoisted(() => ({ printerConnections: vi.fn(), listSerialPorts: vi.fn(), savePrinterConnection: vi.fn(), testPrinterConnection:vi.fn(), deletePrinterConnection: vi.fn() }));
 vi.mock("../../api", () => ({ api: mocks }));
 vi.mock("../../i18n", () => ({ useI18n: () => ({ t: (key: string) => key }) }));
 const left = { id: "left", name: "Plotter links", transport: "serial", serial_port: "/dev/left", serial_baud: 115200, octoprint_api_key_configured: false };
@@ -62,4 +62,19 @@ it("reports server validation failures without discarding the entered connection
   fireEvent.click(screen.getByRole("button", { name: "common.save" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("Anschluss bereits vergeben");
   expect(screen.getByLabelText("printers.name")).toHaveValue("Dritter");
+});
+
+it("tests each saved printer without selecting or saving it, and confirms an active USB probe",async()=>{
+ mocks.testPrinterConnection.mockResolvedValue({id:"left",ok:false,canProbe:true,steps:[{key:"port",state:"ok",message:"Port found"},{key:"device",state:"skipped",message:"Not probed"}]});
+ const changed=vi.fn();render(<PrintersPanel status={status} onChanged={changed}/>);
+ const row=(await screen.findByText("Plotter links")).closest("li")!;
+ fireEvent.click(within(row).getByRole("button",{name:"printers.test"}));
+ await screen.findByText("Port found");
+ expect(mocks.testPrinterConnection).toHaveBeenCalledWith("left",false);
+ fireEvent.click(within(row).getByRole("button",{name:"printers.probe"}));
+ expect(screen.getByText("printers.probeHint")).toBeDefined();
+ expect(mocks.testPrinterConnection).toHaveBeenCalledTimes(1);
+ fireEvent.click(within(row).getAllByRole("button",{name:"printers.probe"})[1]);
+ await waitFor(()=>expect(mocks.testPrinterConnection).toHaveBeenCalledWith("left",true));
+ expect(changed).not.toHaveBeenCalled();expect(mocks.savePrinterConnection).not.toHaveBeenCalled();
 });

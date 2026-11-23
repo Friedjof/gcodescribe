@@ -1,4 +1,3 @@
-import PagedControls from "../../components/paging/PagedControls";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Calibration, PageColoring } from "../../api";
 import { useI18n } from "../../i18n";
@@ -21,7 +20,7 @@ import {
   type StlParams,
 } from "./lib";
 import Modal from "../../components/Modal";
-import StlView3D from "../../components/StlView3D";
+import StlView3D, { type StlControlMode } from "../../components/StlView3D";
 import { useToasts } from "../../components/Toasts";
 
 const MAX_STL_MB = 20;
@@ -66,6 +65,7 @@ export default function StlEditor({
   const { t } = useI18n();
   const toast = useToasts();
 
+  const [controlMode,setControlMode]=useState<StlControlMode>(()=>{try{const mode=localStorage.getItem("gcs.stl.controls");return mode==="trackball"||mode==="cad"?mode:"orbit";}catch{return "orbit";}});
   const [mesh, setMesh] = useState<Mesh | null>(null);
   const [model, setModel] = useState<EdgeModel | null>(null);
   const [fileName, setFileName] = useState(initialName ?? "model.stl");
@@ -145,7 +145,7 @@ export default function StlEditor({
 
   const applyPreset = (name: keyof typeof PRESETS) => {
     const [az, el] = PRESETS[name];
-    set({ azimuth: az, elevation: el });
+    set({ azimuth: az, elevation: el, roll:0 });
     setOrientToken((n) => n + 1);
   };
 
@@ -154,7 +154,7 @@ export default function StlEditor({
     setOrientToken((n) => n + 1);
   };
 
-  const resetView = () => setResetToken((n) => n + 1);
+  const resetView = () => {applyPreset("iso");setResetToken((n) => n + 1);};
 
   // ---- outputs ------------------------------------------------------------
   const template = useMemo<TemplateSpec | null>(() => {
@@ -226,7 +226,9 @@ export default function StlEditor({
                 <input ref={fileInputRef} type="file" accept=".stl" hidden onChange={(e) => pickFile(e.target.files?.[0])} />
               </div>
 
-              <PagedControls size={5}>
+              <label className="stl-field"><span>{t("stl.controlMode")}</span><select value={controlMode} onChange={e=>{const mode=e.target.value as StlControlMode;setControlMode(mode);try{localStorage.setItem("gcs.stl.controls",mode);}catch{}}}>
+                <option value="orbit">{t("stl.mode.orbit")}</option><option value="trackball">{t("stl.mode.trackball")}</option><option value="cad">CAD</option>
+              </select></label>
               <div className="stl-presets">
                 {(["front", "back", "left", "right", "top", "iso"] as const).map((p) => (
                   <button key={p} type="button" className="ghost" onClick={() => applyPreset(p)}>
@@ -331,7 +333,7 @@ export default function StlEditor({
                   <ColorPicker value={params.colorHidden} onChange={(c) => set({ colorHidden: c })} />
                 </label>
               )}
-              </PagedControls>
+
             </div>
           )}
         </section>
@@ -343,6 +345,8 @@ export default function StlEditor({
               model={model}
               azimuth={params.azimuth}
               elevation={params.elevation}
+              roll={params.roll??0}
+              controlMode={controlMode}
               fov={params.fov}
               up={params.up}
               distanceFactor={params.distanceFactor}
@@ -353,7 +357,7 @@ export default function StlEditor({
               showBox={params.dimStyle !== "none"}
               orientToken={orientToken}
               resetToken={resetToken}
-              onOrient={(azimuth, elevation) => set({ azimuth, elevation })}
+              onOrient={(azimuth, elevation,roll) => set({ azimuth, elevation,roll })}
             />
           ) : (
             <div className="stl-view-3d">

@@ -24,17 +24,23 @@ def machine(workspace, cal):
     return PrinterController(client=client, tracker=tracker)
 
 
-@pytest.mark.parametrize("diagonal,points", [
-    ("bl-tr", [("bl", 20, 30), ("tr", 180, 190)]),
-    ("tl-br", [("tl", 20, 190), ("br", 180, 30)]),
-])
+@pytest.mark.parametrize(
+    "diagonal,points",
+    [
+        ("bl-tr", [("bl", 20, 30), ("tr", 180, 190)]),
+        ("tl-br", [("tl", 20, 190), ("br", 180, 30)]),
+    ],
+)
 def test_capture_diagonal_completes_rectangle_and_preserves_provenance(machine, diagonal, points):
     paper = PaperService(machine.tracker)
     for corner, x, y in points:
         machine.tracker.set_axes(x=x, y=y)
         result = paper.capture(corner, mode="diagonal", diagonal=diagonal)
     assert result["calibration"]["paper_corners"] == {
-        "bl": [20, 30], "br": [180, 30], "tr": [180, 190], "tl": [20, 190],
+        "bl": [20, 30],
+        "br": [180, 30],
+        "tr": [180, 190],
+        "tl": [20, 190],
     }
     assert Calibration.load().paper_diagonal == diagonal
     restored = calibration_from_xml(calibration_to_xml(Calibration.load()))
@@ -105,9 +111,16 @@ def test_precalibration_positioning_never_lowers_the_head(machine, cal):
 def test_dot_is_a_single_batch_without_xy_motion_and_finishes_raised(machine, cal):
     cal.pen_calibrated = True
     result = machine.test_dot(cal=cal)
-    machine.client.gcode.assert_called_once_with([
-        "G90", "M203 Z60", "G1 Z1.400 F1602", "G4 P100", "G0 Z7.400 F1602", "M400",
-    ])
+    machine.client.gcode.assert_called_once_with(
+        [
+            "G90",
+            "M203 Z60",
+            "G1 Z1.400 F1602",
+            "G4 P100",
+            "G0 Z7.400 F1602",
+            "M400",
+        ]
+    )
     assert (result["x"], result["y"], result["z"]) == (30, 40, 7.4)
 
 
@@ -139,11 +152,16 @@ def test_new_motion_requests_keep_archived_profile_guards(machine, monkeypatch):
     profiles.archive(inactive["id"])
     client = TestClient(app)
     for path, payload in [
-        ("test-dot", {}), ("move-to-position", {"kind": "calibration", "lift_only": True}),
+        ("test-dot", {}),
+        ("move-to-position", {"kind": "calibration", "lift_only": True}),
     ]:
-        response = client.post(f"/api/printer/{path}", json={
-            **payload, "profileId": inactive["id"],
-        })
+        response = client.post(
+            f"/api/printer/{path}",
+            json={
+                **payload,
+                "profileId": inactive["id"],
+            },
+        )
         assert response.status_code == 409
     machine.client.gcode.assert_not_called()
 
@@ -154,8 +172,10 @@ def test_corner_pattern_marks_front_left_back_left_back_right_front_right(cal):
     cal.park_after_plot = False
     lines = [line for line in pattern("corners", cal).splitlines() if not line.startswith(";")]
     assert [line for line in lines if line.startswith("G0 X")] == [
-        "G0 X25.000 Y35.000 F6000", "G0 X25.000 Y195.000 F6000",
-        "G0 X185.000 Y195.000 F6000", "G0 X185.000 Y35.000 F6000",
+        "G0 X25.000 Y35.000 F6000",
+        "G0 X25.000 Y195.000 F6000",
+        "G0 X185.000 Y195.000 F6000",
+        "G0 X185.000 Y35.000 F6000",
     ]
     assert not any(line.startswith("G1 X") for line in lines)
     assert lines.count("G1 Z1.400 F1602") == 4
@@ -176,7 +196,10 @@ def test_corner_pattern_refuses_a_contact_point_inside_a_clamp(cal):
 def test_paper_default_raises_without_ever_lowering_a_higher_head(machine, cal):
     machine.raise_pen(cal=cal)
     assert machine.client.gcode.call_args.args[0] == [
-        "G90", "M203 Z60", "G0 Z20.000 F1602", "M400",
+        "G90",
+        "M203 Z60",
+        "G0 Z20.000 F1602",
+        "M400",
     ]
     machine.tracker.set_axes(z=cal.pen_down_z)
     assert machine.raise_pen(cal=cal)["z"] == cal.pen_up_z
@@ -192,4 +215,22 @@ def test_paper_xy_jog_lifts_before_travelling(machine, cal):
     machine.client.gcode.reset_mock()
     with pytest.raises(NotHomedError):
         machine.jog(10, 0, 0, cal=cal, pen_up_first=True)
+    machine.client.gcode.assert_not_called()
+
+
+@pytest.mark.parametrize("offset", [-2, 0, 1.5])
+def test_pen_insertion_uses_project_offset_and_keeps_plotting_heights(machine, cal, offset):
+    cal.calibration_pressure_offset = offset
+    before = cal.as_dict()
+    result = machine.home_and_move_to_position("calibration", cal=cal, insert_pen=True)
+    assert result["z"] == max(0, cal.pen_down_z + offset)
+    commands = [c for call in machine.client.gcode.call_args_list for c in call.args[0]]
+    assert commands[-1].startswith(f"G1 Z{max(0, cal.pen_down_z + offset):.3f}")
+    assert cal.as_dict() == before
+
+
+def test_bad_insertion_offset_never_starts_homing(machine, cal):
+    cal.calibration_pressure_offset = 4
+    with pytest.raises(ServiceError, match="Versatz"):
+        machine.home_and_move_to_position("calibration", cal=cal, insert_pen=True)
     machine.client.gcode.assert_not_called()

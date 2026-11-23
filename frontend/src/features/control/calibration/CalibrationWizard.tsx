@@ -57,10 +57,20 @@ export default function CalibrationWizard({
   const tour = useAppTour();
   const previousStep = useRef(active);
   const requested = tour?.step?.calibration;
-  const requestedLocked = steps.find(step => step.id === requested)?.locked;
+  const requestKey = requested ? `${tour?.step?.id}:${tour?.request}` : null;
+  const handledRequest = useRef<string | null>(null);
+  const activeLocked = !!steps.find(step => step.id === active)?.locked;
   useEffect(() => {
-    if (guided && requested && !requestedLocked && !positions.busy && !busy) setActive(requested);
-  }, [tour?.request, tour?.step?.id, requestedLocked, positions.busy, busy, guided]);
+    if (positions.busy || busy) return;
+    if (guided && requested) {
+      if (handledRequest.current === requestKey) return;
+      handledRequest.current = requestKey;
+      setActive(requested);
+    } else {
+      handledRequest.current = null;
+      if (activeLocked) setActive("home");
+    }
+  }, [requestKey, positions.busy, busy, guided, activeLocked, requested, setActive]);
   useEffect(() => {
     if (active !== previousStep.current) { previousStep.current = active; tour?.followCalibration(active); }
   }, [active]);
@@ -125,7 +135,8 @@ export default function CalibrationWizard({
       </nav>
       <section className="calibration-current-step">
         <h3>{t(current.titleKey)}</h3>
-        {!current.locked && <GuidedCalibrationStep key={`${current.id}:${controls.profileId}`} id={current.id} controls={controls} />}
+        {requested && !controls.online && <p className="calibration-task-note" role="status">{t("tour.offlinePreview")}</p>}
+        {(!current.locked || requested === current.id) && <GuidedCalibrationStep key={`${current.id}:${controls.profileId}`} id={current.id} controls={controls} />}
       </section>
       <div className="calibration-optional-tools">
         <EditorMenu

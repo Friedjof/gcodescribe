@@ -189,7 +189,7 @@ export default function SetupGuide({
               <section className="setup-step-content setup-calibration-entry">
                 <h2>{t("profiles.setupCalibrationTitle")}</h2>
                 <p className="setup-lead">{t("profiles.setupCalibrationHint")}</p>
-                <div className="setup-existing"><div><strong>{profile.name}</strong><span>{profile.calibration.bed_width} × {profile.calibration.bed_height} mm · {t(calibrationReady(profile) ? "profiles.penOk" : "profiles.penMissing")}</span></div>
+                <div className="setup-existing"><div><strong>{profile.name}</strong><span>{profile.calibration.bed_width} × {profile.calibration.bed_height}  mm · {t(calibrationReady(profile) ? "profiles.penOk" : "profiles.penMissing")}</span></div>
                   <button className="primary" disabled={!visible} onClick={() => onCalibrate ? onCalibrate(profile.id) : onNavigate("calibrate")}><EditorIcon name="preview" size={16}/>{t("profiles.openVisual")}</button>
                 </div>
               </section>

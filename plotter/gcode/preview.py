@@ -155,3 +155,23 @@ def parse_gcode_3d_text(text: str, max_points: int = 150000) -> dict:
         "bounds": bounds,
         "truncated": truncated,
     }
+
+
+def profile_outline(cal) -> dict:
+    """Printer-space outlines from the same calibration used for this preview."""
+    x, y, w, h = cal.origin_x, cal.origin_y, cal.plot_width, cal.plot_height
+    plot = [[x, y, 0], [x + w, y, 0], [x + w, y + h, 0], [x, y + h, 0], [x, y, 0]]
+    corners = cal.paper_corners
+    paper = []
+    if all(key in corners for key in ("bl", "br", "tr", "tl")):
+        paper = [[*corners[key], 0] for key in ("bl", "br", "tr", "tl", "bl")]
+    elif cal.paper_rect():
+        px, py, pw, ph = cal.paper_rect()
+        paper = [
+            [px, py, 0],
+            [px + pw, py, 0],
+            [px + pw, py + ph, 0],
+            [px, py + ph, 0],
+            [px, py, 0],
+        ]
+    return {"plot": plot, "paper": paper}

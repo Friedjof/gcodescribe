@@ -1,0 +1,5 @@
+# Preserve exported CAD and print files byte for byte.
+*.step binary
+*.stp binary
+*.stl binary
+*.f3d binary

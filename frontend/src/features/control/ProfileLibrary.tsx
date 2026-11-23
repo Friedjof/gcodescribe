@@ -14,7 +14,7 @@ export default function ProfileLibrary({ profiles, selectedId, onSelect, project
       {paging.items.map((p) => <div key={p.id} className={`profile-item${p.id === selectedId ? " selected" : ""}${p.id === projectProfileId ? " active" : ""}${p.archived ? " archived" : ""}`}>
         <button type="button" className="profile-select" disabled={disabled} aria-pressed={p.id === selectedId} onClick={() => onSelect(p.id)}>
           <div className="profile-item-head"><strong title={p.name}>{p.name}</strong>{p.id === projectProfileId && <span className="pbadge pbadge-active">{t("profiles.projectBadge")}</span>}{p.archived && <span className="pbadge pbadge-muted">{t("profiles.archivedBadge")}</span>}</div>
-          <div className="profile-item-info">{p.plot_width.toFixed(0)} × {p.plot_height.toFixed(0)} mm · @{p.origin_x.toFixed(0)}/{p.origin_y.toFixed(0)}</div>
+          <div className="profile-item-info">{p.plot_width.toFixed(0)} × {p.plot_height.toFixed(0)}  mm · @{p.origin_x.toFixed(0)}/{p.origin_y.toFixed(0)}</div>
           <span title={t(p.pen_calibrated ? "profiles.penOk" : "profiles.penMissing")} className={`profile-pen-status ${p.pen_calibrated ? "pen-ok" : "pen-missing"}`}>{t(p.pen_calibrated ? "profiles.penOk" : "profiles.penMissing")}</span>
         </button>
       </div>)}

@@ -75,6 +75,25 @@ def test_manager_is_printer_backend():
     assert isinstance(mgr, PrinterBackend)
 
 
+@pytest.mark.parametrize("named", [False, True])
+@pytest.mark.parametrize("state, expected", [
+    ("Closed", False), ("Offline", False), ("Error", False),
+    ("Connecting", False), ("Operational", True),
+])
+def test_octoprint_server_reachability_does_not_enable_disconnected_printer(named, state, expected):
+    backend = FakeBackend()
+    backend.status = lambda: {
+        "configured": True, "online": True, "connection": {"state": state},
+    }
+    bid = "named-printer" if named else OCTOPRINT
+    manager = PrinterManager(
+        {bid: backend}, bid,
+        metadata={bid: {"transport": OCTOPRINT}} if named else None,
+    )
+    assert manager.status()["online"] is expected
+    assert manager.backends()[0]["online"] is expected
+
+
 def test_delegates_to_active(workspace):
     mgr, octo, ser = _manager(active=OCTOPRINT)
     mgr.home(["x"])

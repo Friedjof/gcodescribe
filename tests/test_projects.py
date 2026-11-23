@@ -109,6 +109,8 @@ def test_project_can_link_existing_profile_without_copying_or_changing_slides(wo
     assert updated_index["activeProfile"]["id"] == target["id"]
     assert updated_index["activeProfile"]["fingerprint"] == target["fingerprint"]
     after = client.post(f"/api/pages/{page_id}/preview3d", json={}).json()
+    assert before["profileOutline"]["plot"][0] == [25,35,0]
+    assert after["profileOutline"]["plot"][0] == [45,35,0]
     before_points = [point for line in before["draws"] for point in line]
     after_points = [point for line in after["draws"] for point in line]
     assert len(after_points) == len(before_points) > 0

@@ -58,7 +58,7 @@ export default function GlyphSidebar({
                 onClick={() => onSelect(glyph.key)}
               >
                 <span className="fe-glyph-key">{glyph.label || glyph.key}</span>
-                <span className="muted fe-glyph-type">{glyph.type}</span>
+                <span className="muted fe-glyph-type">{t(`fontEditor.glyphType.${glyph.type}`)}</span>
               </button>
             </li>
           ))}

@@ -227,3 +227,44 @@ section.project-settings-section {
   border-radius: 6px;
   background: var(--panel-2);
 }
+/* Desktop controls behave like native widgets; editable/copy fields retain selection. */
+html[data-desktop="true"] { -webkit-user-select: none; user-select: none; }
+html[data-desktop="true"] input, html[data-desktop="true"] textarea,
+html[data-desktop="true"] [contenteditable="true"] { -webkit-user-select: text; user-select: text; }
+.header-actions .app-settings-button { display: inline-flex; align-items: center; gap: 4px; }
+.header-actions .theme-toggle { width: 27px; min-width: 27px; height: 26px; padding: 4px; border-radius: 3px; }
+.font-workspace { height: 100%; min-height: 0; display: flex; flex-direction: column; }
+.font-workspace-tabs { display: flex; gap: 5px; padding: 5px 10px; background: var(--panel); border-bottom: 1px solid var(--border); }
+.font-workspace-tabs button { background: transparent; border: 0; border-radius: 3px; font-size: 12px; min-height: 27px; padding: 4px 10px; }
+.font-workspace-tabs button[aria-pressed="true"] { background: var(--active-bg); color: var(--accent); }
+.font-workspace-content { flex: 1; min-height: 0; }
+.font-workspace-content[hidden] { display: none; }
+.font-library { flex: 1; min-height: 0; overflow: auto; padding: 14px; }
+.font-library .settings-section { max-width: 1000px; margin: auto; height: 100%; display: flex; flex-direction: column; }
+.font-library .settings-font-library { flex: 1; min-height: 180px; display: flex; flex-direction: column; }
+.font-library .settings-font-viewport { flex: 1; min-height: 0; overflow: hidden; }
+.codex-device-code { width: 170px; letter-spacing: 2px; font-size: 20px; }
+.settings-mcp-config { width: 100%; min-height: 100px; font-family: monospace; resize: vertical; }
+.tasks-toggle-row { display: flex; align-items: center; }
+.tasks-toggle-row .tasks-toggle { flex: 1; }
+.tasks-minimize { padding: 4px; margin-right: 4px; min-height: 23px; }
+.app .background-tasks.tasks-mini { right: 6px; bottom: 3px; border: 0; box-shadow: none; border-radius: 3px; }
+.tasks-mini .tasks-toggle { position: relative; width: 32px; height: 25px; min-height: 25px; padding: 4px; justify-content: center; }
+.tasks-counter { position: absolute; right: -2px; top: -4px; min-width: 13px; padding: 1px 3px; border-radius: 7px; font-size: 9px; background: var(--accent); color: white; line-height: 12px; }
+
+.font-library [hidden] {display:none!important}
+.printers-list .printer-check-result {flex-basis:100%;width:100%;padding:8px;background:var(--bg);border-radius:6px}
+.printer-check-result ul {list-style:none;padding:0;display:grid;gap:5px}
+.printer-check-result li[data-state=ok] {color:var(--success,#25834d)}
+.printer-check-result li[data-state=failed] {color:var(--danger,#b13d3d)}
+
+.paint-job-actions .pen-insertion-button {width:34px;height:34px;min-width:34px;padding:0;display:grid;place-items:center;border-radius:5px}
+.paint-job-actions .pen-insertion-button:hover:not(:disabled) {color:var(--accent);background:var(--hover)}
+.pen-insertion-modal {max-width:460px}.pen-insertion-modal svg {display:block;margin:12px auto}
+
+.stl-side-pane {overflow-y:auto}.stl-controls {gap:7px}.stl-controls .stl-field,.stl-controls .stl-toggle,.stl-controls .stl-range {margin:0;font-size:12px}.stl-controls .stl-presets {gap:3px}.stl-view-hint {max-width:95%;text-align:center}
+
+:root {--raster-ink:brightness(0)}
+:root[data-theme=dark] {--raster-ink:brightness(0) invert(.9)}
+
+.stl-controls {height:auto;flex-shrink:0}.stl-controls > * {flex-shrink:0}

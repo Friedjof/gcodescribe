@@ -50,3 +50,15 @@ it("keeps failed dismissals visible and reports the error while closing the othe
   expect(screen.queryByText("done.svg")).toBeNull();
   expect(screen.getByText("failed.svg")).toBeInTheDocument();
 });
+
+it("minimizes to a counted bell and reopens the task list",async()=>{
+ const running=task("running"),done=task("done");mocks.req.mockResolvedValue([running,done]);
+ const {container}=render(<BackgroundTasks onOpenResult={vi.fn()}/>);
+ await screen.findByRole("button",{name:/tasks.title/});
+ fireEvent.click(screen.getByRole("button",{name:"tasks.compact"}));
+ expect(container.querySelector(".tasks-mini .tasks-counter")?.textContent).toBe("2");
+ expect(localStorage.getItem("gcs.tasks.compact.v1")).toBe("true");
+ fireEvent.click(screen.getByRole("button",{name:/tasks.title/}));
+ expect(await screen.findByText("running.svg")).toBeInTheDocument();
+ expect(container.querySelector(".tasks-mini")).toBeNull();
+});
