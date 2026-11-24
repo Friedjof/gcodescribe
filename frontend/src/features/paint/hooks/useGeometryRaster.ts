@@ -8,7 +8,7 @@ const renders = new WeakMap<Pt[][], { stroke: number; promise: Promise<Blob> }>(
 export function rasterGeometry(lines: Pt[][]) {
   let count = counts.get(lines);
   if (count === undefined) { count = lines.reduce((sum, line) => sum + line.length, 0); counts.set(lines, count); }
-  return count > 40000 && typeof OffscreenCanvas !== "undefined";
+  return (count > 10000 || lines.length > 1000) && typeof OffscreenCanvas !== "undefined";
 }
 /** Avoid magnifying a capped bitmap when zooming into fine linework. */
 export function rasterFitsDisplay(lines: Pt[][], stroke: number) {

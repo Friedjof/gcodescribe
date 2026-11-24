@@ -14,20 +14,30 @@ const ObjectView = memo(function ObjectView({ obj, selected, stroke, interactive
 }) {
   const t = obj.transform ?? IDENTITY;
   const scale = Math.max(Math.abs(t.scaleX ?? t.scale), Math.abs(t.scaleY ?? t.scale), 0.0001);
+  // WebKit re-strokes the complete path on every zoom with non-scaling-stroke.
+  // Uniform transforms can preserve the same pixel width with ordinary strokes.
+  const nonUniform = Math.abs(Math.abs(t.scaleX ?? t.scale) - Math.abs(t.scaleY ?? t.scale)) > 0.000001;
+  const inkWidth = nonUniform ? DISPLAY_INK_PX : stroke / scale;
+  const inkEffect = nonUniform ? "non-scaling-stroke" : undefined;
   const mask = obj.type === "mask-rect" || obj.data?.mask === "erase";
   const sourcePage = sourcePageFrame(obj);
   const pageBounds = sourcePage ? localBounds(sourcePage) : null;
   const lines = (obj.cachedPolylines ?? EMPTY_LINES) as Pt[][];
   const large = !mask && rasterGeometry(lines);
+  const bounds = localBounds(lines);
+  const rasterWidth = Math.max(stroke / scale, Math.max(bounds[2] - bounds[0], bounds[3] - bounds[1]) * DISPLAY_INK_PX / 2048);
   // Keep the prepared bitmap throughout a gesture; only rebuild at rest.
-  const rasterView = useRef({ lines, stroke: stroke / scale });
-  if (!interactive || rasterView.current.lines !== lines) rasterView.current = { lines, stroke: stroke / scale };
+  const rasterView = useRef({ lines, stroke: rasterWidth });
+  if (!interactive || rasterView.current.lines !== lines) rasterView.current = { lines, stroke: rasterWidth };
   const rasterStroke = rasterView.current.stroke;
-  const rasterEligible = large && rasterFitsDisplay(lines, rasterStroke);
+  const rasterEligible = large && (interactive || rasterFitsDisplay(lines, stroke / scale));
   const pressurePaths = useMemo(() => obj.data?.pressureEnabled && !large && active && !interactive
     ? pressurePreviewPaths(lines, obj.data?.cachedSegmentPressures ?? obj.data?.baseSegmentPressures) : undefined,
   [obj.data?.pressureEnabled, obj.data?.cachedSegmentPressures, obj.data?.baseSegmentPressures, lines, large, active, interactive]);
-  const { image: raster } = useGeometryRaster(lines, rasterStroke, rasterEligible && active);
+  // Keep a bounded bitmap warm even when the resting view needs vector detail.
+  // Otherwise the next wheel gesture at high zoom falls back to expensive SVG.
+  const { image } = useGeometryRaster(lines, rasterStroke, large && active);
+  const raster = rasterEligible ? image : null;
   // Bitmap refreshes and navigation share the complete vector fallback.
   const d = useGeometryPath(lines, interactive, active);
   return <g transform={objTransform(t)} opacity={obj.plotted ? 0.25 : 1} pointerEvents="none">
@@ -36,13 +46,18 @@ const ObjectView = memo(function ObjectView({ obj, selected, stroke, interactive
         width={pageBounds[2] - pageBounds[0]} height={pageBounds[3] - pageBounds[1]}
         fill="none" stroke="var(--accent)" strokeWidth={stroke / scale}
         strokeDasharray={`${stroke * 4 / scale} ${stroke * 3 / scale}`} />}
+    {/* Preserve parsed SVG paths and decoded bitmaps across wheel gestures. */}
+    <g display={raster ? "none" : undefined}>
     {pressurePaths ? pressurePaths.map((path, i) => path && <path key={i} d={path} fill="none"
       stroke={obj.plotted ? "var(--muted)" : "var(--ink)"} strokeOpacity={0.35 + i / 7 * 0.65}
-      strokeWidth={DISPLAY_INK_PX} vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />) : raster ? <image className="paint-raster" href={raster.url} x={raster.x} y={raster.y} width={raster.width} height={raster.height}
-      style={{filter:"var(--raster-ink, brightness(0))"}} preserveAspectRatio="none"/> : <path d={d} fill={mask ? "var(--paper)" : "none"} fillOpacity={mask ? 0.92 : undefined}
+      strokeWidth={inkWidth} vectorEffect={inkEffect} strokeLinejoin="round" strokeLinecap="round" />) : <path d={d} fill={mask ? "var(--paper)" : "none"} fillOpacity={mask ? 0.92 : undefined}
       stroke={mask ? selected ? "var(--accent)" : "var(--paper-mask)" : obj.plotted ? "var(--muted)" : "var(--ink)"}
-      strokeWidth={mask ? stroke / scale : DISPLAY_INK_PX} vectorEffect={mask ? undefined : "non-scaling-stroke"} strokeDasharray={mask ? `${stroke * 2 / scale} ${stroke / scale}` : undefined}
+      strokeWidth={mask ? stroke / scale : inkWidth} vectorEffect={mask ? undefined : inkEffect} strokeDasharray={mask ? `${stroke * 2 / scale} ${stroke / scale}` : undefined}
       strokeLinejoin="round" strokeLinecap="round" />}
+    </g>
+    {image && <image className="paint-raster" display={raster ? undefined : "none"}
+      href={image.url} x={image.x} y={image.y} width={image.width} height={image.height}
+      style={{filter:"var(--raster-ink, brightness(0))"}} preserveAspectRatio="none"/>}
   </g>;
 });
 export default memo(function ObjectsLayer({ objects, selectedIds, stroke, interactive = false, active = true }: {

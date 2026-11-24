@@ -4,6 +4,7 @@ import type { TrimSide } from "../../lib/imageTrim";
 import type { VectorStyle } from "../../lib/styling";
 import type { TextFont } from "../../lib/text";
 export interface ObjectOps {
+    flushPendingText: () => Promise<void>;
     processing: boolean;
     pendingStyle?: VectorStyle;
     history: {

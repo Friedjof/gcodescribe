@@ -217,6 +217,17 @@ it("renders text with identical object IDs independently on different pages", as
   expect(cachedPage(first.id)?.objects[0].data.text).toBe("first");
   expect(cachedPage(second.id)?.objects[0].data.text).toBe("second");
 });
+it("flushes the final debounced text and its geometry before an explicit save", async () => {
+  const textGeometry = await import("../lib/sceneObjects");
+  vi.spyOn(textGeometry, "textGeometryAsync").mockResolvedValue({local:lines as [number,number][][],cx:0,cy:0,feeds:undefined,missing:[]});
+  geometry.mockResolvedValue(lines);
+  const base=makePage();const page=rememberPage({...base,objects:[{...original,type:"text",data:{text:"before"}}]});
+  const hook=setup(page);
+  act(()=>hook.result.current.onTextInput("image","last typed text"));
+  await act(async()=>{await hook.result.current.flushPendingText();});
+  expect(cachedPage(page.id)?.objects[0].data.text).toBe("last typed text");
+  expect(hook.fail).not.toHaveBeenCalled();
+});
 it("rejects exact dimensions outside the plot without undo or persistence", () => {
   const page = makePage();
   const hook = setup(page, true, { plot_width: 100, plot_height: 80 } as Calibration);

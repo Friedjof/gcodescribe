@@ -13,6 +13,8 @@ import {
   type ViewBox,
 } from "../lib/strokeGeometry";
 import GlyphDrawingGuideDialog from "./GlyphDrawingGuideDialog";
+import { useCommandShortcuts } from "../../../hooks/useCommandShortcuts";
+import { shortcutScope } from "../../../interface/shortcuts";
 
 // Vertical width references (fractions of the em), so the drawn glyph width can
 // be judged against the em square.
@@ -231,7 +233,8 @@ export default function GlyphCanvas({
     }
     if (tool === "move") {
       const p = toEm(e.clientX, e.clientY);
-      const id = nearestStrokeId(strokes, p, hitThreshold);
+      const hit = nearestStrokeId(strokes, p, hitThreshold);
+      const id = hit && selectedId === "*" ? "*" : hit;
       onSelectStroke(id);
       drag.current = id ? { id, startX: p.x, startY: p.y } : null;
       return;
@@ -304,11 +307,18 @@ export default function GlyphCanvas({
     return () => svg.removeEventListener("wheel", onWheel);
   }, [toUser, metrics.em]);
 
+  useCommandShortcuts([
+    { command: "zoomIn", run: () => setVb(v => zoomViewBox(v, { x: v.x + v.w / 2, y: v.y + v.h / 2 }, 1.2, metrics.em)) },
+    { command: "zoomOut", run: () => setVb(v => zoomViewBox(v, { x: v.x + v.w / 2, y: v.y + v.h / 2 }, 1 / 1.2, metrics.em)) },
+    { command: "fit", run: () => setVb(viewBoxFor(metrics)) },
+  ], true, svgRef);
+
   // Arrow keys nudge the selected stroke in move mode. Pen side buttons that
   // emit arrow keys drive this too. Shift = larger step, Alt = fine step.
   useEffect(() => {
     if (tool !== "move" || !selectedId) return;
     const onKey = (e: KeyboardEvent) => {
+      if (!shortcutScope(e, svgRef.current)) return;
       const active = document.activeElement;
       if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA")) return;
       const step = e.shiftKey ? metrics.em * 0.04 : e.altKey ? metrics.em * 0.004 : metrics.em * 0.012;
@@ -339,12 +349,12 @@ export default function GlyphCanvas({
     let pts = strokePoints(stroke);
     if (reveal) pts = pts.slice(0, reveal[i] ?? 0);
     // Live preview while dragging this stroke in move mode.
-    if (dragOffset && dragOffset.id === stroke.id) {
+    if (dragOffset && (dragOffset.id === "*" || dragOffset.id === stroke.id)) {
       pts = pts.map((p) => ({ ...p, x: p.x + dragOffset.dx, y: p.y + dragOffset.dy }));
     }
     const d = pointsToPath(pts, top);
     if (!d) return null;
-    const selected = tool === "move" && stroke.id === selectedId;
+    const selected = tool === "move" && (selectedId === "*" || stroke.id === selectedId);
     return <path key={stroke.id} className={`fe-stroke ${selected ? "is-selected" : ""}`} d={d} />;
   };
 

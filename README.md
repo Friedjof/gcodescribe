@@ -9,7 +9,7 @@
   <img src="https://img.shields.io/badge/Desktop-Linux-334155" alt="Linux desktop">
   <img src="https://img.shields.io/badge/Connection-USB%20%2F%20OctoPrint-334155" alt="USB or OctoPrint connection">
 </p>
-<p align="center"><a href="#installation">Installation</a> · <a href="#what-you-can-do">Features</a> · <a href="#build-your-pen-holder">Print files &amp; materials</a> · <a href="docs/screenshots.md">Screenshot gallery</a> · <a href="docs/releases/0.6.2.md">New in v0.6.2</a></p>
+<p align="center"><a href="#installation">Installation</a> · <a href="#what-you-can-do">Features</a> · <a href="#build-your-pen-holder">Print files &amp; materials</a> · <a href="docs/screenshots.md">Screenshot gallery</a> · <a href="docs/releases/0.6.3.md">New in v0.6.3</a></p>
 
 <table>
   <tr>
@@ -46,7 +46,7 @@ All app screenshots use an isolated demo environment with neutral English conten
 Download the appropriate package from the [release page](https://github.com/Friedjof/gcodescribe/releases/latest). Use the **Flatpak** for the standalone GTK/WebKit desktop app:
 
 ```sh
-flatpak install --user ./GCodeScribe-v0.6.2.flatpak
+flatpak install --user ./GCodeScribe-v0.6.3.flatpak
 flatpak run info.noweck.gcodescribe
 ```
 
@@ -57,7 +57,7 @@ The first launch opens the setup guide. The app can follow your system theme; th
 Releases also include packages for the web application. On Debian/Ubuntu:
 
 ```sh
-sudo apt install ./gcodescribe_0.6.2_amd64.deb
+sudo apt install ./gcodescribe_0.6.3_amd64.deb
 gcodescribe-web
 ```
 
@@ -90,7 +90,7 @@ Switching printers invalidates the previously known position. Home the selected 
 
 ## Build your pen holder
 
-The included hardware is designed for the **Anycubic i3 Mega S (Ai3MS)**. Software version **v0.6.2** and hardware revision **v2** are independent.
+The included hardware is designed for the **Anycubic i3 Mega S (Ai3MS)**. Software version **v0.6.3** and hardware revision **v2** are independent.
 
 <table>
   <tr>
@@ -149,4 +149,4 @@ npm --prefix frontend test
 npm --prefix frontend run build
 ```
 
-`make deb`, `make rpm`, `make appimage` and `make packages` build installation packages. See the [release notes](docs/releases/0.6.2.md) for the current changes.
+`make deb`, `make rpm`, `make appimage` and `make packages` build installation packages. See the [release notes](docs/releases/0.6.3.md) for the current changes.

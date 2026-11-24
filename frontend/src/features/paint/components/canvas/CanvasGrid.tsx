@@ -11,6 +11,7 @@ export default function CanvasGrid({
   major,
   gridVisible = true,
   showOrientation = true,
+  shadow = true,
   pixel = 1,
 }: {
   W: number;
@@ -21,6 +22,7 @@ export default function CanvasGrid({
   major: number;
   gridVisible?: boolean;
   showOrientation?: boolean;
+  shadow?: boolean;
   pixel?: number;
 }) {
   const { t } = useI18n();
@@ -42,7 +44,7 @@ export default function CanvasGrid({
         </pattern>
       </defs>
       <rect x={0} y={0} width={W} height={H} fill="var(--paper)"
-        stroke="var(--paper-border)" strokeWidth={pixel * 0.9} filter={`url(#${shadowId})`} />
+        stroke="var(--paper-border)" strokeWidth={pixel * 0.9} filter={shadow ? `url(#${shadowId})` : undefined} />
       {gridVisible && <rect x={0} y={0} width={W} height={H} fill="url(#pc-grid-major)" />}
       {showOrientation && <g className="canvas-orientation-marker" pointerEvents="none" aria-hidden="true">
         <path d={`M 0 0 H ${W / 2 - markerGap} M ${W / 2 + markerGap} 0 H ${W}`} strokeWidth={pixel * 1.5} />

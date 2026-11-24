@@ -1,5 +1,6 @@
 import Modal from "../../../components/Modal";
 import { useI18n } from "../../../i18n";
+import { shortcutLabels, type Command } from "../../../interface/shortcuts";
 
 /** Reference popup listing the editor's keyboard shortcuts and canvas
  * mouse/touch gestures. Opened via the ⓘ button in the toolbar. */
@@ -7,6 +8,18 @@ export default function PaintInfoModal({ onClose }: { onClose: () => void }) {
   const { t } = useI18n();
 
   const shortcuts: { keys: string[]; label: string }[] = [
+    { keys: ["Ctrl", "Tab"], label: t("interface.nextWorkspace") },
+    { keys: ["Ctrl", "Shift", "Tab"], label: t("interface.previousWorkspace") },
+    { keys: ["Ctrl", "PageUp / PageDown"], label: t("shortcuts.workspaceCycle") },
+    { keys: ["Alt", "1–9"], label: t("shortcuts.workspaceDirect") },
+    ...([
+      ["settings", "settings.title"], ["help", "app.help"], ["shortcuts", "paint.info.button"],
+      ["newSlide", "app.newPage"], ["newProject", "projects.newProject"], ["open", "app.projects"],
+      ["save", "shortcuts.save"], ["export", "shortcuts.export"], ["plot", "paint.plotOptions"], ["preview", "paint.preview"],
+      ["search", "shortcuts.search"], ["rename", "profiles.renameAction"], ["selectAll", "shortcuts.selectAll"],
+      ["deselect", "shortcuts.deselect"], ["zoomIn", "paint.zoomIn"], ["zoomOut", "paint.zoomOut"],
+      ["fit", "interface.fitPage"], ["sidebar", "shortcuts.sidebar"],
+    ] as [Command, string][]).map(([command, label]) => ({ keys: command === "zoomIn" ? ["Ctrl", "+"] : shortcutLabels[command].split("+"), label: t(label) })),
     { keys: ["Esc"], label: t("paint.info.escape") },
     { keys: ["↑", "↓", "←", "→"], label: t("paint.info.nudge") },
     { keys: ["Del"], label: t("paint.info.deleteSel") },
@@ -49,6 +62,7 @@ export default function PaintInfoModal({ onClose }: { onClose: () => void }) {
 
   return (
     <Modal title={t("paint.info.title")} onClose={onClose} className="paint-info-modal">
+      <p>{t("shortcuts.context")}</p>
       <div className="paint-info-columns">
         <section>
           <h4>{t("paint.info.shortcuts")}</h4>

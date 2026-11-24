@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { retainPage } from "../../../../api/pageEdits";
+import { cachedPage, retainPage } from "../../../../api/pageEdits";
 import { type Pt } from "../../lib/geometry";
 import { keepsStrokeFeeds, objectStyle, randomTextSeed, textGeometryAsync } from "../../lib/sceneObjects";
 import { type TextFont } from "../../lib/text";
@@ -13,6 +13,7 @@ export function useTextCommands(context: ObjectCommandContext) {
     const textDraftTimer = useRef<number | undefined>(undefined);
     const [draftText, setDraftText] = useState<string | null>(null);
     const pendingDraft = useRef<{ commit: () => void; release: () => void } | null>(null);
+    const pendingText = useRef(new Set<Promise<void>>());
     const finishDraft = () => {
         clearTimeout(textDraftTimer.current);
         const pending = pendingDraft.current;
@@ -35,7 +36,7 @@ export function useTextCommands(context: ObjectCommandContext) {
             draftTextRef.current = null;
             setDraftText(null);
         }
-        return finishDraft;
+        return () => { void finishDraft(); };
     }, [page?.id, selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
     const updateTextObject = (id: string, patch: Partial<{
         text: string;
@@ -61,7 +62,7 @@ export function useTextCommands(context: ObjectCommandContext) {
         textSequence.current.set(`${page.id}:${id}`, token);
         const release = retainPage(page);
         setProcessing((n) => n + 1);
-        textGeometryAsync(data.text, data.size, data.font, defaultText, false, data.seed)
+        const work = textGeometryAsync(data.text, data.size, data.font, defaultText, false, data.seed)
             .then(async ({ local, feeds, missing }) => {
             if (missing?.length)
                 warnMissingGlyphs(missing);
@@ -73,10 +74,12 @@ export function useTextCommands(context: ObjectCommandContext) {
                             ...obj, plotted: false, data: { ...data, basePolylines: local, style },
                             cachedPolylines: geometry, cachedFeeds: keepsStrokeFeeds(style) ? feeds : undefined,
                         } }]]));
-        }).catch(fail).finally(() => {
+        }).finally(() => {
             if (textSequence.current.get(`${page.id}:${id}`) === token) textSequence.current.delete(`${page.id}:${id}`);
             release(); setProcessing((n) => n - 1);
         });
+        pendingText.current.add(work);
+        void work.catch(fail).finally(() => pendingText.current.delete(work));
     };
     const onTextInput = (id: string, text: string) => {
         draftTextRef.current = text;
@@ -110,5 +113,16 @@ export function useTextCommands(context: ObjectCommandContext) {
         onTextInput(obj.id, next);
         return true;
     };
-    return { draftText, updateTextObject, onTextInput, onFontOrSizeChange, editSelectedText };
+    const flushPendingText = async () => {
+        const hadDraft = !!pendingDraft.current;
+        finishDraft();
+        const current = page && (cachedPage(page.id) ?? page).objects.find(object => object.id === selectedId && object.type === "text");
+        if (!hadDraft && current && draftTextRef.current !== null && String(current.data?.text ?? defaultText) !== draftTextRef.current)
+            updateTextObject(current.id, { text: draftTextRef.current });
+        while (pendingText.current.size) await Promise.all(pendingText.current);
+        const saved = page && cachedPage(page.id)?.objects.find(object => object.id === selectedId && object.type === "text");
+        if (saved && draftTextRef.current !== null && String(saved.data?.text ?? defaultText) !== draftTextRef.current)
+            throw new Error(context.t("save.failed"));
+    };
+    return { draftText, updateTextObject, onTextInput, onFontOrSizeChange, editSelectedText, flushPendingText };
 }

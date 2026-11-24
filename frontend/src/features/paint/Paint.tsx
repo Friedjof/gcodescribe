@@ -1,4 +1,7 @@
 import PenInsertionDialog from "./components/PenInsertionDialog";
+import ExportDrawingDialog from "./components/ExportDrawingDialog";
+import Modal from "../../components/Modal";
+import { useCommandShortcuts } from "../../hooks/useCommandShortcuts";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type Page, type SceneObject } from "../../api";
 import { startImport } from "../../api/assetTasks";
@@ -96,6 +99,11 @@ export default function Paint({
   const [mdOpen, setMdOpen] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [projectsOpen, setProjectsOpen] = useState(false);
+  const [projectMode, setProjectMode] = useState<"list" | "create">("list");
+  const [exportOpen, setExportOpen] = useState(false);
+  const [plotOptionsOpen, setPlotOptionsOpen] = useState(false);
+  const shortcutRoot = useRef<HTMLDivElement>(null);
+  useEffect(() => { setExportOpen(false); setPlotOptionsOpen(false); }, [page?.id, index?.project?.id, profile?.fingerprint, visible]);
   const [movePageId, setMovePageId] = useState<string | null>(null);
   const [viewRotation, setViewRotation] = useState<ViewRotation>(0);
   const [measurementsOpen, setMeasurementsOpen] = useState(() => {
@@ -215,6 +223,8 @@ export default function Paint({
     if (!visible || !page || !renderProfile || !command || handledCommand.current === command.id) return;
     handledCommand.current = command.id;
     if (command.type === "projects") setProjectsOpen(true);
+    else if (command.type === "new-project") { setProjectMode("create"); setProjectsOpen(true); }
+    else if (command.type === "export") setExportOpen(true);
     else void pages.newPage();
     onCommandHandled?.();
   }, [visible, page?.id, renderProfile?.id, command?.id]);
@@ -289,6 +299,29 @@ export default function Paint({
     defaultText,
   });
 
+  const togglePages = () => updateInterface(p => ({ ...p, pagesPanel: { ...p.pagesPanel, open: !p.pagesPanel.open } }));
+  const saveDocument = () => {
+    if (!page) return;
+    void ops.flushPendingText().then(() => flushEdits(page.id)).then(() => toast.success(t("save.saved"))).catch(fail);
+  };
+  useCommandShortcuts([
+    { command: "newSlide", run: () => { void pages.newPage(); }, input: true },
+    { command: "newProject", run: () => { setProjectMode("create"); setProjectsOpen(true); }, input: true },
+    { command: "open", run: () => { setProjectMode("list"); setProjectsOpen(true); }, input: true },
+    { command: "save", run: saveDocument, input: true, disabled: ops.processing },
+    { command: "export", run: () => { void ops.flushPendingText().then(() => setExportOpen(true)).catch(fail); }, disabled: ops.processing },
+    { command: "plot", run: () => setPlotOptionsOpen(true), disabled: busy || sending || ops.processing },
+    { command: "preview", run: () => { void openFullscreen(); }, disabled: busy || sending || loadingPreview || ops.processing || !page?.objects.length },
+    { command: "selectAll", run: () => { setTool("select"); setSelectedIds(page?.objects.map(object => object.id) ?? []); } },
+    { command: "deselect", run: () => setSelectedIds([]) },
+    { command: "rename", run: () => { if (page) void pages.rename(page.id, page.name); } },
+    { command: "sidebar", run: togglePages },
+    { command: "search", input: true, run: () => {
+      updateInterface(p => ({ ...p, pagesPanel: { ...p.pagesPanel, open: true } }));
+      requestAnimationFrame(() => shortcutRoot.current?.querySelector<HTMLInputElement>('.paint-pages-search')?.focus());
+    } },
+  ], visible && !pageBlocked && !!page, shortcutRoot);
+
   const canvasHandlers = useLatestCallbacks({
     onSelect: selectIds, onAdd: ops.addObject, onUpdate: updateObject, onUpdateMany: updateObjects,
     onEditStart: ops.remember,
@@ -312,9 +345,16 @@ export default function Paint({
   const togglePagesCollapsed = () => updateInterface(p => ({ ...p, pagesPanel: { ...p.pagesPanel, open: !p.pagesPanel.open } }));
 
   return (
-    <div className={`paint${pagesCollapsed ? " pages-collapsed" : ""}${!preferences.propertiesPanel.open ? " properties-collapsed" : ""}`}
+    <div ref={shortcutRoot} className={`paint${pagesCollapsed ? " pages-collapsed" : ""}${!preferences.propertiesPanel.open ? " properties-collapsed" : ""}`}
       style={{ "--pages-width": `${pagesWidth}px`, "--properties-width": `${propertiesWidth}px` } as React.CSSProperties}>
       <PaintObjectMenu menu={menu} objects={page.objects} ops={ops} onClose={() => setMenu(null)} />
+      {visible && exportOpen && <ExportDrawingDialog page={page} cal={cal} onClose={() => setExportOpen(false)}/>}
+      {visible && plotOptionsOpen && <Modal title={t("paint.plotOptions")} onClose={() => setPlotOptionsOpen(false)}>
+        <p>{t("shortcuts.plotHint")}</p>
+        <button disabled={busy || sending || printerBusy || !status?.online || !page.objects.length}
+          onClick={() => { setPlotOptionsOpen(false); void directPlot(); }}>{t("paint.directPlot")}</button>
+        <button disabled={busy || loadingPreview || !page.objects.length} onClick={() => { setPlotOptionsOpen(false); void openFullscreen(); }}>{t("paint.preview")}</button>
+      </Modal>}
       {imageImport && (
         <PaintImageModal
           file={imageImport.file}
@@ -518,13 +558,14 @@ export default function Paint({
         />
       )}
       {projectsOpen && <ProjectOverviewPopup
+        initialMode={projectMode}
         activeId={index.project?.id}
         movePageId={movePageId}
         beforeChange={() => prepareProjectChange(movePageId)}
         onRefresh={reloadIndex}
         onActivate={showProject}
         confirm={confirm}
-        onClose={() => { setProjectsOpen(false); setMovePageId(null); }}
+        onClose={() => { setProjectsOpen(false); setProjectMode("list"); setMovePageId(null); }}
       />}
       {ConfirmNode}
       {PromptNode}

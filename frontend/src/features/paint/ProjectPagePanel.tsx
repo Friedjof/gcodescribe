@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import type { PageGroup, PageIndex, PageMeta } from "../../api";
 import PageThumbnail from "./PageThumbnail";
 import EditorIcon from "../../components/editor/EditorIcon";
+import { matchesCommand } from "../../interface/shortcuts";
 
 type Dragged = { kind: "slide" | "folder"; id: string };
 
@@ -144,6 +145,7 @@ export default function ProjectPagePanel({ index, activePageId, onOpenProjects, 
   const renderPage = (page: PageMeta) => {
     const active = page.id === activePageId;
     return <li key={page.id}
+      onKeyDown={event => { if (matchesCommand(event.nativeEvent, "rename")) { event.preventDefault(); onRename(page.id, page.name); } }}
       className={`project-slide${active ? " active" : ""}${loadingPageId === page.id ? " loading" : ""}${dropTarget === page.id ? " drop-before" : ""}`}
       draggable={canDrag} onDragStart={canDrag ? () => setDrag({ kind: "slide", id: page.id }) : undefined}
       onDragEnd={() => { setDrag(null); setDropTarget(null); }}
@@ -175,6 +177,7 @@ export default function ProjectPagePanel({ index, activePageId, onOpenProjects, 
     const isClosed = !search && closed[folderId];
     return <section key={folderId} className="project-folder" style={{ "--folder-depth": depth } as CSSProperties}>
       <div className={`project-folder-head${selectedFolder === folderId ? " selected" : ""}${dropTarget === folderId ? " drop-into" : ""}`}
+        onKeyDown={event => { if (matchesCommand(event.nativeEvent, "rename")) { event.preventDefault(); onRenameGroup(folder.id, folder.name); } }}
         draggable={canDrag} onDragStart={canDrag ? () => setDrag({ kind: "folder", id: folderId }) : undefined}
         onDragEnd={() => { setDrag(null); setDropTarget(null); }}
         onDragOver={(event) => { if (canDrag && drag?.id !== folderId) { event.preventDefault(); setDropTarget(folderId); } }}

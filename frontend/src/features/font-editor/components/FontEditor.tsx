@@ -1,4 +1,8 @@
 import { useEffect, useRef, useState } from "react";
+import { api } from "../../../api";
+import { useCommandShortcuts } from "../../../hooks/useCommandShortcuts";
+import { usePrompt } from "../../../components/dialogs";
+import { shortcutScope } from "../../../interface/shortcuts";
 import { useI18n } from "../../../i18n";
 import { useToasts } from "../../../components/Toasts";
 import type { Stroke, StrokePoint } from "../../../api";
@@ -103,9 +107,12 @@ export default function FontEditor({ visible,onDocumentChange }: { visible: bool
   const { t } = useI18n();
   const toast = useToasts();
   const font = useStrokeFont();
+  const shortcutRoot = useRef<HTMLElement>(null);
+  const { prompt: promptName, PromptNode: NamePrompt } = usePrompt();
   useEffect(()=>{onDocumentChange?.(font.current?.id??null);},[font.current?.id,onDocumentChange]);
   const editing = useGlyphEditing();
   const [listOpen, setListOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeKey, setActiveKey] = useState("");
   const [playReq, setPlayReq] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -294,7 +301,7 @@ export default function FontEditor({ visible,onDocumentChange }: { visible: bool
   };
 
   const handleEraseStroke = (id: string) => {
-    editing.replace(editing.strokes.filter((s) => s.id !== id));
+    editing.replace(id === "*" ? [] : editing.strokes.filter((s) => s.id !== id));
   };
 
   const handleEraseArea = (center: StrokePoint, radius: number) => {
@@ -308,7 +315,7 @@ export default function FontEditor({ visible,onDocumentChange }: { visible: bool
   };
 
   const handleMoveStroke = (id: string, dx: number, dy: number) => {
-    editing.replace(editing.strokes.map((s) => (s.id === id ? translateStroke(s, dx, dy) : s)));
+    editing.replace(editing.strokes.map((s) => (id === "*" || s.id === id ? translateStroke(s, dx, dy) : s)));
   };
 
   const handleStroke = (raw: StrokePoint[]) => {
@@ -507,11 +514,42 @@ export default function FontEditor({ visible,onDocumentChange }: { visible: bool
     setAdvanceTouched(true);
   };
 
+  const saveFont = async () => {
+    if (currentGlyphDirty) return handleSaveGlyph();
+    if (font.current && !font.busy) { await font.save(); toast.success(t("save.saved")); }
+    return true;
+  };
+  const renameFont = async () => {
+    if (!font.current) return;
+    const label = (await promptName(t("profiles.renameAction"), font.current.label))?.trim();
+    if (!label) return;
+    const next = { ...font.current, label };
+    font.updateCurrent(next); await font.save(next);
+  };
+  const exportFont = async () => {
+    if (!font.current || !await saveFont()) return;
+    await api.exportStrokeFont(font.current.id, font.current.label);
+  };
+  useCommandShortcuts([
+    { command: "save", input: true, disabled: !font.current || font.busy, run: () => { void saveFont().catch(fail); } },
+    { command: "export", disabled: !font.current || font.busy, run: () => { void exportFont().catch(fail); } },
+    { command: "rename", disabled: !font.current || font.busy, run: () => { void renameFont().catch(fail); } },
+    { command: "open", input: true, run: handleOpenList },
+    { command: "newSlide", input: true, run: () => shortcutRoot.current?.querySelector<HTMLInputElement>(".fe-name-input")?.focus() },
+    { command: "selectAll", disabled: !editing.strokes.length, run: () => { setTool("move"); setSelectedStroke("*"); } },
+    { command: "deselect", run: () => setSelectedStroke(null) },
+    { command: "sidebar", run: () => setSidebarOpen(value => !value) },
+    { command: "search", input: true, disabled: !font.current, run: () => {
+      setSidebarOpen(true); requestAnimationFrame(() => shortcutRoot.current?.querySelector<HTMLInputElement>(".fe-search")?.focus());
+    } },
+  ], visible, shortcutRoot);
+
   // Editor-wide keyboard shortcuts. Active only while the tab is visible and the
   // focus isn't in a text field, so typing keys/labels still works normally.
   useEffect(() => {
     if (!visible || !font.current) return;
     const onKey = (e: KeyboardEvent) => {
+      if (!shortcutScope(e, shortcutRoot.current)) return;
       const el = document.activeElement;
       if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) return;
       const mod = e.ctrlKey || e.metaKey;
@@ -552,7 +590,8 @@ export default function FontEditor({ visible,onDocumentChange }: { visible: bool
   });
 
   return (
-    <section className="font-editor" aria-hidden={!visible}>
+    <section ref={shortcutRoot} className="font-editor" aria-hidden={!visible}>
+      {NamePrompt}
       <FontEditorHeader
         hasCurrent={!!font.current}
         currentLabel={font.current?.label ?? null}
@@ -560,18 +599,20 @@ export default function FontEditor({ visible,onDocumentChange }: { visible: bool
         busy={font.busy}
         onCreate={handleCreate}
         onOpenList={handleOpenList}
+        onRename={() => { void renameFont().catch(fail); }}
+        onExport={() => { void exportFont().catch(fail); }}
         onCloseCurrent={()=>withDiscardedGlyphChanges(()=>{if(confirmDiscardFontChanges()){font.close();resetSession();}})}
       />
 
       {font.current ? (
         <div className="fe-body">
-          <GlyphSidebar
+          {sidebarOpen && <GlyphSidebar
             glyphs={font.current.glyphs}
             activeKey={key}
             coverage={coverage}
             onSelect={selectGlyph}
             onOpenOverview={() => setOverviewOpen(true)}
-          />
+          />}
           <div className="fe-center">
             <GlyphCanvas
               metrics={font.current.metrics}

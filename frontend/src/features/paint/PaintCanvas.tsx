@@ -1,4 +1,6 @@
 import { displayStrokeWorld } from "../../lib/displayStroke";
+import { wheelZoomFactor } from "./lib/wheelZoom";
+import { useCommandShortcuts } from "../../hooks/useCommandShortcuts";
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Calibration, Page, SceneObject } from "../../api";
 import {
@@ -163,13 +165,26 @@ function PaintCanvas({
   const queuedPointer = useRef<React.PointerEvent | null>(null);
   const [zooming, setZooming] = useState(false);
   const wheelFrame = useRef<number>();
-  const wheelChange = useRef<{factor:number;anchor:Pt} | null>(null);
+  const wheelChange = useRef<{factor:number;client:Pt} | null>(null);
   useEffect(() => () => { if(wheelFrame.current!==undefined)cancelAnimationFrame(wheelFrame.current); clearTimeout(zoomTimer.current); }, []);
   const zoomTimer = useRef<ReturnType<typeof setTimeout>>();
   const activePointer = useRef<number | null>(null);
   const drafting = useRef(false); drafting.current = !!(draft || marquee);
   const visibleRef = useRef(visible); visibleRef.current = visible;
+  const keyboardZoom = (factor: number) => {
+    setZooming(true); clearTimeout(zoomTimer.current);
+    zoomTimer.current = setTimeout(() => setZooming(false), 120);
+    zoomAt(factor);
+  };
+  useCommandShortcuts([
+    { command: "zoomIn", run: () => keyboardZoom(1.2) },
+    { command: "zoomOut", run: () => keyboardZoom(1 / 1.2) },
+    { command: "fit", run: () => { cancelGesture(); fitPage(); } },
+  ], visible, svgRef);
   const cancelGesture = () => {
+    if (wheelFrame.current !== undefined) cancelAnimationFrame(wheelFrame.current);
+    wheelFrame.current = undefined; wheelChange.current = null;
+    clearTimeout(zoomTimer.current); setZooming(false);
     queuedPointer.current = null;
     if (frame.current !== null) cancelAnimationFrame(frame.current);
     frame.current = null;
@@ -312,17 +327,35 @@ function PaintCanvas({
     onImageDrop(file, snapPt(clientToMM(e.clientX, e.clientY), step, snapOn));
   };
 
-  const onWheel = (e: React.WheelEvent) => {
+  const onWheel = (e: WheelEvent) => {
+    if (!visibleRef.current) return;
     e.preventDefault();
-    const factor = Math.exp(-e.deltaY * 0.0015);
-    const anchor = rotatePoint(clientToMM(e.clientX, e.clientY), W, H, viewRotation);
-    wheelChange.current = {factor:factor*(wheelChange.current?.factor??1),anchor};
+    const factor = wheelZoomFactor(e.deltaY, e.deltaMode, size.height);
+    if (factor === 1) return;
+    setZooming(true);
+    clearTimeout(zoomTimer.current);
+    zoomTimer.current = setTimeout(() => setZooming(false), 120);
+    wheelChange.current = {factor:factor*(wheelChange.current?.factor??1),client:[e.clientX,e.clientY]};
     if(wheelFrame.current===undefined)wheelFrame.current=requestAnimationFrame(()=>{
       wheelFrame.current=undefined;
       const change=wheelChange.current;wheelChange.current=null;
-      if(change&&visibleRef.current)zoomAt(change.factor,change.anchor);
+      if(change&&visibleRef.current) {
+        // Read the SVG transform once per painted frame, rather than forcing
+        // layout for every event in a high-frequency trackpad/wheel burst.
+        const anchor = rotatePoint(clientToMM(...change.client), W, H, viewRotation);
+        zoomAt(change.factor,anchor);
+      }
     });
   };
+  const wheelHandler = useRef(onWheel); wheelHandler.current = onWheel;
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const listener = (event: WheelEvent) => wheelHandler.current(event);
+    // React's delegated wheel listener is passive; cancellation belongs here.
+    svg.addEventListener("wheel", listener, { passive: false });
+    return () => svg.removeEventListener("wheel", listener);
+  }, []);
 
   const onSvgDown = (e: React.PointerEvent) => {
     // Detect stylus eraser tip (buttons bit 5 = 0x20).
@@ -769,7 +802,6 @@ function PaintCanvas({
         viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
         preserveAspectRatio="xMidYMid meet"
         style={{ cursor: panning ? "grabbing" : spaceDown ? "grab" : effectiveTool === "select" ? "default" : "crosshair", touchAction: "none" }}
-        onWheel={(e) => { setZooming(true); clearTimeout(zoomTimer.current); zoomTimer.current = setTimeout(() => setZooming(false), 120); onWheel(e); }}
         onPointerDownCapture={emitClick}
         onPointerDown={onSvgDown}
         onPointerMove={schedulePointer}
@@ -782,7 +814,8 @@ function PaintCanvas({
         onDrop={onDrop}
       >
         <g transform={canvasRotationTransform}>
-        <CanvasGrid W={W} H={H} S={S} pad={pad} step={step} major={major} gridVisible={gridVisible} pixel={pixel} />
+        <CanvasGrid W={W} H={H} S={S} pad={pad} step={step} major={major} gridVisible={gridVisible} pixel={pixel}
+          shadow={!panning && !zooming && zoom <= 2} />
 
         {backsideReference && <BacksideLayer {...backsideReference} cal={cal} stroke={LINE_STROKE}
           active={visible} interactive={panning || zooming}/>}

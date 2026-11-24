@@ -4,6 +4,8 @@ import EditorMenu, { type EditorMenuItem } from "../../../components/editor/Edit
 import EditorIcon from "../../../components/editor/EditorIcon";
 import { useI18n } from "../../../i18n";
 import type { ObjectOps } from "../hooks/useObjectOps";
+import { executeCommand } from "../../../hooks/useCommandShortcuts";
+import { shortcutLabels } from "../../../interface/shortcuts";
 
 /** Document commands stay available even when the properties dock is closed. */
 export default function PaintCommandBar({ ops, selected, visible, onText, onGallery, onMarkdown, onImage }: {
@@ -12,6 +14,8 @@ export default function PaintCommandBar({ ops, selected, visible, onText, onGall
 }) {
   const { t } = useI18n(), input = useRef<HTMLInputElement>(null), hasSelection = selected.length > 0;
   const edit: EditorMenuItem[] = [
+    {id:"select-all",label:t("shortcuts.selectAll"),shortcut:shortcutLabels.selectAll,action:()=>executeCommand("selectAll")},
+    {id:"deselect",label:t("shortcuts.deselect"),shortcut:shortcutLabels.deselect,action:()=>executeCommand("deselect")},
     {id:"copy",label:t("paint.copy"),shortcut:"Ctrl+C",disabled:!hasSelection,icon:"copy",action:ops.copySelected},
     {id:"cut",label:t("paint.cut"),shortcut:"Ctrl+X",disabled:!hasSelection,icon:"cut",action:ops.cutSelected},
     {id:"paste",label:t("paint.paste"),shortcut:"Ctrl+V",disabled:ops.clipboardCount === 0,icon:"paste",action:() => ops.pasteObjects()},

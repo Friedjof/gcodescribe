@@ -2,6 +2,7 @@ import { spherePoint, trackballRotate } from "../features/stl/lib/trackball";
 export type StlControlMode = "orbit" | "trackball" | "cad";
 import { useEffect, useRef } from "react";
 import { useI18n } from "../i18n";
+import { useCommandShortcuts } from "../hooks/useCommandShortcuts";
 import {
   drawMesh3d,
   meshCenter,
@@ -67,6 +68,14 @@ export default function StlView3D({
   const onOrientRef=useRef(onOrient);onOrientRef.current=onOrient;
   const drag = useRef<{ x: number; y: number; mode: "orbit" | "pan" } | null>(null);
   const renderRef = useRef<() => void>(() => {});
+  const keyboardZoom = (factor: number) => {
+    view.current.zoom = Math.max(.2, Math.min(8, view.current.zoom * factor)); renderRef.current();
+  };
+  useCommandShortcuts([
+    { command: "zoomIn", run: () => keyboardZoom(1.2) },
+    { command: "zoomOut", run: () => keyboardZoom(1 / 1.2) },
+    { command: "fit", run: () => { view.current = { ...view.current, zoom: 1, panX: 0, panY: 0 }; renderRef.current(); } },
+  ], true, canvasRef);
   const propsRef = useRef({ mesh, model, fov, up, distanceFactor, featureAngleDeg, showTriangles, shading, opacity, showBox });
   propsRef.current = { mesh, model, fov, up, distanceFactor, featureAngleDeg, showTriangles, shading, opacity, showBox };
 

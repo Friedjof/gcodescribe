@@ -42,6 +42,13 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.6.3" date="2026-11-24">
+      <description>
+        <p>Faster canvas navigation with retained raster previews and SVG geometry.</p>
+        <p>Linux keyboard shortcuts for workspaces, files, zoom, selection, search and export, with native GTK Backtab handling.</p>
+        <p>SVG and JSON drawing exports and direct font rename/export actions.</p>
+      </description>
+    </release>
     <release version="0.6.2" date="2026-11-24">
       <description>
         <p>Use the current application icon on the desktop loading screen and prevent stale interfaces after Flatpak updates.</p>

@@ -7,20 +7,29 @@ import type {
 import { fitWorkspaceTabs } from "../../interface/tabOverflow";
 import EditorMenu from "./EditorMenu";
 import EditorIcon from "./EditorIcon";
+import { useWorkspaceShortcuts } from "../../hooks/useWorkspaceShortcuts";
 
 export default function WorkspaceTabs({
   workspaces,
   active,
   onChange,
   onCustomize,
+  shortcutsEnabled = true,
 }: {
   workspaces: readonly WorkspaceDefinition[];
   active: WorkspaceId;
   onChange: (id: WorkspaceId) => void;
   onCustomize: () => void;
+  shortcutsEnabled?: boolean;
 }) {
   const { t } = useI18n();
   const refs = useRef(new Map<WorkspaceId, HTMLButtonElement>());
+  const pendingFocus = useRef<WorkspaceId | null>(null);
+  useWorkspaceShortcuts({ workspaces, active, enabled: shortcutsEnabled, onChange: id => {
+    if (id === active) { refs.current.get(id)?.focus({ preventScroll: true }); return; }
+    pendingFocus.current = id;
+    onChange(id);
+  } });
   const strip = useRef<HTMLDivElement>(null),
     measures = useRef<HTMLDivElement>(null);
   const [shown, setShown] = useState<WorkspaceId[]>(
@@ -57,6 +66,14 @@ export default function WorkspaceTabs({
     if (strip.current) observer?.observe(strip.current);
     return () => observer?.disconnect();
   }, [workspaces, active, t]);
+  useLayoutEffect(() => {
+    if (pendingFocus.current !== active) return;
+    const tab = refs.current.get(active);
+    if (tab) {
+      tab.focus({ preventScroll: true });
+      pendingFocus.current = null;
+    }
+  }, [active, shown]);
   const displayed = workspaces.filter((workspace) =>
     shown.includes(workspace.id),
   );
@@ -83,6 +100,7 @@ export default function WorkspaceTabs({
           className="workspace-tabs"
           role="tablist"
           aria-label={t("interface.workspaces")}
+          aria-keyshortcuts="Control+Tab Control+Shift+Tab Control+PageUp Control+PageDown"
         >
           {displayed.map((workspace, index) => (
             <button

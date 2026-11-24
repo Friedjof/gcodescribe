@@ -32,6 +32,81 @@ middle mouse button to rotate (Shift + middle or right mouse pans). Wheel zoom
 works in all modes. The selected mode persists. Trackball roll is included in the
 technical drawing and gallery parameters. Reset restores the isometric view.
 
+## Keyboard shortcuts
+
+Implemented workspace navigation follows the configured order of enabled
+workspaces, including entries in the overflow menu:
+
+| Shortcut | Action |
+| --- | --- |
+| Ctrl+Tab | Next workspace; wrap after the last workspace |
+| Ctrl+Shift+Tab | Previous workspace; wrap before the first workspace |
+| Left/Right, Home/End while a workspace tab has focus | Navigate the displayed tab strip |
+
+The selected workspace tab receives keyboard focus. Text fields also allow
+Ctrl+Tab; plain Tab and Shift+Tab retain their normal focus behavior. Modal
+dialogs, open menu items, composition input and printer-switch transitions keep
+control of their keys. Disabled or unavailable workspaces are excluded. The help
+popup lists the new shortcuts in English, German, Bavarian, French and Spanish.
+The desktop wrapper forwards both combinations in GTK's capture phase: native
+`ISO_Left_Tab` otherwise gets consumed as focus traversal before reaching WebKit.
+Forwarded events target the focused element and use the same frontend scope and
+composition checks as browser keyboard events.
+In a normal browser, Ctrl+Tab may be reserved for browser tabs before the page
+receives the event; the app's tab strip remains keyboard accessible with arrows.
+
+Validation combines unit tests, the production build and Ruff with native XTest
+key events in the Flatpak WebKit runtime. Native checks cover settings/help,
+text selection, zoom, selection, sidebar, rename, save, preview, SVG/JSON export,
+creation, workspace aliases and font save/export. Drawing geometry stayed
+unchanged and the test reported no JavaScript errors. The release workflow also
+runs the complete backend and frontend suites in a clean checkout.
+
+### Commands available in v0.6.3
+
+Bindings follow the [GNOME shortcut conventions](https://developer.gnome.org/hig/reference/keyboard.html),
+with context appropriate to autosaved slides, fonts and plotter output.
+
+| Shortcut | Behavior |
+| --- | --- |
+| Ctrl+, | Open Settings |
+| F1 / Ctrl+? | Open the localized shortcut and gesture reference |
+| Ctrl++ / Ctrl+- / Ctrl+0 | Zoom in/out or fit the active canvas; supported in Draw, glyph editing, writing preview, Coloring and 3D views |
+| Ctrl+A / Ctrl+Shift+A | Select/deselect drawing objects or all strokes of the active glyph; text fields retain native selection |
+| Ctrl+S | Finish pending text rendering and flush Draw autosave, or save the current font/glyph |
+| Ctrl+N | Create a slide in Draw; focus the new-font name field in the font editor |
+| Ctrl+Shift+N | Open the new-project form |
+| Ctrl+O | Open the project overview or the font list, according to the active editor |
+| Ctrl+Shift+E | Open the SVG/JSON export chooser in Draw, or save and export the open font as .gcsfont |
+| Ctrl+P / Ctrl+Shift+P | Open plot options / 3D preview in Draw; keyboard activation alone never starts a printer |
+| Ctrl+F | Focus the slide search, project-overview search or current font's glyph search |
+| F2 | Rename a focused slide/folder/project or the open font |
+| Ctrl+PageDown / Ctrl+PageUp | Next/previous workspace, with the same order as Ctrl+Tab |
+| Alt+1–8 / Alt+9 | Select a workspace by configured position / select the last workspace |
+| F9 | Toggle the Draw slide sidebar or the font glyph sidebar |
+
+Menu commands and keyboard shortcuts share a dispatcher. A deeper visible editor
+has priority over application fallbacks regardless of lazy-loading order. The
+foremost modal owns its commands; background editors, disabled controls, IME
+composition and already handled events are respected. Holding document-creation
+keys does not create repeated slides. Zoom keys may repeat.
+
+Existing Draw shortcuts retain copy/cut/paste, Ctrl+D for duplicate,
+Ctrl+Z/Ctrl+Shift+Z/Ctrl+Y for undo/redo, Delete, arrow nudging and Escape. The font
+editor retains D/E/M/P for draw, erase, move and playback. Coloring retains
+undo/redo and Space for temporary pan. Ctrl+Q quits the desktop app.
+
+Drawing exports retain physical SVG dimensions and visible mask ordering, or the
+complete slide and calibration in JSON. Font export saves pending glyph changes
+first. Renaming and export also have visible actions in the font editor header.
+The 3D preview uses modal semantics and focus trapping so shortcuts cannot edit
+a drawing behind it.
+
+Ctrl+W does not delete slides or hide permanent workspaces. Global reload is not
+bound while editing. Alt+Tab, Alt+F4, Super combinations and desktop workspace
+switching remain with the operating system. Normal browsers may reserve some
+bindings before the app receives them; all commands retain visible UI actions.
+
 ## Printer diagnostics
 
 Each saved printer has a connection test; testing does not change the selection

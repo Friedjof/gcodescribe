@@ -1,7 +1,9 @@
 import { useI18n } from "../../i18n";
 import PaginationBar from "../../components/paging/PaginationBar";
 import { useFitListPage } from "../../components/paging/useFitListPage";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useCommandShortcuts } from "../../hooks/useCommandShortcuts";
+import { matchesCommand } from "../../interface/shortcuts";
 import { useProjectCalibration } from "../../state/ProjectCalibrationContext";
 import { api, type Calibration, type CalibrationProfile, type CalibrationProfileSummary, type PageIndex, type PaintProject } from "../../api";
 import Modal from "../../components/Modal";
@@ -31,7 +33,8 @@ const FLAGS: { key: keyof Calibration; label: string }[] = [
   { key: "trust_axis_home", label: "calibration.trust_axis_home" },
 ];
 
-export default function ProjectOverviewPopup({ activeId, movePageId, onClose, onActivate, beforeChange, onRefresh, confirm }: {
+export default function ProjectOverviewPopup({ activeId, movePageId, onClose, onActivate, beforeChange, onRefresh, confirm, initialMode = "list" }: {
+  initialMode?: "list" | "create";
   activeId?: string;
   movePageId?: string | null;
   onClose: () => void;
@@ -45,7 +48,7 @@ export default function ProjectOverviewPopup({ activeId, movePageId, onClose, on
   const [settingsGroup, setSettingsGroup] = useState("general");
   const [projects, setProjects] = useState<PaintProject[]>([]);
   const [profiles, setProfiles] = useState<CalibrationProfileSummary[]>([]);
-  const [mode, setMode] = useState<"list" | "create" | "settings">("list");
+  const [mode, setMode] = useState<"list" | "create" | "settings">(initialMode);
   const [selected, setSelected] = useState<PaintProject | null>(null);
   const [profile, setProfile] = useState<CalibrationProfile | null>(null);
   const [originalCalibration, setOriginalCalibration] = useState<Calibration | null>(null);
@@ -56,6 +59,8 @@ export default function ProjectOverviewPopup({ activeId, movePageId, onClose, on
   const [corners, setCorners] = useState("{}");
   const [obstacles, setObstacles] = useState("[]");
   const [query, setQuery] = useState("");
+  const searchRoot = useRef<HTMLDivElement>(null), searchInput = useRef<HTMLInputElement>(null);
+  useCommandShortcuts([{ command: "search", input: true, run: () => searchInput.current?.focus() }], mode === "list", searchRoot);
   const [archived, setArchived] = useState(false);
   const [numberDrafts, setNumberDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -201,13 +206,14 @@ export default function ProjectOverviewPopup({ activeId, movePageId, onClose, on
         <button role="tab" aria-selected={!archived} className={!archived ? "active" : ""} onClick={() => { setArchived(false); paging.setPage(0); }}>{t("profiles.activeBadge")} <span>{activeCount}</span></button>
         <button role="tab" aria-selected={archived} className={archived ? "active" : ""} onClick={() => { setArchived(true); paging.setPage(0); }}>{t("projects.archive")} <span>{archivedCount}</span></button>
       </div>}
-      <div className="project-popup-toolbar">
-        <input type="search" value={query} onChange={(event) => { setQuery(event.target.value); paging.setPage(0); }}
+      <div className="project-popup-toolbar" ref={searchRoot}>
+        <input ref={searchInput} type="search" value={query} onChange={(event) => { setQuery(event.target.value); paging.setPage(0); }}
           placeholder={t("projects.searchProjects")} aria-label={t("projects.searchProjects")} />
         <span>{visible.length} {t(visible.length===1?"setup.projectSelect":"app.projects")}</span>
       </div>
       <div className="project-popup-list" ref={paging.viewport}>
-        {paging.items.map((p) => <article className={`project-popup-card${p.id === activeId ? " current" : ""}`} key={p.id}>
+        {paging.items.map((p) => <article className={`project-popup-card${p.id === activeId ? " current" : ""}`} key={p.id}
+          onKeyDown={event => { if (!busy && !movePageId && matchesCommand(event.nativeEvent, "rename")) { event.preventDefault(); void openSettings(p); } }}>
           <div className="project-popup-cover" aria-hidden="true">
             {p.coverPageId ? <PageThumbnail page={{ id: p.coverPageId, modified: p.coverModified ?? p.modified }} /> : <span>▤</span>}
           </div>
@@ -243,7 +249,7 @@ export default function ProjectOverviewPopup({ activeId, movePageId, onClose, on
       <div className="project-settings-note">{t("projects.paperViewPreviewAndPlottingUse")}</div>
       <nav className="project-settings-tabs" aria-label={t("projects.projectSettings")}>{[["general", "projects.general"], ["area", "paper.plotArea"], ["pen", "projects.penMovement"], ["positions", "projects.positions"], ["geometry", "projects.geometry"]].map(([id, label]) => <button type="button" key={id} aria-pressed={settingsGroup === id} onClick={() => setSettingsGroup(id)}>{t(label)}</button>)}</nav>
       <section className="project-settings-section" hidden={settingsGroup !== "general"}><h3>{t("projects.general")}</h3>
-        <label>{t("setup.projectName")}<input value={name} onChange={(event) => setName(event.target.value)} /></label>
+        <label>{t("setup.projectName")}<input autoFocus value={name} onChange={(event) => setName(event.target.value)} /></label>
         <label>{t("projects.profile")}<select value={profile?.id ?? selected?.profileId ?? ""} disabled={busy}
           onChange={(event) => selectProfile(event.target.value)}>
           {selected && !profiles.some((item) => item.id === selected.profileId) &&

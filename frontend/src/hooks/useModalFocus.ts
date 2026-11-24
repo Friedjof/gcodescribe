@@ -1,4 +1,4 @@
-import { useEffect, useRef, type RefObject } from "react";
+import { useLayoutEffect, useRef, type RefObject } from "react";
 const stack: HTMLElement[] = [];
 const SELECTOR = 'button:not(:disabled), input:not(:disabled):not([type="hidden"]), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])';
 function focusable(root: HTMLElement): HTMLElement[] {
@@ -12,7 +12,7 @@ function focusable(root: HTMLElement): HTMLElement[] {
 /** Only the foremost dialog owns Escape and keyboard focus. */
 export function useModalFocus(ref: RefObject<HTMLElement>, onClose: () => void) {
   const close = useRef(onClose); close.current = onClose;
-  useEffect(() => {
+  useLayoutEffect(() => {
     const dialog = ref.current;
     if(!dialog)return;
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;

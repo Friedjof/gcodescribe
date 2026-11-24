@@ -31,6 +31,7 @@ from .appearance import DesktopAppearance  # noqa: E402
 from .endpoint import desktop_port  # noqa: E402
 from .links import DesktopLinks  # noqa: E402
 from .notifications import DesktopNotifications  # noqa: E402
+from .shortcuts import DesktopShortcuts  # noqa: E402
 from .startup import desktop_start_url, loading_html  # noqa: E402
 
 log = logging.getLogger(__name__)
@@ -68,6 +69,7 @@ class MainWindow(Gtk.ApplicationWindow):
             Path(application._data_dir()) / "desktop_notifications.json",
         )
         self._wv = WebKit.WebView(web_context=context)
+        self._shortcuts = DesktopShortcuts(self._wv, application._url)
         self._appearance = DesktopAppearance(self._wv, application._url)
         self._links = DesktopLinks(self._wv, self, application._url)
         self._notifications.attach(self._wv, self)

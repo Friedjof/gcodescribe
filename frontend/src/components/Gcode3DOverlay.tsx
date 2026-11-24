@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useModalFocus } from "../hooks/useModalFocus";
 import type { GcodePreview3D } from "../api";
 import { useI18n } from "../i18n";
 import Gcode3D, { type Gcode3DView } from "./Gcode3D";
@@ -22,6 +23,8 @@ export default function Gcode3DOverlay({
   onClose: () => void;
 }) {
   const { t } = useI18n();
+  const dialog = useRef<HTMLDivElement>(null);
+  useModalFocus(dialog, onClose);
   const read = (key:string, fallback:boolean) => {try {const v=localStorage.getItem(`gcs.preview.${key}`);return v===null?fallback:v==="true";}catch{return fallback;}};
   const [bedState, setBedState] = useState(()=>read("bed",true));
   const [showTravels,setShowTravels]=useState(()=>travelsProp??read("travels",true));
@@ -29,15 +32,11 @@ export default function Gcode3DOverlay({
   const save = (key:string,value:boolean) => {try{localStorage.setItem(`gcs.preview.${key}`,String(value));}catch{}};
   useEffect(()=>{if(travelsProp!==undefined)setShowTravels(travelsProp);},[travelsProp]);
   const showBed = bedProp ?? bedState;
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
 
   return (
     <div className="g3d-fullscreen" onClick={onClose}>
-      <div className="g3d-fullscreen-view" onClick={(e) => e.stopPropagation()}>
+      <div ref={dialog} role="dialog" aria-modal="true" aria-label={t("paint.preview")} tabIndex={-1}
+        className="g3d-fullscreen-view" onClick={(e) => e.stopPropagation()}>
         <Gcode3D data={data} chrome={false} showTravels={showTravels} showBed={showBed} showProfile={showProfile}
           viewState={viewState} onViewChange={onViewChange} />
         <div className="g3d-fullscreen-controls">

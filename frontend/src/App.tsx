@@ -36,6 +36,7 @@ import DelayedLoading from "./components/DelayedLoading";
 import { ProjectCalibrationProvider } from "./state/ProjectCalibrationContext";
 
 import { installPageEditLifecycle } from "./api/pageEdits";
+import { useCommandShortcuts } from "./hooks/useCommandShortcuts";
 
 type Tab = WorkspaceId;
 
@@ -73,11 +74,23 @@ function AdminApp() {
   const [aiStatus, setAiStatus] = useState<AiImageStatus | null>(null);
   const [aiInitialFile, setAiInitialFile] = useState<File | null>(null);
   const [desktop, setDesktop] = useState(isDesktop);
+  const drawCommand = (type: PaintWorkspaceCommand["type"]) => {
+    update(prefs => prefs.visibleWorkspaces.includes("paint") ? prefs : { ...prefs, visibleWorkspaces: [...prefs.visibleWorkspaces, "paint"] });
+    setPaintCommand({ id: ++commandId.current, type }); setRequestedTab("paint");
+  };
   useEffect(() => { document.documentElement.dataset.desktop = String(desktop); }, [desktop]);
   const visibleTabs = tourWorkspace && !preferences.visibleWorkspaces.includes(tourWorkspace) ? [...preferences.visibleWorkspaces, tourWorkspace] : preferences.visibleWorkspaces;
   const tab = usableWorkspace(requestedTab, preferences.workspaceOrder, visibleTabs, aiStatus?.enabled ?? false);
   const workspaces = visibleWorkspaces(preferences.workspaceOrder, visibleTabs, aiStatus?.enabled ?? false);
   const interactive = !settingsOpen && !printerSwitching && !tabSettingsOpen && !helpOpen;
+  useCommandShortcuts([
+    { command: "settings", run: () => setSettingsOpen(true), input: true },
+    { command: "help", run: () => setHelpOpen(true), input: true },
+    { command: "shortcuts", run: () => setHelpOpen(true), input: true },
+    { command: "newSlide", run: () => drawCommand("new-page"), input: true },
+    { command: "newProject", run: () => drawCommand("new-project"), input: true },
+    { command: "open", run: () => drawCommand("projects"), input: true },
+  ], interactive);
   const setTab = useCallback((id: Tab) => {
     if (id === "start") id = "paper";
     if (id === "ai" && !aiStatus?.enabled) return;
@@ -163,7 +176,7 @@ function AdminApp() {
       <header className="app-titlebar">
         <h1 className="app-brand"><EditorIcon name="draw" size={20} />GCodeScribe</h1>
         <div className="app-main-menu">
-          <ProgramMenus aiEnabled={aiStatus?.enabled ?? false} onNavigate={setTab} onCustomize={() => setTabSettingsOpen(true)} onHelp={() => setHelpOpen(true)}
+          <ProgramMenus workspace={tab} aiEnabled={aiStatus?.enabled ?? false} onNavigate={setTab} onCustomize={() => setTabSettingsOpen(true)} onHelp={() => setHelpOpen(true)} onSettings={() => setSettingsOpen(true)}
             onProjects={() => { setPaintCommand({ id: ++commandId.current, type: "projects" }); setTab("paint"); }}
             onNewPage={() => { setPaintCommand({ id: ++commandId.current, type: "new-page" }); setTab("paint"); }}
             notifications={{ supported: notificationPermission !== "unsupported", granted: notificationPermission === "granted", action: notificationPermission === "granted" ? notifications.test : notifications.request }} />
@@ -182,7 +195,7 @@ function AdminApp() {
           {canStopPlot(status) && <QuickStopPlot status={status} onAction={refreshStatus} />}
         </div>
       </header>
-      <WorkspaceTabs workspaces={workspaces} active={tab} onChange={setTab} onCustomize={() => setTabSettingsOpen(true)} />
+      <WorkspaceTabs workspaces={workspaces} active={tab} onChange={setTab} onCustomize={() => setTabSettingsOpen(true)} shortcutsEnabled={interactive} />
       {tabSettingsOpen && <TabSettings aiEnabled={aiStatus?.enabled ?? false} onClose={() => setTabSettingsOpen(false)} onOpen={setTab} />}
 
       <Suspense fallback={<DelayedLoading />}>

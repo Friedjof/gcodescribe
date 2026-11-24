@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { isPrinterBusy } from "../../lib/printerState";
+import { useCommandShortcuts } from "../../hooks/useCommandShortcuts";
+import { shortcutScope } from "../../interface/shortcuts";
 import type {
   Calibration, ColoringApiItem, ColoringColor, GalleryMetrics, GalleryScore, Job, Page, PageColoring, ProfileRef, SceneObject,
 } from "../../api";
@@ -469,9 +471,20 @@ export default function ColoringEditor({ cal, page, activeProfile, initialRotati
     return () => svg.removeEventListener("wheel", onWheel);
   }, [W, S]);
 
+  const keyboardZoom = (factor: number) => setView(v => {
+    const w = Math.max(W * .05, Math.min(S * 3, v.w / factor)), h = v.h * w / v.w;
+    return { x: v.x + (v.w - w) / 2, y: v.y + (v.h - h) / 2, w, h };
+  });
+  useCommandShortcuts([
+    { command: "zoomIn", run: () => keyboardZoom(1.2) },
+    { command: "zoomOut", run: () => keyboardZoom(1 / 1.2) },
+    { command: "fit", run: () => setView(fitView(rotation)) },
+  ], true, svgRef);
+
   // Space = temporary pan; Ctrl/Cmd+Z / +Y (or +Shift+Z) = undo / redo.
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
+      if (!shortcutScope(e, svgRef.current)) return;
       if (e.code === "Space" && !e.repeat) { spaceDown.current = true; e.preventDefault(); return; }
       if (e.ctrlKey || e.metaKey) {
         const k = e.key.toLowerCase();

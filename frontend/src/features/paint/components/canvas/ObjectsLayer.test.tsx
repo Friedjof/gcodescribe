@@ -11,6 +11,16 @@ vi.mock("../../hooks/useGeometryRaster", () => ({
   useGeometryRaster: () => ({ image: null, failed: false }),
 }));
 afterEach(cleanup);
+it("uses ordinary SVG strokes for uniform transforms while keeping the same screen width", () => {
+  const object: SceneObject = { id: "uniform", type: "line", cachedPolylines: [[[0, 0], [10, 10]]],
+    transform: { x: 0, y: 0, scale: 4, rotation: 0 } };
+  const { container, rerender } = render(<svg><ObjectsLayer objects={[object]} selectedIds={[]} stroke={0.2}/></svg>);
+  const path = container.querySelector("path")!;
+  expect(Number(path.getAttribute("stroke-width")) * 4).toBeCloseTo(0.2);
+  expect(path.hasAttribute("vector-effect")).toBe(false);
+  rerender(<svg><ObjectsLayer objects={[object]} selectedIds={[]} stroke={0.01}/></svg>);
+  expect(Number(path.getAttribute("stroke-width")) * 4).toBeCloseTo(0.01);
+});
 it("keeps fine ink on mirrored and non-uniformly scaled objects while retaining source geometry", () => {
   const object: SceneObject = {
     id: "line",

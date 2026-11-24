@@ -3,21 +3,27 @@ import { useI18n } from "../../i18n";
 import type { WorkspaceId } from "../../interface/workspaces";
 import EditorMenu from "./EditorMenu";
 import InterfaceMenu from "./InterfaceMenu";
+import { shortcutLabels } from "../../interface/shortcuts";
+import { commandAvailable, executeCommand } from "../../hooks/useCommandShortcuts";
 export default function ProgramMenus({
   onNavigate,
   onProjects,
   onNewPage,
   onCustomize,
   onHelp,
+  onSettings,
   aiEnabled,
   notifications,
+  workspace = "paint",
 }: {
   onNavigate: (id: WorkspaceId) => void;
   onProjects: () => void;
   onNewPage: () => void;
   onCustomize: () => void;
   onHelp: () => void;
+  onSettings?: () => void;
   aiEnabled: boolean;
+  workspace?: WorkspaceId;
   notifications: { supported: boolean; granted: boolean; action: () => void };
 }) {
   const { t } = useI18n();
@@ -31,15 +37,29 @@ export default function ProgramMenus({
         items={[
           {
             id: "new",
-            label: t("app.newPage"),
+            label: t(workspace === "font" ? "fontEditor.create" : "app.newPage"),
             icon: "add",
-            action: onNewPage,
+            action: () => { if (!executeCommand("newSlide")) onNewPage(); },
+            shortcut: shortcutLabels.newSlide,
           },
           {
             id: "projects",
-            label: t("app.projects"),
+            label: t(workspace === "font" ? "fontEditor.myFonts" : "app.projects"),
             icon: "folder",
-            action: onProjects,
+            action: () => { if (!executeCommand("open")) onProjects(); },
+            shortcut: shortcutLabels.open,
+          },
+          {
+            id: "new-project", label: t("projects.newProject"), shortcut: shortcutLabels.newProject,
+            icon: "folder", action: () => executeCommand("newProject"),
+          },
+          {
+            id: "save", label: t("shortcuts.save"), shortcut: shortcutLabels.save, icon: "check",
+            disabled: () => !commandAvailable("save"), action: () => executeCommand("save"),
+          },
+          {
+            id: "export-document", label: t("shortcuts.export"), shortcut: shortcutLabels.export, icon: "folder",
+            disabled: () => !commandAvailable("export"), action: () => executeCommand("export"),
           },
           {
             id: "jobs",
@@ -50,11 +70,18 @@ export default function ProgramMenus({
           },
         ]}
       />
-      <InterfaceMenu onCustomize={onCustomize} />
+      <InterfaceMenu onCustomize={onCustomize} editable={workspace === "paint" || workspace === "font"} />
       <EditorMenu
         label={t("app.tools")}
         className="program-menu"
         items={[
+          {
+            id: "settings",
+            label: t("settings.title"),
+            icon: "settings",
+            shortcut: shortcutLabels.settings,
+            action: () => onSettings?.(),
+          },
           {
             id: "profiles",
             label: t("workspace.calibrate"),
@@ -113,6 +140,7 @@ export default function ProgramMenus({
             label: t("paint.info.button"),
             icon: "help",
             action: onHelp,
+            shortcut: shortcutLabels.shortcuts,
           },
         ]}
       />

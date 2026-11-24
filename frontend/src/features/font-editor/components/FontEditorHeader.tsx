@@ -9,6 +9,8 @@ export default function FontEditorHeader({
   onCreate,
   onOpenList,
   onCloseCurrent,
+  onRename,
+  onExport,
 }: {
   hasCurrent: boolean;
   currentLabel: string | null;
@@ -17,6 +19,8 @@ export default function FontEditorHeader({
   onCreate: (label: string) => void;
   onOpenList: () => void;
   onCloseCurrent?:()=>void;
+  onRename?: () => void;
+  onExport?: () => void;
 }) {
   const { t } = useI18n();
   const [name, setName] = useState("");
@@ -50,6 +54,8 @@ export default function FontEditorHeader({
       {hasCurrent && (
         <div className="fe-header-current">
           <span className="fe-current-label">{currentLabel}</span>
+          <button className="ghost" disabled={busy} onClick={onRename} title="F2">{t("profiles.renameAction")}</button>
+          <button className="ghost" disabled={busy} onClick={onExport} title="Ctrl+Shift+E">{t("settings.fonts.export")}</button>
           {onCloseCurrent && <button className="ghost" disabled={busy} onClick={onCloseCurrent}>{t("fontWorkspace.close")}</button>}
           <span className={`fe-dirty-badge ${dirty ? "is-dirty" : "is-saved"}`}>
             {dirty ? t("fontEditor.unsaved") : t("fontEditor.saved")}

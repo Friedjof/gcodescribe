@@ -116,11 +116,36 @@ it("keeps handle targets in screen pixels through zoom and window resize", () =>
   const targetWidth = () => Number(view.getByLabelText("paint.canvas.rotateHandle").querySelector("rect")!.getAttribute("width"));
   const viewWidth = () => Number(view.svg.getAttribute("viewBox")!.split(" ")[2]);
   const before = targetWidth() / viewWidth();
+  const initialWidth = viewWidth();
   fireEvent.wheel(view.svg, { deltaY: -250, clientX: 40, clientY: 30 });
+  act(() => { vi.advanceTimersByTime(2); });
+  expect(viewWidth()).toBeLessThan(initialWidth);
   expect(targetWidth() / viewWidth()).toBeCloseTo(before);
   vi.mocked(view.svg.getBoundingClientRect).mockReturnValue({ x: 0, y: 0, width: 400, height: 300, top: 0, left: 0, right: 400, bottom: 300, toJSON: () => ({}) });
   fireEvent.resize(window);
   expect(targetWidth() / viewWidth() * 400).toBeCloseTo(before * 800);
+});
+it("cancels browser scrolling and reads the pointer transform once per wheel frame", () => {
+  const view = setup();
+  const mapping = vi.spyOn(view.svg as SVGSVGElement, "getScreenCTM");
+  const initial = view.svg.getAttribute("viewBox");
+  for (let i = 0; i < 4; i++) {
+    expect(fireEvent.wheel(view.svg, { deltaY: -1, deltaMode: 1, clientX: 40, clientY: 30, cancelable: true })).toBe(false);
+  }
+  expect(mapping).not.toHaveBeenCalled();
+  act(() => { vi.advanceTimersByTime(2); });
+  expect(mapping).toHaveBeenCalledOnce();
+  expect(view.svg.getAttribute("viewBox")).not.toBe(initial);
+  expect(view.props.onUpdateMany).not.toHaveBeenCalled();
+  expect(view.props.onEditStart).not.toHaveBeenCalled();
+});
+it("discards a queued wheel gesture when the page changes", () => {
+  const view = setup();
+  const initial = view.svg.getAttribute("viewBox");
+  fireEvent.wheel(view.svg, { deltaY: -120, clientX: 40, clientY: 30 });
+  view.rerender(<PaintCanvas {...view.props} page={page("other")} />);
+  act(() => { vi.advanceTimersByTime(150); });
+  expect(view.svg.getAttribute("viewBox")).toBe(initial);
 });
 it.each(["many strokes", "detailed curves"])("retains every path during continuous wheel zoom and panning with %s", kind => {
   const geometry: Pt[][] = kind === "many strokes"
@@ -152,6 +177,15 @@ it("does not steal Space from focused toolbar buttons", () => {
   const button = view.container.querySelector("button")!;
   expect(fireEvent.keyDown(button, { key: " ", code: "Space" })).toBe(true);
   expect(view.svg.getAttribute("style")).not.toContain("grab;");
+});
+it("zooms and fits the canvas with keyboard commands without editing the drawing", () => {
+  const view=setup();const before=view.svg.getAttribute("viewBox");
+  fireEvent.keyDown(view.svg,{key:"+",ctrlKey:true});
+  expect(view.svg.getAttribute("viewBox")).not.toBe(before);
+  fireEvent.keyDown(view.svg,{key:"0",ctrlKey:true});
+  expect(view.svg.getAttribute("viewBox")).toBe(before);
+  expect(view.props.onUpdateMany).not.toHaveBeenCalled();
+  expect(view.props.onEditStart).not.toHaveBeenCalled();
 });
 it("does not jump or create undo history when a resize target is grabbed off-center", () => {
   const view = setup();

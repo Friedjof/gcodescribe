@@ -1,4 +1,5 @@
 import EditorIcon from "../../../components/editor/EditorIcon";
+import { useCommandShortcuts } from "../../../hooks/useCommandShortcuts";
 import SeedControl from "../../../components/SeedControl";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Stroke, StrokeFontDocument, StrokeGlyph, StrokePoint, StrokeVariant } from "../../../api";
@@ -466,6 +467,12 @@ export default function WritingTestDialog({
     },
     []
   );
+
+  useCommandShortcuts([
+    { command: "zoomIn", run: () => setViewZoom(zoom * 1.2) },
+    { command: "zoomOut", run: () => setViewZoom(zoom / 1.2) },
+    { command: "fit", run: resetView },
+  ], true, previewRef);
 
   const setHead = useCallback(
     (v: number) => {

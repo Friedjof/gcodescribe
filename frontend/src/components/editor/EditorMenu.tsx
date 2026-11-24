@@ -13,7 +13,7 @@ export interface EditorMenuItem {
   id: string;
   label: string;
   action: () => void;
-  disabled?: boolean;
+  disabled?: boolean | (() => boolean);
   icon?: EditorIconName;
   shortcut?: string;
   separator?: boolean;
@@ -166,7 +166,7 @@ export default function EditorMenu({
                         : "menuitemcheckbox"
                   }
                   aria-checked={item.checked}
-                  disabled={item.disabled}
+                  disabled={typeof item.disabled === "function" ? item.disabled() : item.disabled}
                   onClick={() => {
                     close(true);
                     item.action();

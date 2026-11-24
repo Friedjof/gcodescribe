@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { GcodePreview3D } from "../api";
 import { useI18n } from "../i18n";
+import { useCommandShortcuts } from "../hooks/useCommandShortcuts";
 
 type V3 = [number, number, number];
 export type Gcode3DView = { yaw: number; pitch: number; zoom: number; panX: number; panY: number };
@@ -35,6 +36,15 @@ export default function Gcode3D({
   const view = useRef({ yaw: -0.7, pitch: 1.0, zoom: 1, panX: 0, panY: 0 });
   const drag = useRef<{ x: number; y: number; mode: "orbit" | "pan" } | null>(null);
   const renderRef = useRef<() => void>(() => {});
+  const keyboardZoom = (factor: number) => {
+    view.current.zoom = Math.max(.2, Math.min(8, view.current.zoom * factor));
+    onViewChange?.({ ...view.current }); renderRef.current();
+  };
+  useCommandShortcuts([
+    { command: "zoomIn", run: () => keyboardZoom(1.2) },
+    { command: "zoomOut", run: () => keyboardZoom(1 / 1.2) },
+    { command: "fit", run: () => { view.current = { ...view.current, zoom: 1, panX: 0, panY: 0 }; onViewChange?.({ ...view.current }); renderRef.current(); } },
+  ], true, canvasRef);
   const [travelsState, setShowTravels] = useState(true);
   const [bedState, setShowBed] = useState(true);
   const showTravels = travelsProp ?? travelsState;
