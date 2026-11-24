@@ -31,6 +31,7 @@ from .appearance import DesktopAppearance  # noqa: E402
 from .endpoint import desktop_port  # noqa: E402
 from .links import DesktopLinks  # noqa: E402
 from .notifications import DesktopNotifications  # noqa: E402
+from .startup import desktop_start_url, loading_html  # noqa: E402
 
 log = logging.getLogger(__name__)
 
@@ -50,115 +51,6 @@ def _poll_health(url: str, timeout: float) -> bool:
         except Exception:
             time.sleep(0.25)
     return False
-
-
-_LOADING_HTML = """\
-<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8">
-<style>
-  :root {
-    --bg: #0d0d0f;
-    --accent: #0a84ff;
-    --text: #f5f5f7;
-    --muted: #98989e;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 100vh;
-    background: radial-gradient(900px 500px at 50% -80px, #111a2e 0%, var(--bg) 65%);
-    color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
-                 Inter, system-ui, sans-serif;
-    -webkit-font-smoothing: antialiased;
-  }
-  .splash {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 28px;
-    user-select: none;
-  }
-  .icon-wrap {
-    width: 92px;
-    height: 92px;
-    border-radius: 22px;
-    background: rgba(10, 132, 255, 0.08);
-    border: 1px solid rgba(10, 132, 255, 0.22);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 0 0 0 rgba(10, 132, 255, 0.25), 0 12px 40px rgba(0, 0, 0, 0.45);
-    animation: glow 2.6s ease-in-out infinite alternate;
-  }
-  @keyframes glow {
-    from { box-shadow: 0 0 28px rgba(10, 132, 255, 0.10), 0 12px 40px rgba(0,0,0,0.45); }
-    to   { box-shadow: 0 0 56px rgba(10, 132, 255, 0.32), 0 12px 40px rgba(0,0,0,0.45); }
-  }
-  .icon-wrap svg { width: 56px; height: 56px; }
-  h1 {
-    font-size: 26px;
-    font-weight: 650;
-    letter-spacing: -0.03em;
-  }
-  .status {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 14px;
-  }
-  .dots {
-    display: flex;
-    gap: 7px;
-  }
-  .dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--accent);
-    animation: pulse 1.3s ease-in-out infinite;
-  }
-  .dot:nth-child(2) { animation-delay: 0.22s; }
-  .dot:nth-child(3) { animation-delay: 0.44s; }
-  @keyframes pulse {
-    0%, 80%, 100% { opacity: 0.25; transform: scale(0.75); }
-    40%           { opacity: 1;    transform: scale(1.2);  }
-  }
-  .label {
-    font-size: 13px;
-    color: var(--muted);
-    letter-spacing: 0.01em;
-  }
-</style>
-</head>
-<body>
-  <div class="splash">
-    <div class="icon-wrap">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-        <rect width="64" height="64" rx="12" fill="#1d4ed8"/>
-        <polygon points="32,6 44,38 32,32 20,38" fill="#ffffff" opacity="0.95"/>
-        <polygon points="32,32 44,38 32,44" fill="#93c5fd"/>
-        <path d="M10,54 Q20,44 32,50 Q44,56 54,46"
-              fill="none" stroke="#ffffff" stroke-width="3"
-              stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
-      </svg>
-    </div>
-    <h1>GCodeScribe</h1>
-    <div class="status">
-      <div class="dots">
-        <div class="dot"></div>
-        <div class="dot"></div>
-        <div class="dot"></div>
-      </div>
-      <span class="label">Wird gestartet …</span>
-    </div>
-  </div>
-</body>
-</html>
-"""
 
 
 # ── window ────────────────────────────────────────────────────────────────────
@@ -194,7 +86,7 @@ class MainWindow(Gtk.ApplicationWindow):
         key_capture.connect("key-pressed", self._block_devtools_keys)
         self._wv.add_controller(key_capture)
 
-        self._wv.load_html(_LOADING_HTML, "about:blank")
+        self._wv.load_html(loading_html(GLib.get_language_names()[0]), "about:blank")
 
         # Ctrl+Q
         shortcut_ctrl = Gtk.ShortcutController(scope=Gtk.ShortcutScope.GLOBAL)
@@ -338,7 +230,7 @@ class App(Gtk.Application):
 
     def _on_ready(self) -> bool:
         if self._window is not None:
-            self._window.navigate(self._url)
+            self._window.navigate(desktop_start_url(self._url))
         return False
 
     def _fatal(self, detail: str) -> bool:

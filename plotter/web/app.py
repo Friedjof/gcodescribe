@@ -5,7 +5,6 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
 
 from plotter.artwork.pipeline import PlotterError
 
@@ -13,6 +12,7 @@ from ..mcp import server as mcp_server
 from ..printer import PrinterError, get_printer_client, use_serial
 from ..services import ServiceError
 from .auth import require_admin
+from .frontend import HTML_HEADERS, FrontendFiles
 from .routes import (
     ai_images,
     asset_tasks,
@@ -115,13 +115,13 @@ def create_app() -> FastAPI:
         # /upload is the public SPA route handed out for event submissions.
         @app.get("/upload", include_in_schema=False)
         def upload_page() -> FileResponse:
-            return FileResponse(static / "index.html")
+            return FileResponse(static / "index.html", headers=HTML_HEADERS)
 
         @app.get("/live", include_in_schema=False)
         def live_page() -> FileResponse:
-            return FileResponse(static / "index.html")
+            return FileResponse(static / "index.html", headers=HTML_HEADERS)
 
-        app.mount("/", StaticFiles(directory=str(static), html=True), name="static")
+        app.mount("/", FrontendFiles(directory=str(static), html=True), name="static")
 
     return app
 

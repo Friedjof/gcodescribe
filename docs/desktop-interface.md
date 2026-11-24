@@ -83,3 +83,19 @@ The editor now retains its complete raster during gestures, removes the SVG mask
 and coalesces wheel updates into animation frames. After navigation, high zoom
 returns to full vector detail when bitmap resolution would be insufficient.
 Geometry used for export and printing is unchanged.
+
+## Desktop updates and HTML caching
+
+Starting with v0.6.2, the loading screen reads the current icon from the bundled
+frontend. Startup navigation includes a digest of the frontend entry page while
+retaining the same origin, local storage and MCP address. HTML entry points use
+`Cache-Control: no-store`; content-hashed assets retain conditional caching.
+
+Flatpak/OSTree normalises installed file timestamps. The previous static handler
+could return HTTP 304 for different HTML files with identical sizes and timestamps.
+Regression coverage reproduces that collision and verifies fresh HTML after an
+update, including `/`, `/index.html`, `/live` and `/upload`.
+
+Fully quit the app before upgrading. Reinstallation does not replace a process
+that is already running. Use the existing system/user installation location;
+projects and preferences do not need to be deleted.

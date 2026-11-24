@@ -42,6 +42,12 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.6.2" date="2026-11-24">
+      <description>
+        <p>Use the current application icon on the desktop loading screen and prevent stale interfaces after Flatpak updates.</p>
+        <p>English documentation and screenshots, including an editable Workshop demo font.</p>
+      </description>
+    </release>
     <release version="0.6.1" date="2026-11-23">
       <description>
         <p>Refined desktop workflows, connection diagnostics and documentation.</p>
