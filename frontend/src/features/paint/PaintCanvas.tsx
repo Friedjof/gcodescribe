@@ -76,6 +76,9 @@ const zValue = (obj: SceneObject, index: number) => obj.zOrder ?? index;
 const PEN_SIMPLIFY_EPS = 0.4;
 const PEN_MIN_LENGTH = 0.08;
 const ERASER_RADIUS = 2.5;
+// Separate wheel notches can be >120 ms apart. Keep the fast navigation view
+// between them instead of repeatedly decoding a preview and restoring vectors.
+const NAVIGATION_IDLE_MS = 250;
 
 function PaintCanvas({
   visible = true,
@@ -173,7 +176,7 @@ function PaintCanvas({
   const visibleRef = useRef(visible); visibleRef.current = visible;
   const keyboardZoom = (factor: number) => {
     setZooming(true); clearTimeout(zoomTimer.current);
-    zoomTimer.current = setTimeout(() => setZooming(false), 120);
+    zoomTimer.current = setTimeout(() => setZooming(false), NAVIGATION_IDLE_MS);
     zoomAt(factor);
   };
   useCommandShortcuts([
@@ -334,7 +337,7 @@ function PaintCanvas({
     if (factor === 1) return;
     setZooming(true);
     clearTimeout(zoomTimer.current);
-    zoomTimer.current = setTimeout(() => setZooming(false), 120);
+    zoomTimer.current = setTimeout(() => setZooming(false), NAVIGATION_IDLE_MS);
     wheelChange.current = {factor:factor*(wheelChange.current?.factor??1),client:[e.clientX,e.clientY]};
     if(wheelFrame.current===undefined)wheelFrame.current=requestAnimationFrame(()=>{
       wheelFrame.current=undefined;

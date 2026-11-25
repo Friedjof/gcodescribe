@@ -107,6 +107,26 @@ bound while editing. Alt+Tab, Alt+F4, Super combinations and desktop workspace
 switching remain with the operating system. Normal browsers may reserve some
 bindings before the app receives them; all commands retain visible UI actions.
 
+## Canvas navigation and visibility
+
+Paper stays white and drawing ink stays dark in both interface themes. Dense
+drawings prepare their bitmap in that ink color directly; no SVG image color
+filter runs during navigation. A preview is decoded before it replaces the
+previous image, and the complete vectors stay visible until the SVG image has
+loaded. Image errors restore the vector fallback.
+
+Navigation textures are capped at 2048 pixels per edge, reducing the maximum
+texture area by 75% compared with the previous 4096-pixel cap. Small resting zoom
+adjustments reuse the prepared image while cosmetic stroke width stays within
+10% of its target. Wheel notches less than 250 ms apart share a gesture, avoiding
+repeated vector/bitmap switches between notches. At rest, precise vectors return
+when the bitmap would be enlarged. None of these display choices changes saved
+geometry or printer toolpaths.
+
+Visibility, native wheel input and image-resource cleanup are checked in the
+Flatpak WebKit runtime using isolated data. Software rendering under Xvfb and
+variable host load do not establish a guaranteed frame rate on every desktop.
+
 ## Printer diagnostics
 
 Each saved printer has a connection test; testing does not change the selection

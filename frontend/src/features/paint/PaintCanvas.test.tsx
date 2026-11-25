@@ -147,6 +147,20 @@ it("discards a queued wheel gesture when the page changes", () => {
   act(() => { vi.advanceTimersByTime(150); });
   expect(view.svg.getAttribute("viewBox")).toBe(initial);
 });
+it("keeps the fast view between ordinary wheel notches and restores detail after settling", () => {
+  const view = setup();
+  const paper = () => view.svg.querySelector('rect[fill="var(--paper)"]');
+  expect(paper()?.getAttribute("filter")).toBeTruthy();
+  fireEvent.wheel(view.svg, { deltaY: -10, clientX: 40, clientY: 30 });
+  act(() => { vi.advanceTimersByTime(180); });
+  expect(paper()?.getAttribute("filter")).toBeNull();
+  fireEvent.wheel(view.svg, { deltaY: -10, clientX: 40, clientY: 30 });
+  act(() => { vi.advanceTimersByTime(180); });
+  expect(paper()?.getAttribute("filter")).toBeNull();
+  act(() => { vi.advanceTimersByTime(80); });
+  expect(paper()?.getAttribute("filter")).toBeTruthy();
+  expect(view.props.onUpdateMany).not.toHaveBeenCalled();
+});
 it.each(["many strokes", "detailed curves"])("retains every path during continuous wheel zoom and panning with %s", kind => {
   const geometry: Pt[][] = kind === "many strokes"
     ? Array.from({ length: 2400 }, (_, row) => [[10, row / 40], [90, row / 40]])

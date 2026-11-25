@@ -42,6 +42,12 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.6.4" date="2026-11-25">
+      <description>
+        <p>Keep dense drawings visible in both themes and while bitmap previews load.</p>
+        <p>Reduce zoom texture size, reuse decoded previews and keep wheel gestures together.</p>
+      </description>
+    </release>
     <release version="0.6.3" date="2026-11-24">
       <description>
         <p>Faster canvas navigation with retained raster previews and SVG geometry.</p>

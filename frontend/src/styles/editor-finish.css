@@ -264,7 +264,4 @@ html[data-desktop="true"] [contenteditable="true"] { -webkit-user-select: text; 
 
 .stl-side-pane {overflow-y:auto}.stl-controls {gap:7px}.stl-controls .stl-field,.stl-controls .stl-toggle,.stl-controls .stl-range {margin:0;font-size:12px}.stl-controls .stl-presets {gap:3px}.stl-view-hint {max-width:95%;text-align:center}
 
-:root {--raster-ink:brightness(0)}
-:root[data-theme=dark] {--raster-ink:brightness(0) invert(.9)}
-
 .stl-controls {height:auto;flex-shrink:0}.stl-controls > * {flex-shrink:0}

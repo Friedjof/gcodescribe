@@ -1,11 +1,12 @@
 import { DISPLAY_INK_PX } from "../../../../lib/displayStroke";
-import { memo, useMemo, useRef } from "react";
+import { memo, useMemo, useRef, useState } from "react";
 import type { SceneObject } from "../../../../api";
 import { EMPTY_LINES, IDENTITY, localBounds, type Pt, type Transform } from "../../lib/geometry";
 import { sourcePageFrame } from "../../lib/sourcePage";
 import { useGeometryPath } from "../../hooks/useGeometryPath";
 import { rasterFitsDisplay, rasterGeometry, useGeometryRaster } from "../../hooks/useGeometryRaster";
 import { pressurePreviewPaths } from "../../lib/pressure";
+import { rasterStrokeWidth } from "../../lib/rasterPreview";
 function objTransform(t: Transform) {
   return `translate(${t.x} ${t.y}) rotate(${(t.rotation * 180) / Math.PI}) scale(${t.scaleX ?? t.scale},${t.scaleY ?? t.scale})`;
 }
@@ -25,10 +26,14 @@ const ObjectView = memo(function ObjectView({ obj, selected, stroke, interactive
   const lines = (obj.cachedPolylines ?? EMPTY_LINES) as Pt[][];
   const large = !mask && rasterGeometry(lines);
   const bounds = localBounds(lines);
-  const rasterWidth = Math.max(stroke / scale, Math.max(bounds[2] - bounds[0], bounds[3] - bounds[1]) * DISPLAY_INK_PX / 2048);
+  const rasterWidth = rasterStrokeWidth(Math.max(bounds[2] - bounds[0], bounds[3] - bounds[1]), stroke / scale);
   // Keep the prepared bitmap throughout a gesture; only rebuild at rest.
   const rasterView = useRef({ lines, stroke: rasterWidth });
-  if (!interactive || rasterView.current.lines !== lines) rasterView.current = { lines, stroke: rasterWidth };
+  if (!interactive || rasterView.current.lines !== lines) rasterView.current = {
+    lines,
+    stroke: rasterStrokeWidth(Math.max(bounds[2] - bounds[0], bounds[3] - bounds[1]), stroke / scale,
+      rasterView.current.lines === lines ? rasterView.current.stroke : undefined),
+  };
   const rasterStroke = rasterView.current.stroke;
   const rasterEligible = large && (interactive || rasterFitsDisplay(lines, stroke / scale));
   const pressurePaths = useMemo(() => obj.data?.pressureEnabled && !large && active && !interactive
@@ -37,7 +42,11 @@ const ObjectView = memo(function ObjectView({ obj, selected, stroke, interactive
   // Keep a bounded bitmap warm even when the resting view needs vector detail.
   // Otherwise the next wheel gesture at high zoom falls back to expensive SVG.
   const { image } = useGeometryRaster(lines, rasterStroke, large && active);
-  const raster = rasterEligible ? image : null;
+  const [loadedImage, setLoadedImage] = useState<string>();
+  const [failedImage, setFailedImage] = useState<string>();
+  // An allocated blob URL is not evidence that WebKit has loaded the SVG image.
+  // Keep the complete vectors until the replacement can actually be displayed.
+  const raster = rasterEligible && image?.url === loadedImage && image?.url !== failedImage ? image : null;
   // Bitmap refreshes and navigation share the complete vector fallback.
   const d = useGeometryPath(lines, interactive, active);
   return <g transform={objTransform(t)} opacity={obj.plotted ? 0.25 : 1} pointerEvents="none">
@@ -55,9 +64,10 @@ const ObjectView = memo(function ObjectView({ obj, selected, stroke, interactive
       strokeWidth={mask ? stroke / scale : inkWidth} vectorEffect={mask ? undefined : inkEffect} strokeDasharray={mask ? `${stroke * 2 / scale} ${stroke / scale}` : undefined}
       strokeLinejoin="round" strokeLinecap="round" />}
     </g>
-    {image && <image className="paint-raster" display={raster ? undefined : "none"}
+    {image && <image className="paint-raster" display={rasterEligible && image.url !== failedImage ? undefined : "none"}
       href={image.url} x={image.x} y={image.y} width={image.width} height={image.height}
-      style={{filter:"var(--raster-ink, brightness(0))"}} preserveAspectRatio="none"/>}
+      onLoad={() => setLoadedImage(image.url)} onError={() => setFailedImage(image.url)}
+      preserveAspectRatio="none"/>}
   </g>;
 });
 export default memo(function ObjectsLayer({ objects, selectedIds, stroke, interactive = false, active = true }: {
